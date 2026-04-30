@@ -11,3 +11,15 @@
     @apply antialiased bg-[#0a0f1d] text-slate-100;
   }
 }
+
+/* T-Account PDF helper styles */
+@layer components {
+  .t-account-card {
+    transition: transform 0.2s ease;
+  }
+  
+  /* Print-specific overrides that html2canvas will see */
+  .t-account-card {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+}

@@ -50,6 +50,7 @@ export default function App() {
   const [accounts] = useState<Account[]>(INITIAL_ACCOUNTS);
   const [activeTab, setActiveTab] = useState<'journal' | 't-accounts' | 'balance' | 'profit-loss'>('journal');
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'entry' | 'journal', id: string, title: string, message: string } | null>(null);
+  const [modalInfo, setModalInfo] = useState<{ type: 'success' | 'error', title: string, message: string } | null>(null);
   
   const activeJournal = journals.find(j => j.id === activeJournalId) || null;
   const entries = activeJournal?.entries || [];
@@ -273,6 +274,7 @@ export default function App() {
                   });
                 }}
                 onImport={importEntries}
+                onSetModal={setModalInfo}
               />
             </motion.div>
           )}
@@ -336,6 +338,42 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Global Information Modal */}
+      <AnimatePresence>
+        {modalInfo && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-slate-900 border border-white/10 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center"
+            >
+              <div className={cn(
+                "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6",
+                modalInfo.type === 'success' ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+              )}>
+                {modalInfo.type === 'success' ? <Check className="w-8 h-8" /> : <AlertCircle className="w-8 h-8" />}
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-2">{modalInfo.title}</h3>
+              <p className="text-slate-400 mb-8 leading-relaxed">
+                {modalInfo.message}
+              </p>
+              <button
+                onClick={() => setModalInfo(null)}
+                className={cn(
+                  "w-full py-3 rounded-xl font-semibold transition-all shadow-lg",
+                  modalInfo.type === 'success' 
+                    ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20" 
+                    : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                )}
+              >
+                Entendido
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Confirmation Modal */}
       <AnimatePresence>
@@ -407,7 +445,8 @@ function JournalView({
   accounts, 
   onAdd, 
   onDelete,
-  onImport
+  onImport,
+  onSetModal
 }: { 
   journals: Journal[],
   activeJournalId: string | null,
@@ -419,7 +458,8 @@ function JournalView({
   accounts: Account[], 
   onAdd: (e: Omit<JournalEntry, 'id'>) => void,
   onDelete: (id: string) => void,
-  onImport: (entries: JournalEntry[]) => void
+  onImport: (entries: JournalEntry[]) => void,
+  onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void
 }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const activeJournal = journals.find(j => j.id === activeJournalId);
@@ -499,37 +539,71 @@ function JournalView({
         throw new Error('Formato inválido. Asegúrate de usar la plantilla descargada con las columnas: ' + requiredColumns.join(', '));
       }
 
-      // Map keys to normalized uppercase for reliable access
+      // Map keys to normalized uppercase for reliable access and handle common variants
       const normalizedData = data.map(row => {
         const newRow: any = {};
         Object.keys(row).forEach(key => {
-          newRow[key.toUpperCase()] = row[key];
+          const k = key.toUpperCase().trim()
+            .replace(/\s+/g, '_')
+            .replace('CONCEPTO', 'GLOSA')
+            .replace('MOVIMIENTO', 'ASIENTO_ID')
+            .replace('NO._DE_MOVIMIENTO', 'ASIENTO_ID')
+            .replace('NO_DE_MOVIMIENTO', 'ASIENTO_ID');
+          newRow[k] = row[key];
         });
         return newRow;
       });
 
       const groupedEntries: Record<string, any> = {};
+      const unmatchedAccounts = new Set<string>();
       
+      let lastId = "";
+      let lastDate: any = null;
+      let lastGlosa = "";
+
       normalizedData.forEach((row: any, index: number) => {
-        const groupKey = row.ASIENTO_ID || `${row.FECHA}_${row.GLOSA}_${index}`;
+        // Skip truly empty rows (no account and no values)
+        if (!row.CUENTA && !row.DEBE && !row.HABER) return;
+
+        // Carry-forward logic for empty cells
+        const currentId = (row.ASIENTO_ID !== undefined && row.ASIENTO_ID !== null && row.ASIENTO_ID !== "") ? String(row.ASIENTO_ID) : "";
+        
+        if (currentId !== "") lastId = currentId;
+        if (row.FECHA) lastDate = row.FECHA;
+        if (row.GLOSA) lastGlosa = row.GLOSA;
+
+        // Determine which movement this row belongs to
+        const groupKey = lastId || `INITIAL_GROUP_${index}`;
         
         if (!groupedEntries[groupKey]) {
+          // Format date if it's a Date object
+          let dateVal = lastDate || new Date().toISOString().split('T')[0];
+          if (dateVal instanceof Date) {
+            dateVal = dateVal.toISOString().split('T')[0];
+          } else if (typeof dateVal === 'number') {
+            // Excel serial date 
+            const date = new Date((dateVal - 25569) * 86400 * 1000);
+            dateVal = date.toISOString().split('T')[0];
+          }
+
           groupedEntries[groupKey] = {
-            date: row.FECHA,
-            description: row.GLOSA,
+            date: dateVal,
+            description: lastGlosa || "Asiento Importado",
             movements: []
           };
         }
         
-        const accountSearch = String(row.CUENTA);
+        const accountSearch = String(row.CUENTA || "").trim();
+        if (!accountSearch) return;
+
         const account = accounts.find(a => 
           normalizeString(a.name) === normalizeString(accountSearch) || 
           a.code === accountSearch
         );
 
         if (account) {
-          const debe = Number(row.DEBE) || 0;
-          const haber = Number(row.HABER) || 0;
+          const debe = parseFloat(String(row.DEBE || "0").replace(/[^0-9.-]/g, '')) || 0;
+          const haber = parseFloat(String(row.HABER || "0").replace(/[^0-9.-]/g, '')) || 0;
           
           if (debe > 0) {
             groupedEntries[groupKey].movements.push({ accountId: account.id, type: 'debit', amount: debe });
@@ -537,6 +611,8 @@ function JournalView({
           if (haber > 0) {
             groupedEntries[groupKey].movements.push({ accountId: account.id, type: 'credit', amount: haber });
           }
+        } else {
+          unmatchedAccounts.add(accountSearch);
         }
       });
 
@@ -548,13 +624,31 @@ function JournalView({
         }));
 
       if (finalEntries.length === 0) {
-        throw new Error('No se encontraron asientos válidos para importar. Verifica que los nombres de las cuentas coincidan con los del sistema.');
+        let msg = 'No encontramos asientos válidos para importar. Revisa que el archivo contenga cuentas y montos correctos (la suma de debe y haber debe coincidir).';
+        if (unmatchedAccounts.size > 0) {
+          msg = `Las siguientes cuentas no están en tu catálogo de cuentas: ${Array.from(unmatchedAccounts).slice(0, 5).join(', ')}. Verifica que los nombres sean idénticos en ambos lados.`;
+        }
+        onSetModal({
+          type: 'error',
+          title: 'Error de Importación',
+          message: msg
+        });
+        return;
       }
 
       onImport(finalEntries);
+      onSetModal({
+        type: 'success',
+        title: '¡Importación Lista!',
+        message: `Hemos cargado con éxito ${finalEntries.length} asientos a tu libro de diario desde el archivo Excel.`
+      });
       e.target.value = ''; 
     } catch (err) {
-      alert('Error de Importación: ' + (err instanceof Error ? err.message : 'Error desconocido'));
+      onSetModal({
+        type: 'error',
+        title: 'Formato no soportado',
+        message: 'No pudimos leer el archivo correctamente. Asegúrate de que sea un archivo Excel válido (.xlsx) y utiliza la plantilla proporcionada.'
+      });
     }
   };
 
@@ -1070,18 +1164,18 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
             const balance = balanceSide === 'left' ? totalD - totalC : totalC - totalD;
 
             return (
-              <div key={accountId} className="bg-white/5 border border-white/10 rounded-2xl shadow-xl backdrop-blur-md overflow-hidden flex flex-col h-fit transition-transform hover:scale-[1.02]">
-                <div className="bg-white/5 px-4 py-3 border-b border-white/10 flex items-center justify-between">
+              <div key={accountId} className="t-account-card bg-white/5 border border-white/10 rounded-2xl shadow-xl backdrop-blur-md overflow-hidden flex flex-col h-fit transition-transform hover:scale-[1.02]">
+                <div className="t-account-header bg-white/5 px-4 py-3 border-b border-white/10 flex items-center justify-between">
                   <span className="font-bold text-sm tracking-tight text-indigo-300">{acc?.name}</span>
                   <span className="text-[10px] font-mono text-slate-500">{acc?.code}</span>
                 </div>
                 
                 {/* The T Structure */}
-                <div className="flex flex-col flex-1 divide-y divide-white/10">
+                <div className="t-account-content flex flex-col flex-1 divide-y divide-white/10">
                   <div className="flex min-h-[140px] divide-x divide-white/20">
                     {/* Debit Column */}
-                    <div className="flex-1 p-3 space-y-1.5">
-                      <div className="text-[9px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
+                    <div className="t-account-column-debit flex-1 p-3 space-y-1.5">
+                      <div className="text-[9px] font-bold text-slate-500 uppercase mb-1 flex justify-between uppercase">
                         <span>Debe</span>
                       </div>
                       {typedData.debits.map((d, i) => (
@@ -1091,9 +1185,11 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
                         </div>
                       ))}
                     </div>
+                    {/* Divider for PDF consistency */}
+                    <div className="t-account-divider w-0"></div>
                     {/* Credit Column */}
-                    <div className="flex-1 p-3 space-y-1.5">
-                      <div className="text-[9px] font-bold text-slate-500 uppercase mb-1 text-right">
+                    <div className="t-account-column-credit flex-1 p-3 space-y-1.5">
+                      <div className="text-[9px] font-bold text-slate-500 uppercase mb-1 text-right uppercase">
                         <span>Haber</span>
                       </div>
                       {typedData.credits.map((c, i) => (
@@ -1106,7 +1202,7 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
                   </div>
 
                   {/* Totals */}
-                  <div className="flex divide-x divide-white/20 border-t-2 border-white/20">
+                  <div className="t-account-totals flex divide-x divide-white/20 border-t-2 border-white/20">
                     <div className="flex-1 p-2 text-right font-mono font-bold text-xs text-emerald-400">
                       {formatCurrency(totalD)}
                     </div>

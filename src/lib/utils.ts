@@ -230,58 +230,99 @@ export const exportToPDF = async (elementId: string, fileName: string) => {
   const element = document.getElementById(elementId);
   if (!element) return;
 
-  const canvas = await html2canvas(element, {
-    scale: 2,
-    useCORS: true,
-    logging: false,
-    onclone: (clonedDoc) => {
-      // Robust fix for oklch/oklab errors in html2canvas
-      // We traverse the cloned document and replace any problematic color functions
-      const elements = clonedDoc.querySelectorAll('*');
-      elements.forEach(el => {
-        const style = (el as HTMLElement).style;
-        const computed = window.getComputedStyle(el);
-        
-        ['color', 'backgroundColor', 'borderColor', 'fill', 'stroke'].forEach(prop => {
-          const val = style.getPropertyValue(prop) || computed.getPropertyValue(prop);
-          if (val && (val.includes('oklch') || val.includes('oklab'))) {
-            style.setProperty(prop, '#4f46e5', 'important');
-          }
-        });
-      });
-
-      // Also replace in CSS variables and style tags
-      const styleTags = clonedDoc.querySelectorAll('style');
-      styleTags.forEach(tag => {
-        tag.innerHTML = tag.innerHTML
-          .replace(/oklch\([^)]+\)/g, '#4f46e5')
-          .replace(/oklab\([^)]+\)/g, '#4f46e5');
-      });
-
-      const style = clonedDoc.createElement('style');
-      style.innerHTML = `
-        * {
-          color-scheme: light !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-        /* Override some common tailwind variables that might use oklch */
-        :root {
-          --tw-ring-color: rgba(79, 70, 229, 0.5) !important;
-          --tw-ring-offset-color: #0a0f1d !important;
-        }
-      `;
-      clonedDoc.head.appendChild(style);
-    }
-  });
-  
-  const imgData = canvas.toDataURL('image/png');
   const pdf = new jsPDF('p', 'mm', 'a4');
-  const imgProps = pdf.getImageProperties(imgData);
   const pdfWidth = pdf.internal.pageSize.getWidth();
-  const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+  const pdfHeight = pdf.internal.pageSize.getHeight();
+  const margin = 12;
   
-  pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+  const drawPageHeader = (pageNumber: number, totalPages: number) => {
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(30, 41, 59); // slate-800
+    pdf.text('Contabilidad M4Pro', margin, margin - 2);
+    
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(100, 116, 139); // slate-500
+    pdf.text(`Página ${pageNumber} de ${totalPages}`, pdfWidth - margin, margin - 2, { align: 'right' });
+    
+    pdf.setDrawColor(203, 213, 225); // slate-300
+    pdf.setLineWidth(0.5);
+    pdf.line(margin, margin, pdfWidth - margin, margin);
+  };
+
+  const cards = element.querySelectorAll('.t-account-card');
+  
+  if (cards.length > 0) {
+    let currentY = margin + 10;
+    
+    // First pass: Draw content and capture page count
+    for (let i = 0; i < cards.length; i += 2) {
+      const card1 = cards[i] as HTMLElement;
+      const card2 = cards[i + 1] as HTMLElement;
+
+      const captureConfig = {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc: Document) => {
+          const style = clonedDoc.createElement('style');
+          style.innerHTML = `
+            .t-account-card { border: 2px solid #000000 !important; border-radius: 8px !important; background: #ffffff !important; }
+            .t-account-header { border-bottom: 2px solid #000000 !important; background: #f8fafc !important; }
+            .t-account-divider { border-left: 2px solid #000000 !important; }
+            .t-account-totals { border-top: 2px solid #000000 !important; background: #f1f5f9 !important; }
+            span, div { color: #000000 !important; }
+            .text-emerald-400 { color: #059669 !important; font-weight: bold !important; }
+            .text-rose-400 { color: #dc2626 !important; font-weight: bold !important; }
+          `;
+          clonedDoc.head.appendChild(style);
+        }
+      };
+
+      const canvas1 = await html2canvas(card1, captureConfig);
+      const imgData1 = canvas1.toDataURL('image/png');
+      const imgWidth = (pdfWidth - (margin * 3)) / 2;
+      const imgHeight1 = (canvas1.height * imgWidth) / canvas1.width;
+
+      let maxHeightInRow = imgHeight1;
+      let imgData2 = null;
+      let imgHeight2 = 0;
+
+      if (card2) {
+        const canvas2 = await html2canvas(card2, captureConfig);
+        imgData2 = canvas2.toDataURL('image/png');
+        imgHeight2 = (canvas2.height * imgWidth) / canvas2.width;
+        maxHeightInRow = Math.max(imgHeight1, imgHeight2);
+      }
+
+      if (currentY + maxHeightInRow > pdfHeight - margin) {
+        pdf.addPage();
+        currentY = margin + 10;
+      }
+
+      pdf.addImage(imgData1, 'PNG', margin, currentY, imgWidth, imgHeight1);
+      if (imgData2) {
+        pdf.addImage(imgData2, 'PNG', margin * 2 + imgWidth, currentY, imgWidth, imgHeight2);
+      }
+
+      currentY += maxHeightInRow + 12;
+    }
+
+    // Second pass: Add headers to all pages
+    const totalPages = pdf.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      pdf.setPage(i);
+      drawPageHeader(i, totalPages);
+    }
+  } else {
+    const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+    const imgData = canvas.toDataURL('image/png');
+    const imgWidth = pdfWidth - (margin * 2);
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    drawPageHeader(1, 1);
+    pdf.addImage(imgData, 'PNG', margin, margin + 10, imgWidth, imgHeight);
+  }
+
   pdf.save(`${fileName}.pdf`);
 };
 
@@ -349,16 +390,16 @@ export const readExcel = (file: File): Promise<any[]> => {
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet);
+        const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
         resolve(json);
       } catch (err) {
         reject(err);
       }
     };
     reader.onerror = (err) => reject(err);
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   });
 };

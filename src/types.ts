@@ -47,6 +47,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // Activo No Circulante
   { id: 'anc-1', code: '1201', name: 'Terrenos', type: 'asset' },
   { id: 'anc-2', code: '1202', name: 'Edificios', type: 'asset' },
+  { id: 'anc-2b', code: '1202b', name: 'Edificio', type: 'asset' },
   { id: 'anc-3', code: '1203', name: 'Mobiliario y Equipo de Oficina', type: 'asset' },
   { id: 'anc-4', code: '1204', name: 'Equipo de Cómputo', type: 'asset' },
   { id: 'anc-5', code: '1205', name: 'Equipo de Entrega o Reparto', type: 'asset' },
@@ -65,6 +66,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { id: 'pcp-4', code: '2104', name: 'IVA Trasladado', type: 'liability' },
   { id: 'pcp-5', code: '2105', name: 'IVA por Trasladar', type: 'liability' },
   { id: 'pcp-6', code: '2106', name: 'Impuestos y Cuotas por Pagar', type: 'liability' },
+  { id: 'pcp-8', code: '2108', name: 'Sueldos por pagar', type: 'liability' },
   { id: 'pcp-7', code: '2107', name: 'Anticipo de Clientes', type: 'liability' },
 
   // Pasivo a Largo Plazo
@@ -75,6 +77,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
 
   // Capital Contable
   { id: 'cc-1', code: '3101', name: 'Capital Social', type: 'equity' },
+  { id: 'cc-1b', code: '3101b', name: 'Capital', type: 'equity' },
   { id: 'cc-2', code: '3102', name: 'Reserva Legal', type: 'equity' },
   { id: 'cc-3', code: '3103', name: 'Utilidad del Ejercicio', type: 'equity' },
   { id: 'cc-4', code: '3104', name: 'Pérdida del Ejercicio', type: 'equity' },
