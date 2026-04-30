@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
