@@ -37,6 +37,7 @@ import {
   cn, 
   formatCurrency, 
   exportToExcel, 
+  exportTAccountsStyleToExcel,
   exportTableToPDF,
   exportToPDF,
   readExcel,
@@ -1025,25 +1026,7 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
   };
 
   const handleExportExcel = async () => {
-    const data = Object.entries(tAccountsData).map(([accountId, data]) => {
-      const acc = accounts.find(a => a.id === accountId);
-      const typedData = data as { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] };
-      const totalDebit = typedData.debits.reduce((sum, d) => sum + d.amount, 0);
-      const totalCredit = typedData.credits.reduce((sum, c) => sum + c.amount, 0);
-      const balanceSide = (acc?.type === 'asset' || acc?.type === 'expense') ? 'Deudor' : 'Acreedor';
-      const balance = balanceSide === 'Deudor' ? totalDebit - totalCredit : totalCredit - totalDebit;
-      
-      return {
-        'Código': acc?.code,
-        'Cuenta': acc?.name,
-        'Tipo': acc?.type,
-        'Total Debe': totalDebit,
-        'Total Haber': totalCredit,
-        'Naturaleza': balanceSide,
-        'Saldo Final': balance
-      };
-    });
-    await exportToExcel(data, `Libro_Mayor_Saldos_${journalName}`, 'Cuentas_T');
+    await exportTAccountsStyleToExcel(tAccountsData, accounts, `Libro_Mayor_Cuentas_T_${journalName}`);
   };
 
   return (

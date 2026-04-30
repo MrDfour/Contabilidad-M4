@@ -6,6 +6,7 @@ import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas-pro';
+import { Account } from '../types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -90,6 +91,134 @@ export const exportToExcel = async (data: any[], fileName: string, sheetName: st
       });
       column.width = Math.min(50, maxColumnLength + 5);
     });
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  saveAs(blob, `${fileName}.xlsx`);
+};
+
+export const exportTAccountsStyleToExcel = async (
+  tAccountsData: Record<string, { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] }>,
+  accounts: Account[],
+  fileName: string
+) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Cuentas T');
+
+  const ACCOUNTS_PER_ROW = 4;
+  const COLUMN_WIDTHS = [5, 15, 2, 15, 5]; // Ref | Amount | Border | Amount | Ref
+  const SPACING_COLUMNS = 1;
+
+  let currentAccountIndex = 0;
+  let startRow = 2;
+
+  const entries = Object.entries(tAccountsData);
+
+  for (let i = 0; i < entries.length; i += ACCOUNTS_PER_ROW) {
+    const rowAccounts = entries.slice(i, i + ACCOUNTS_PER_ROW);
+    let maxRowsInThisBatch = 0;
+
+    rowAccounts.forEach(([accountId, data], colIndex) => {
+      const acc = accounts.find(a => a.id === accountId);
+      const startCol = colIndex * (COLUMN_WIDTHS.length + SPACING_COLUMNS) + 1;
+      
+      // Header
+      const headerCell = worksheet.getCell(startRow, startCol);
+      worksheet.mergeCells(startRow, startCol, startRow, startCol + 4);
+      headerCell.value = acc?.name || 'Unknown';
+      headerCell.font = { bold: true, size: 12 };
+      headerCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      headerCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE2E8F0' } // slate-200
+      };
+      headerCell.border = {
+        bottom: { style: 'thin' }
+      };
+
+      // T-Structure drawing
+      const debits = data.debits;
+      const credits = data.credits;
+      const rowCount = Math.max(debits.length, credits.length);
+      
+      for (let r = 0; r < rowCount; r++) {
+        const currentRow = startRow + 1 + r;
+        
+        // Debit side
+        if (debits[r]) {
+          worksheet.getCell(currentRow, startCol).value = `(${debits[r].ref})`;
+          worksheet.getCell(currentRow, startCol).font = { size: 9, color: { argb: 'FF64748B' } };
+          worksheet.getCell(currentRow, startCol + 1).value = debits[r].amount;
+          worksheet.getCell(currentRow, startCol + 1).numFmt = '"$"#,##0.00';
+        }
+
+        // Center line
+        worksheet.getCell(currentRow, startCol + 2).border = {
+          left: { style: 'medium' }
+        };
+
+        // Credit side
+        if (credits[r]) {
+          worksheet.getCell(currentRow, startCol + 3).value = credits[r].amount;
+          worksheet.getCell(currentRow, startCol + 3).numFmt = '"$"#,##0.00';
+          worksheet.getCell(currentRow, startCol + 4).value = `(${credits[r].ref})`;
+          worksheet.getCell(currentRow, startCol + 4).font = { size: 9, color: { argb: 'FF64748B' } };
+        }
+      }
+
+      const endDataRow = startRow + 1 + rowCount;
+      
+      // Totals Row
+      worksheet.getCell(endDataRow, startCol + 1).value = debits.reduce((s, d) => s + d.amount, 0);
+      worksheet.getCell(endDataRow, startCol + 1).numFmt = '"$"#,##0.00';
+      worksheet.getCell(endDataRow, startCol + 1).font = { bold: true };
+      worksheet.getCell(endDataRow, startCol + 1).border = { top: { style: 'thin' } };
+
+      worksheet.getCell(endDataRow, startCol + 2).border = { left: { style: 'medium' } };
+
+      worksheet.getCell(endDataRow, startCol + 3).value = credits.reduce((s, c) => s + c.amount, 0);
+      worksheet.getCell(endDataRow, startCol + 3).numFmt = '"$"#,##0.00';
+      worksheet.getCell(endDataRow, startCol + 3).font = { bold: true };
+      worksheet.getCell(endDataRow, startCol + 3).border = { top: { style: 'thin' } };
+
+      // Balance
+      const totalD = debits.reduce((s, d) => s + d.amount, 0);
+      const totalC = credits.reduce((s, c) => s + c.amount, 0);
+      const isDebitBalance = (acc?.type === 'asset' || acc?.type === 'expense');
+      const balance = isDebitBalance ? totalD - totalC : totalC - totalD;
+      const balanceType = isDebitBalance ? '(Saldo Deudor)' : '(Saldo Acreedor)';
+
+      const balanceRow = endDataRow + 1;
+      if (isDebitBalance) {
+        worksheet.getCell(balanceRow, startCol + 1).value = balance;
+        worksheet.getCell(balanceRow, startCol + 1).numFmt = '"$"#,##0.00';
+        worksheet.getCell(balanceRow, startCol + 1).font = { bold: true };
+        worksheet.getCell(balanceRow + 1, startCol + 1).value = balanceType;
+        worksheet.getCell(balanceRow + 1, startCol + 1).font = { italic: true, size: 9 };
+      } else {
+        worksheet.getCell(balanceRow, startCol + 3).value = balance;
+        worksheet.getCell(balanceRow, startCol + 3).numFmt = '"$"#,##0.00';
+        worksheet.getCell(balanceRow, startCol + 3).font = { bold: true };
+        worksheet.getCell(balanceRow + 1, startCol + 3).value = balanceType;
+        worksheet.getCell(balanceRow + 1, startCol + 3).font = { italic: true, size: 9 };
+      }
+
+      maxRowsInThisBatch = Math.max(maxRowsInThisBatch, rowCount + 5);
+    });
+
+    startRow += maxRowsInThisBatch + 2;
+  }
+
+  // Set column widths
+  for (let c = 0; c < ACCOUNTS_PER_ROW * (COLUMN_WIDTHS.length + SPACING_COLUMNS); c++) {
+    const colIdx = (c % (COLUMN_WIDTHS.length + SPACING_COLUMNS));
+    if (colIdx < COLUMN_WIDTHS.length) {
+      worksheet.getColumn(c + 1).width = COLUMN_WIDTHS[colIdx];
+    } else {
+      worksheet.getColumn(c + 1).width = 2; // spacer
+    }
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
