@@ -19,7 +19,9 @@ import {
   Settings,
   Edit2,
   Check,
-  X
+  X,
+  Upload,
+  FileUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -34,7 +36,9 @@ import {
   formatCurrency, 
   exportToExcel, 
   exportTableToPDF,
-  exportToPDF
+  exportToPDF,
+  readExcel,
+  normalizeString
 } from './lib/utils';
 
 export default function App() {
@@ -42,6 +46,7 @@ export default function App() {
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
   const [accounts] = useState<Account[]>(INITIAL_ACCOUNTS);
   const [activeTab, setActiveTab] = useState<'journal' | 't-accounts' | 'balance' | 'profit-loss'>('journal');
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'entry' | 'journal', id: string, title: string, message: string } | null>(null);
   
   const activeJournal = journals.find(j => j.id === activeJournalId) || null;
   const entries = activeJournal?.entries || [];
@@ -157,13 +162,32 @@ export default function App() {
     setJournals(prev => prev.map(j => j.id === id ? { ...j, name: newName } : j));
   };
 
-  const deleteJournal = (id: string) => {
-    if (journals.length <= 1) return;
-    const nextJournals = journals.filter(j => j.id !== id);
-    setJournals(nextJournals);
-    if (activeJournalId === id) {
-      setActiveJournalId(nextJournals[0].id);
+  const handleConfirmDelete = () => {
+    if (!confirmDelete) return;
+    if (confirmDelete.type === 'entry') {
+      if (!activeJournalId) return;
+      setJournals(prev => prev.map(j => 
+        j.id === activeJournalId 
+          ? { ...j, entries: j.entries.filter(e => e.id !== confirmDelete.id) }
+          : j
+      ));
+    } else {
+      const nextJournals = journals.filter(j => j.id !== confirmDelete.id);
+      setJournals(nextJournals);
+      if (activeJournalId === confirmDelete.id && nextJournals.length > 0) {
+        setActiveJournalId(nextJournals[0].id);
+      }
     }
+    setConfirmDelete(null);
+  };
+
+  const importEntries = (newEntries: JournalEntry[]) => {
+    if (!activeJournalId) return;
+    setJournals(prev => prev.map(j => 
+      j.id === activeJournalId 
+        ? { ...j, entries: [...j.entries, ...newEntries] }
+        : j
+    ));
   };
 
   return (
@@ -178,7 +202,7 @@ export default function App() {
             <div className="w-8 h-8 bg-indigo-600 flex items-center justify-center rounded-lg shadow-lg shadow-indigo-500/20">
               <BarChart3 className="text-white w-5 h-5" />
             </div>
-            <h1 className="text-xl font-semibold tracking-tight">ContaSis <span className="text-indigo-400">Pro</span></h1>
+            <h1 className="text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
           </div>
           <nav className="flex gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
             <TabButton 
@@ -224,11 +248,28 @@ export default function App() {
                 onSelectJournal={setActiveJournalId}
                 onCreateJournal={createJournal}
                 onRenameJournal={renameJournal}
-                onDeleteJournal={deleteJournal}
+                onDeleteJournal={(id) => {
+                  const j = journals.find(journal => journal.id === id);
+                  setConfirmDelete({
+                    type: 'journal',
+                    id,
+                    title: 'Eliminar Libro de Diario',
+                    message: `¿Estás seguro de que deseas eliminar "${j?.name}"? Esta acción no se puede deshacer.`
+                  });
+                }}
                 entries={entries} 
                 accounts={accounts} 
                 onAdd={addEntry} 
-                onDelete={deleteEntry} 
+                onDelete={(id) => {
+                  const e = entries.find(entry => entry.id === id);
+                  setConfirmDelete({
+                    type: 'entry',
+                    id,
+                    title: 'Eliminar Asiento',
+                    message: `¿Estás seguro de que deseas eliminar el asiento "${e?.description}"?`
+                  });
+                }}
+                onImport={importEntries}
               />
             </motion.div>
           )}
@@ -283,7 +324,7 @@ export default function App() {
 
       <footer className="mt-auto border-t border-white/10 py-8 bg-white/5 backdrop-blur-md relative z-10">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-400">
-          <p>© 2026 ContaSis Pro. Sistema de Gestión Contable.</p>
+          <p>© 2026 Contabilidad M4. Sistema de Gestión Contable.</p>
           <div className="flex gap-6">
             <span className="flex items-center gap-2 italic">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
@@ -292,6 +333,42 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {confirmDelete && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-slate-900 border border-white/10 p-6 rounded-2xl shadow-2xl max-w-sm w-full"
+            >
+              <div className="flex items-center gap-3 text-rose-400 mb-4">
+                <AlertCircle className="w-6 h-6" />
+                <h3 className="text-xl font-semibold">{confirmDelete.title}</h3>
+              </div>
+              <p className="text-slate-300 mb-8 leading-relaxed">
+                {confirmDelete.message}
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setConfirmDelete(null)}
+                  className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 transition-colors text-sm font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-lg shadow-rose-500/20 text-sm font-medium"
+                >
+                  Confirmar Eliminación
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -326,7 +403,8 @@ function JournalView({
   entries, 
   accounts, 
   onAdd, 
-  onDelete 
+  onDelete,
+  onImport
 }: { 
   journals: Journal[],
   activeJournalId: string | null,
@@ -337,7 +415,8 @@ function JournalView({
   entries: JournalEntry[], 
   accounts: Account[], 
   onAdd: (e: Omit<JournalEntry, 'id'>) => void,
-  onDelete: (id: string) => void
+  onDelete: (id: string) => void,
+  onImport: (entries: JournalEntry[]) => void
 }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const activeJournal = journals.find(j => j.id === activeJournalId);
@@ -357,33 +436,123 @@ function JournalView({
     }
   };
 
-  const handleExportExcel = () => {
-    const data = entries.flatMap((entry, idx) => 
-      entry.movements.map(m => ({
-        '#': idx + 1,
-        'Fecha': entry.date,
-        'Descripción': entry.description,
-        'Cuenta': accounts.find(a => a.id === m.accountId)?.name,
-        'Debe': m.type === 'debit' ? m.amount : 0,
-        'Haber': m.type === 'credit' ? m.amount : 0
-      }))
+  const handleExportExcel = async () => {
+    const data = entries.flatMap((entry) => 
+      entry.movements.map(m => {
+        const account = accounts.find(a => a.id === m.accountId);
+        return {
+          'FECHA': entry.date,
+          'GLOSA_DESCRIPCION': entry.description,
+          'CUENTA': account?.name || 'N/A',
+          'CODIGO': account?.code || '',
+          'DEBE': m.type === 'debit' ? m.amount : 0,
+          'HABER': m.type === 'credit' ? m.amount : 0
+        };
+      })
     );
-    exportToExcel(data, `Libro_Diario_${activeJournal?.name || 'General'}`, 'Movimientos');
+    await exportToExcel(data, `Libro_Diario_${activeJournal?.name || 'General'}`, 'Movimientos');
   };
 
   const handleExportPDF = () => {
-    const headers = [['#', 'Fecha', 'Cuenta', 'Descripción', 'Debe', 'Haber']];
-    const body = entries.flatMap((entry, idx) => 
-      entry.movements.map((m, mIdx) => [
-        mIdx === 0 ? idx + 1 : '',
-        mIdx === 0 ? entry.date : '',
+    const headers = [['FECHA', 'CUENTA', 'DESCRIPCIÓN / GLOSA', 'DEBE', 'HABER']];
+    const body = entries.flatMap((entry) => 
+      entry.movements.map((m) => [
+        entry.date,
         accounts.find(a => a.id === m.accountId)?.name || '',
-        mIdx === 0 ? entry.description : '',
+        entry.description,
         m.type === 'debit' ? formatCurrency(m.amount) : '',
         m.type === 'credit' ? formatCurrency(m.amount) : ''
       ])
     );
     exportTableToPDF(headers, body, `Libro_Diario_${activeJournal?.name || 'General'}`, `Libro Diario - ${activeJournal?.name || 'Resumen General'}`);
+  };
+
+  const handleDownloadTemplate = async () => {
+    const templateData = [
+      { 'ASIENTO_ID': '1', 'FECHA': '2024-05-01', 'GLOSA': 'Apertura de caja', 'CUENTA': 'Caja', 'DEBE': 1000, 'HABER': 0 },
+      { 'ASIENTO_ID': '1', 'FECHA': '2024-05-01', 'GLOSA': 'Apertura de caja', 'CUENTA': 'Capital Social', 'DEBE': 0, 'HABER': 1000 },
+      { 'ASIENTO_ID': '2', 'FECHA': '2024-05-02', 'GLOSA': 'Compra de mercadería', 'CUENTA': 'Caja', 'DEBE': 0, 'HABER': 500 },
+      { 'ASIENTO_ID': '2', 'FECHA': '2024-05-02', 'GLOSA': 'Compra de mercadería', 'CUENTA': 'Mercaderías', 'DEBE': 500, 'HABER': 0 },
+    ];
+    await exportToExcel(templateData, 'Plantilla_Importacion_M4', 'Guia_Carga');
+  };
+
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = await readExcel(file);
+      
+      const requiredColumns = ['FECHA', 'GLOSA', 'CUENTA', 'DEBE', 'HABER'];
+      if (data.length === 0) throw new Error('El archivo está vacío o no tiene el formato correcto.');
+      
+      // Handle potential case sensitivity in header
+      const firstRow = data[0];
+      const actualKeys = Object.keys(firstRow).map(k => k.toUpperCase());
+      const hasRequiredColumns = requiredColumns.every(col => actualKeys.includes(col));
+      
+      if (!hasRequiredColumns) {
+        throw new Error('Formato inválido. Asegúrate de usar la plantilla descargada con las columnas: ' + requiredColumns.join(', '));
+      }
+
+      // Map keys to normalized uppercase for reliable access
+      const normalizedData = data.map(row => {
+        const newRow: any = {};
+        Object.keys(row).forEach(key => {
+          newRow[key.toUpperCase()] = row[key];
+        });
+        return newRow;
+      });
+
+      const groupedEntries: Record<string, any> = {};
+      
+      normalizedData.forEach((row: any, index: number) => {
+        const groupKey = row.ASIENTO_ID || `${row.FECHA}_${row.GLOSA}_${index}`;
+        
+        if (!groupedEntries[groupKey]) {
+          groupedEntries[groupKey] = {
+            date: row.FECHA,
+            description: row.GLOSA,
+            movements: []
+          };
+        }
+        
+        const accountSearch = String(row.CUENTA);
+        const account = accounts.find(a => 
+          normalizeString(a.name) === normalizeString(accountSearch) || 
+          a.code === accountSearch
+        );
+
+        if (account) {
+          const debe = Number(row.DEBE) || 0;
+          const haber = Number(row.HABER) || 0;
+          
+          if (debe > 0) {
+            groupedEntries[groupKey].movements.push({ accountId: account.id, type: 'debit', amount: debe });
+          }
+          if (haber > 0) {
+            groupedEntries[groupKey].movements.push({ accountId: account.id, type: 'credit', amount: haber });
+          }
+        }
+      });
+
+      const finalEntries: JournalEntry[] = Object.values(groupedEntries)
+        .filter((entry: any) => entry.movements.length > 0)
+        .map(entry => ({
+          ...entry,
+          id: crypto.randomUUID(),
+        }));
+
+      if (finalEntries.length === 0) {
+        throw new Error('No se encontraron asientos válidos para importar. Verifica que los nombres de las cuentas coincidan con los del sistema.');
+      }
+
+      onImport(finalEntries);
+      e.target.value = ''; 
+    } catch (err) {
+      alert('Error de Importación: ' + (err instanceof Error ? err.message : 'Error desconocido'));
+    }
   };
 
   return (
@@ -394,6 +563,26 @@ function JournalView({
           <p className="text-slate-400 text-sm mt-1">Registra aquí todos los movimientos económicos de tu empresa.</p>
         </div>
         <div className="flex gap-3">
+          <button 
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600/10 border border-emerald-500/20 rounded-lg hover:bg-emerald-600/20 transition-colors text-sm text-emerald-400 font-medium"
+            title="Descargar plantilla de Excel para importación"
+          >
+            <FileUp className="w-4 h-4" /> Plantilla
+          </button>
+          <div className="relative">
+            <input 
+              type="file" 
+              accept=".xlsx,.xls" 
+              className="absolute inset-0 opacity-0 cursor-pointer" 
+              onChange={handleImportExcel}
+            />
+            <button 
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600/10 border border-indigo-500/20 rounded-lg hover:bg-indigo-600/20 transition-colors text-sm text-indigo-400 font-medium"
+            >
+              <Upload className="w-4 h-4" /> Importar
+            </button>
+          </div>
           <button 
             onClick={handleExportExcel}
             className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-sm text-slate-200"
@@ -734,7 +923,7 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
     exportToPDF('t-accounts-canvas', `Libro_Mayor_Cuentas_T_${journalName}`);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const data = Object.entries(tAccountsData).map(([accountId, data]) => {
       const acc = accounts.find(a => a.id === accountId);
       const typedData = data as { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] };
@@ -753,7 +942,7 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
         'Saldo Final': balance
       };
     });
-    exportToExcel(data, `Libro_Mayor_Saldos_${journalName}`, 'Cuentas_T');
+    await exportToExcel(data, `Libro_Mayor_Saldos_${journalName}`, 'Cuentas_T');
   };
 
   return (
@@ -884,7 +1073,7 @@ function ProfitLossView({ accountBalances, accounts, journalName }: { accountBal
     exportToPDF('profit-loss-canvas', `Estado_de_Resultados_${journalName}`);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const data = [
       { Concepto: 'INGRESOS', Monto: '' },
       ...revenueAccounts.map(a => ({ Concepto: a.name, Monto: accountBalances[a.id] })),
@@ -896,7 +1085,7 @@ function ProfitLossView({ accountBalances, accounts, journalName }: { accountBal
       { Concepto: '', Monto: '' },
       { Concepto: 'UTILIDAD / PERDIDA NETA', Monto: netIncome }
     ];
-    exportToExcel(data, `Estado_Resultados_${journalName}`, 'P&L');
+    await exportToExcel(data, `Estado_Resultados_${journalName}`, 'P&L');
   };
 
   return (
@@ -1008,7 +1197,7 @@ function BalanceSheetView({ accountBalances, accounts, journalName }: { accountB
     exportToPDF('balance-sheet-canvas', `Balance_General_${journalName}`);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const data = [
       { Sección: 'ACTIVOS', Concepto: '', Monto: '' },
       ...assetsAccounts.map(a => ({ Sección: 'Activo', Concepto: a.name, Monto: accountBalances[a.id] })),
@@ -1025,7 +1214,7 @@ function BalanceSheetView({ accountBalances, accounts, journalName }: { accountB
       { Sección: '', Concepto: '', Monto: '' },
       { Sección: 'PASIVO + CAPITAL', Concepto: '', Monto: totalLiabilities + totalEquity }
     ];
-    exportToExcel(data, `Balance_General_${journalName}`, 'Situacion_Financiera');
+    await exportToExcel(data, `Balance_General_${journalName}`, 'Situacion_Financiera');
   };
 
   return (
