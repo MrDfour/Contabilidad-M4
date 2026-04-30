@@ -1,0 +1,6 @@
+{
+  "name": "Programa de Contabilidad D4",
+  "description": "Sistema de contabilidad profesional con libro diario, cuentas T automatizadas, balance general y estados de resultados con exportación a PDF y Excel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
