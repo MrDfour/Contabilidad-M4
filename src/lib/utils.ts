@@ -6,7 +6,55 @@ import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas-pro';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { Account } from '../types';
+
+/** Returns true when running inside a native Capacitor app (iOS / Android). */
+const isNative = () => Capacitor.isNativePlatform();
+
+/**
+ * Converts a Blob to a base64 string (data without the leading data-URI prefix).
+ */
+const blobToBase64 = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Strip the "data:<mime>;base64," prefix that FileReader adds
+      resolve(result.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+
+/**
+ * On Android / iOS: write the file to the cache directory and open the native
+ * share sheet so the user can save it to Downloads, send it, etc.
+ * On desktop: fall back to the standard browser download via file-saver.
+ */
+const saveFile = async (blob: Blob, fileName: string): Promise<void> => {
+  if (isNative()) {
+    const base64Data = await blobToBase64(blob);
+    await Filesystem.writeFile({
+      path: fileName,
+      data: base64Data,
+      directory: Directory.Cache,
+    });
+    const { uri } = await Filesystem.getUri({
+      path: fileName,
+      directory: Directory.Cache,
+    });
+    await Share.share({
+      title: fileName,
+      url: uri,
+      dialogTitle: 'Guardar o compartir archivo',
+    });
+  } else {
+    saveAs(blob, fileName);
+  }
+};
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -95,7 +143,7 @@ export const exportToExcel = async (data: any[], fileName: string, sheetName: st
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, `${fileName}.xlsx`);
+  await saveFile(blob, `${fileName}.xlsx`);
 };
 
 export const exportTAccountsStyleToExcel = async (
@@ -223,7 +271,7 @@ export const exportTAccountsStyleToExcel = async (
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, `${fileName}.xlsx`);
+  await saveFile(blob, `${fileName}.xlsx`);
 };
 
 export const exportToPDF = async (elementId: string, fileName: string) => {
@@ -323,10 +371,11 @@ export const exportToPDF = async (elementId: string, fileName: string) => {
     pdf.addImage(imgData, 'PNG', margin, margin + 10, imgWidth, imgHeight);
   }
 
-  pdf.save(`${fileName}.pdf`);
+  const pdfBlob = pdf.output('blob');
+  await saveFile(pdfBlob, `${fileName}.pdf`);
 };
 
-export const exportTableToPDF = (headers: string[][], body: (string | number)[][], fileName: string, title: string) => {
+export const exportTableToPDF = async (headers: string[][], body: (string | number)[][], fileName: string, title: string): Promise<void> => {
   const doc = new jsPDF();
   
   // Header section
@@ -378,7 +427,8 @@ export const exportTableToPDF = (headers: string[][], body: (string | number)[][
     }
   });
 
-  doc.save(`${fileName}.pdf`);
+  const pdfBlob = doc.output('blob');
+  await saveFile(pdfBlob, `${fileName}.pdf`);
 };
 
 export const normalizeString = (str: string) => 
