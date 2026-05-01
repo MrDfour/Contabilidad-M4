@@ -647,7 +647,7 @@ function JournalView({
     await exportToExcel(data, `Libro_Diario_${activeJournal?.name || 'General'}`, 'Movimientos');
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     const headers = [['ID', 'FECHA', 'CUENTA', 'DESCRIPCIÓN / GLOSA', 'DEBE', 'HABER']];
     const body = entries.flatMap((entry, idx) => 
       entry.movements.map((m) => [
@@ -659,7 +659,7 @@ function JournalView({
         m.type === 'credit' ? formatCurrency(m.amount) : ''
       ])
     );
-    exportTableToPDF(headers, body, `Libro_Diario_${activeJournal?.name || 'General'}`, `Libro Diario - ${activeJournal?.name || 'Resumen General'}`);
+    await exportTableToPDF(headers, body, `Libro_Diario_${activeJournal?.name || 'General'}`, `Libro Diario - ${activeJournal?.name || 'Resumen General'}`);
   };
 
   const handleDownloadTemplate = async () => {
@@ -1390,8 +1390,8 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
   accounts: Account[],
   journalName: string
 }) {
-  const handleExportPDF = () => {
-    exportToPDF('t-accounts-canvas', `Libro_Mayor_Cuentas_T_${journalName}`);
+  const handleExportPDF = async () => {
+    await exportToPDF('t-accounts-canvas', `Libro_Mayor_Cuentas_T_${journalName}`);
   };
 
   const handleExportExcel = async () => {
@@ -1556,8 +1556,8 @@ function ProfitLossView({ accountBalances, accounts, journalName }: { accountBal
   const totalOpExpenses = opExpenseAccounts.reduce((sum, a) => sum + Math.abs(accountBalances[a.id] || 0), 0);
   const netIncome = utilidadBruta - totalOpExpenses;
 
-  const handleExportPDF = () => {
-    exportToPDF('profit-loss-canvas', `Estado_de_Resultados_${journalName}`);
+  const handleExportPDF = async () => {
+    await exportToPDF('profit-loss-canvas', `Estado_de_Resultados_${journalName}`);
   };
 
   const handleExportExcel = async () => {
@@ -1774,8 +1774,8 @@ function BalanceSheetView({ accountBalances, accounts, journalName }: { accountB
   const totalLiabilities = liabilityAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0);
   const totalEquity = equityAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + netIncome;
 
-  const handleExportPDF = () => {
-    exportToPDF('balance-sheet-canvas', `Balance_General_${journalName}`);
+  const handleExportPDF = async () => {
+    await exportToPDF('balance-sheet-canvas', `Balance_General_${journalName}`);
   };
 
   const handleExportExcel = async () => {
