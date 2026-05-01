@@ -24,7 +24,8 @@ import {
   FileUp,
   Search,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Menu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -52,6 +53,15 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'journal' | 't-accounts' | 'balance' | 'profit-loss'>('journal');
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'entry' | 'journal', id: string, title: string, message: string } | null>(null);
   const [modalInfo, setModalInfo] = useState<{ type: 'success' | 'error', title: string, message: string } | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
   
   const activeJournal = journals.find(j => j.id === activeJournalId) || null;
   const entries = activeJournal?.entries || [];
@@ -225,45 +235,127 @@ export default function App() {
       {/* Background Gradients */}
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_20%_30%,#1e293b_0%,transparent_50%),radial-gradient(circle_at_80%_70%,#334155_0%,transparent_50%)] pointer-events-none"></div>
 
+      {/* Mobile Menu Overlay */}
+      <AnimatePresence>
+        {isMobile && isMobileMenuOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
+            />
+            <motion.div 
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 left-0 w-72 bg-[#0a0f1d] border-r border-white/10 z-[70] p-6 flex flex-col gap-8 shadow-2xl"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-600 flex items-center justify-center rounded-lg shadow-lg">
+                  <BarChart3 className="text-white w-5 h-5" />
+                </div>
+                <h1 className="text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <p className="text-[10px] uppercase font-bold text-slate-500 mb-2 pl-1 tracking-widest">Navegación</p>
+                <MobileNavItem 
+                  active={activeTab === 'journal'} 
+                  onClick={() => { setActiveTab('journal'); setIsMobileMenuOpen(false); }}
+                  icon={<FileText className="w-5 h-5" />}
+                  label="Libro Diario"
+                />
+                <MobileNavItem 
+                  active={activeTab === 't-accounts'} 
+                  onClick={() => { setActiveTab('t-accounts'); setIsMobileMenuOpen(false); }}
+                  icon={<TableIcon className="w-5 h-5" />}
+                  label="Cuentas T"
+                />
+                <MobileNavItem 
+                  active={activeTab === 'balance'} 
+                  onClick={() => { setActiveTab('balance'); setIsMobileMenuOpen(false); }}
+                  icon={<Briefcase className="w-5 h-5" />}
+                  label="Balance General"
+                />
+                <MobileNavItem 
+                  active={activeTab === 'profit-loss'} 
+                  onClick={() => { setActiveTab('profit-loss'); setIsMobileMenuOpen(false); }}
+                  icon={<TrendingUp className="w-5 h-5" />}
+                  label="Estado de Resultados"
+                />
+              </div>
+
+              <div className="mt-auto">
+                <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl">
+                  <p className="text-xs text-indigo-300 font-medium leading-relaxed">
+                    Gestiona tu contabilidad de manera profesional con herramientas avanzadas de exportación y visualización.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
-      <header className="border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <header className="border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-600 flex items-center justify-center rounded-lg shadow-lg shadow-indigo-500/20">
+            {isMobile && (
+              <button 
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="p-2 -ml-2 text-slate-400 hover:text-white"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+            )}
+            <div className="w-8 h-8 bg-indigo-600 hidden sm:flex items-center justify-center rounded-lg shadow-lg shadow-indigo-500/20">
               <BarChart3 className="text-white w-5 h-5" />
             </div>
-            <h1 className="text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
+            <h1 className="text-lg md:text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
           </div>
-          <nav className="flex gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
-            <TabButton 
-              active={activeTab === 'journal'} 
-              onClick={() => setActiveTab('journal')}
-              icon={<FileText className="w-4 h-4" />}
-              label="Libro Diario"
-            />
-            <TabButton 
-              active={activeTab === 't-accounts'} 
-              onClick={() => setActiveTab('t-accounts')}
-              icon={<TableIcon className="w-4 h-4" />}
-              label="Cuentas T"
-            />
-            <TabButton 
-              active={activeTab === 'balance'} 
-              onClick={() => setActiveTab('balance')}
-              icon={<Briefcase className="w-4 h-4" />}
-              label="Balance General"
-            />
-            <TabButton 
-              active={activeTab === 'profit-loss'} 
-              onClick={() => setActiveTab('profit-loss')}
-              icon={<TrendingUp className="w-4 h-4" />}
-              label="E. de Resultados"
-            />
-          </nav>
+          
+          {!isMobile && (
+            <nav className="flex gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
+              <TabButton 
+                active={activeTab === 'journal'} 
+                onClick={() => setActiveTab('journal')}
+                icon={<FileText className="w-4 h-4" />}
+                label="Libro Diario"
+              />
+              <TabButton 
+                active={activeTab === 't-accounts'} 
+                onClick={() => setActiveTab('t-accounts')}
+                icon={<TableIcon className="w-4 h-4" />}
+                label="Cuentas T"
+              />
+              <TabButton 
+                active={activeTab === 'balance'} 
+                onClick={() => setActiveTab('balance')}
+                icon={<Briefcase className="w-4 h-4" />}
+                label="Balance General"
+              />
+              <TabButton 
+                active={activeTab === 'profit-loss'} 
+                onClick={() => setActiveTab('profit-loss')}
+                icon={<TrendingUp className="w-4 h-4" />}
+                label="E. de Resultados"
+              />
+            </nav>
+          )}
+
+          {isMobile && (
+            <div className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-1 rounded border border-indigo-500/30 uppercase">
+              {activeTab === 'journal' ? 'Diario' : activeTab === 't-accounts' ? 'Cuentas T' : activeTab === 'balance' ? 'Balance' : 'Resultados'}
+            </div>
+          )}
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 relative z-10">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 relative z-10">
         <AnimatePresence mode="wait">
           {activeTab === 'journal' && (
             <motion.div
@@ -444,6 +536,25 @@ export default function App() {
 
 // --- Sub-Components ---
 
+function MobileNavItem({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-4 px-4 py-3 rounded-xl transition-all w-full text-left",
+        active 
+          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 font-semibold" 
+          : "text-slate-400 hover:text-white hover:bg-white/5"
+      )}
+    >
+      <div className={cn("transition-colors", active ? "text-white" : "text-slate-500")}>
+        {icon}
+      </div>
+      <span className="text-sm tracking-tight">{label}</span>
+    </button>
+  );
+}
+
 function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
   return (
     <button
@@ -495,6 +606,12 @@ function JournalView({
 }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
+  const [expandedEntries, setExpandedEntries] = useState<Record<string, boolean>>({});
+
+  const toggleCollapse = (id: string) => {
+    setExpandedEntries(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   const activeJournal = journals.find(j => j.id === activeJournalId);
 
   const [editingJournalId, setEditingJournalId] = useState<string | null>(null);
@@ -840,6 +957,7 @@ function JournalView({
           <table className="w-full text-sm">
             <thead className="bg-white/5 border-b border-white/10">
               <tr>
+                <th className="px-6 py-4 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px] w-10"></th>
                 <th className="px-6 py-4 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px]">#</th>
                 <th className="px-6 py-4 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px]">Fecha</th>
                 <th className="px-6 py-4 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px]">Descripción</th>
@@ -857,77 +975,110 @@ function JournalView({
                   </td>
                 </tr>
               ) : (
-                entries.map((entry, idx) => (
-                  <React.Fragment key={entry.id}>
-                    {entry.movements.map((mov, mIdx) => (
-                      <tr key={`${entry.id}-${mIdx}`} className="group hover:bg-white/5 transition-colors">
-                        <td className="px-6 py-4 font-mono text-xs text-indigo-400/70">{mIdx === 0 ? idx + 1 : ""}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-slate-300">{mIdx === 0 ? entry.date : ""}</td>
-                        <td className="px-6 py-4">
-                          {mIdx === 0 && (
-                            <div className="max-w-[200px] truncate font-medium text-slate-200" title={entry.description}>
-                              {entry.description}
-                            </div>
-                          )}
+                entries.map((entry, idx) => {
+                  const isExpanded = expandedEntries[entry.id];
+                  const isCollapsed = !isExpanded;
+                  return (
+                    <React.Fragment key={entry.id}>
+                      <tr 
+                        className={cn(
+                          "group hover:bg-white/5 transition-colors cursor-pointer border-b border-white/5",
+                          isCollapsed && "bg-indigo-500/5 hover:bg-indigo-500/10"
+                        )}
+                        onClick={() => toggleCollapse(entry.id)}
+                      >
+                        <td className="px-3 md:px-6 py-4 text-center">
+                          <button className="text-slate-500 hover:text-white transition-colors">
+                            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </button>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-[10px] bg-indigo-500/10 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/20">
-                              {accounts.find(a => a.id === mov.accountId)?.code}
-                            </span>
-                            <span className={cn("text-slate-300", mov.type === 'credit' && "ml-4 italic text-slate-400")}>
-                              {accounts.find(a => a.id === mov.accountId)?.name}
-                            </span>
+                        <td className="px-2 md:px-6 py-4 font-mono text-[10px] md:text-xs text-indigo-400/70">{idx + 1}</td>
+                        <td className="px-2 md:px-6 py-4 text-xs text-slate-300 whitespace-normal min-w-[70px]">{entry.date}</td>
+                        <td className="px-3 md:px-6 py-4" colSpan={isCollapsed ? 3 : 1}>
+                          <div className={cn("text-xs md:text-sm font-medium text-slate-200 leading-relaxed whitespace-normal break-words", isCollapsed ? "line-clamp-1" : "")} title={entry.description}>
+                            {entry.description}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-right font-mono tabular-nums text-emerald-400">
-                          {mov.type === 'debit' ? formatCurrency(mov.amount) : ""}
-                        </td>
-                        <td className="px-6 py-4 text-right font-mono tabular-nums text-rose-400">
-                          {mov.type === 'credit' ? formatCurrency(mov.amount) : ""}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          {mIdx === 0 && (
-                            <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <div className="flex flex-col gap-0.5 mr-1">
-                                <button 
-                                  onClick={() => onMove(entry.id, 'up')}
-                                  disabled={idx === 0}
-                                  className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
-                                >
-                                  <ChevronUp className="w-3.5 h-3.5" />
-                                </button>
-                                <button 
-                                  onClick={() => onMove(entry.id, 'down')}
-                                  disabled={idx === entries.length - 1}
-                                  className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
-                                >
-                                  <ChevronDown className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
+                        {!isCollapsed && (
+                          <>
+                            <td className="px-3 md:px-6 py-4"></td>
+                            <td className="px-3 md:px-6 py-4 text-right"></td>
+                            <td className="px-3 md:px-6 py-4 text-right"></td>
+                          </>
+                        )}
+                        {isCollapsed && (
+                          <td className="px-3 md:px-6 py-4 text-right">
+                             <span className="text-[9px] md:text-[10px] text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded uppercase font-bold whitespace-nowrap">
+                               {entry.movements.length} Mov.
+                             </span>
+                          </td>
+                        )}
+                        <td className="px-2 md:px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-0.5 md:gap-1">
+                            <div className="flex flex-col gap-0.5 mr-1 hidden md:flex">
                               <button 
-                                onClick={() => {
-                                  setEditingEntry(entry);
-                                  setIsFormOpen(false);
-                                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                                }}
-                                className="p-1.5 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all"
+                                onClick={(e) => { e.stopPropagation(); onMove(entry.id, 'up'); }}
+                                disabled={idx === 0}
+                                className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
                               >
-                                <Edit2 className="w-4 h-4" />
+                                <ChevronUp className="w-3.5 h-3.5" />
                               </button>
                               <button 
-                                onClick={() => onDelete(entry.id)}
-                                className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                                onClick={(e) => { e.stopPropagation(); onMove(entry.id, 'down'); }}
+                                disabled={idx === entries.length - 1}
+                                className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <ChevronDown className="w-3.5 h-3.5" />
                               </button>
                             </div>
-                          )}
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingEntry(entry);
+                                setIsFormOpen(false);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className="p-1 md:p-1.5 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 md:w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
+                              className="p-1 md:p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 md:w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    ))}
-                  </React.Fragment>
-                ))
+                      {!isCollapsed && entry.movements.map((mov, mIdx) => (
+                        <tr key={`${entry.id}-${mIdx}`} className="bg-white/[0.02] hover:bg-white/5 transition-colors border-l-2 border-indigo-500/20">
+                          <td className="px-3 md:px-6 py-3"></td>
+                          <td className="px-3 md:px-6 py-3"></td>
+                          <td className="px-3 md:px-6 py-3"></td>
+                          <td className="px-3 md:px-6 py-3"></td>
+                          <td className="px-3 md:px-6 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[9px] md:text-[10px] bg-indigo-500/10 text-indigo-300 px-1 py-0.5 rounded border border-indigo-500/20">
+                                {accounts.find(a => a.id === mov.accountId)?.code}
+                              </span>
+                              <span className={cn("text-slate-300 text-[11px] md:text-xs whitespace-normal break-words", mov.type === 'credit' && "ml-3 md:ml-4 italic text-slate-400")}>
+                                {accounts.find(a => a.id === mov.accountId)?.name}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-3 md:px-6 py-3 text-right font-mono tabular-nums text-emerald-400 text-[11px] md:text-xs">
+                            {mov.type === 'debit' ? formatCurrency(mov.amount) : ""}
+                          </td>
+                          <td className="px-3 md:px-6 py-3 text-right font-mono tabular-nums text-rose-400 text-[11px] md:text-xs">
+                            {mov.type === 'credit' ? formatCurrency(mov.amount) : ""}
+                          </td>
+                          <td className="px-3 md:px-6 py-3"></td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -1249,31 +1400,31 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold tracking-tight text-white">Cuentas T</h2>
+            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white">Cuentas T</h2>
             <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-xs font-mono rounded border border-indigo-500/30 mt-1">{journalName}</span>
           </div>
-          <p className="text-slate-400 text-sm mt-1">Representiva visual del flujo de cada cuenta referenciada al diario.</p>
+          <p className="text-slate-400 text-xs md:text-sm mt-1">Representiva visual del flujo de cada cuenta referenciada al diario.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 md:gap-3">
           <button 
             onClick={handleExportExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-sm text-slate-200"
+            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 md:px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-xs md:text-sm text-slate-200"
           >
             <Download className="w-4 h-4" /> Excel
           </button>
           <button 
             onClick={handleExportPDF}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 text-sm font-medium"
+            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3 md:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 text-xs md:text-sm font-medium"
           >
             <FileText className="w-4 h-4" /> PDF
           </button>
         </div>
       </div>
 
-      <div id="t-accounts-canvas" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-10">
+      <div id="t-accounts-canvas" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 pb-10">
         {Object.entries(tAccountsData).length === 0 ? (
           <div className="col-span-full py-20 text-center text-slate-500 italic bg-white/5 border border-dashed border-white/10 rounded-2xl font-mono backdrop-blur-sm">
             No hay movimientos generados para mostrar cuentas T.
@@ -1289,9 +1440,9 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
 
             return (
               <div key={accountId} className="t-account-card bg-white/5 border border-white/10 rounded-2xl shadow-xl backdrop-blur-md overflow-hidden flex flex-col h-fit transition-transform hover:scale-[1.02]">
-                <div className="t-account-header bg-white/5 px-4 py-3 border-b border-white/10 flex items-center justify-between">
-                  <span className="font-bold text-sm tracking-tight text-indigo-300">{acc?.name}</span>
-                  <span className="text-[10px] font-mono text-slate-500">{acc?.code}</span>
+                <div className="t-account-header bg-white/5 px-4 py-3 border-b border-white/10 flex items-center justify-between gap-3">
+                  <span className="font-bold text-sm tracking-tight text-indigo-300 break-words line-clamp-2 md:line-clamp-none" title={acc?.name}>{acc?.name}</span>
+                  <span className="text-[10px] font-mono text-slate-500 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">{acc?.code}</span>
                 </div>
                 
                 {/* The T Structure */}
@@ -1439,15 +1590,15 @@ function ProfitLossView({ accountBalances, accounts, journalName }: { accountBal
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold tracking-tight text-white">Estado de Resultados</h2>
+            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white">Estado de Resultados</h2>
             <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-xs font-mono rounded border border-indigo-500/30 mt-1">{journalName}</span>
           </div>
-          <p className="text-slate-400 text-sm mt-1">Método Analítico - Desglose detallado.</p>
+          <p className="text-slate-400 text-xs md:text-sm mt-1">Método Analítico - Desglose detallado.</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-4">
           <div className="flex flex-col">
             <label className="text-[10px] uppercase font-bold text-slate-500 mb-1 ml-1">Inventario Final</label>
             <input 
@@ -1455,19 +1606,19 @@ function ProfitLossView({ accountBalances, accounts, journalName }: { accountBal
               value={finalInventory || ''}
               onChange={(e) => setFinalInventory(Number(e.target.value))}
               placeholder="0.00"
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 w-32 font-mono"
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 w-full sm:w-32 font-mono"
             />
           </div>
-          <div className="flex gap-3 pt-5">
+          <div className="flex gap-3">
             <button 
               onClick={handleExportExcel}
-              className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-sm text-slate-200"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-sm text-slate-200"
             >
               <Download className="w-4 h-4" /> Excel
             </button>
             <button 
               onClick={handleExportPDF}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 text-sm font-medium"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 text-sm font-medium"
             >
               <FileText className="w-4 h-4" /> PDF
             </button>
@@ -1475,7 +1626,7 @@ function ProfitLossView({ accountBalances, accounts, journalName }: { accountBal
         </div>
       </div>
 
-      <div id="profit-loss-canvas" className="bg-white/5 border border-white/10 p-8 rounded-2xl shadow-2xl backdrop-blur-xl max-w-3xl mx-auto">
+      <div id="profit-loss-canvas" className="bg-white/5 border border-white/10 p-4 md:p-8 rounded-2xl shadow-2xl backdrop-blur-xl max-w-3xl mx-auto overflow-x-auto">
         <div className="text-center mb-8 pb-4 border-b border-white/10">
           <h3 className="text-xl font-bold uppercase tracking-widest text-indigo-300">Estado de Resultados</h3>
           <p className="text-[10px] text-slate-500 mt-1 uppercase font-mono tracking-tighter">Método Analítico</p>
@@ -1545,29 +1696,29 @@ function ProfitLossView({ accountBalances, accounts, journalName }: { accountBal
               </div>
               <div className="flex justify-between border-t border-white/10 pt-1 text-slate-200 font-bold">
                 <span>(=) Suma Total de Mercancías</span>
-                <span className="font-mono">{formatCurrency(sumaMercancias)}</span>
+                <span className="font-mono ml-2 whitespace-nowrap">{formatCurrency(sumaMercancias)}</span>
               </div>
-              <div className="flex justify-between text-emerald-400/80 italic pl-4 text-xs">
-                <span>(-) Inventario Final</span>
-                <span className="font-mono">({formatCurrency(finalInventory)})</span>
+              <div className="flex justify-between text-emerald-400/80 italic pl-4 text-xs gap-2">
+                <span className="break-words">(-) Inventario Final</span>
+                <span className="font-mono whitespace-nowrap">({formatCurrency(finalInventory)})</span>
               </div>
-              <div className="flex justify-between border-t border-white/20 pt-1 font-bold text-slate-100 bg-white/5 px-2 rounded">
-                <span>Costo de lo Vendido</span>
-                <span className="font-mono text-rose-400">{formatCurrency(costoVendido)}</span>
+              <div className="flex justify-between border-t border-white/20 pt-1 font-bold text-slate-100 bg-white/5 px-2 rounded gap-2">
+                <span className="break-words">Costo de lo Vendido</span>
+                <span className="font-mono text-rose-400 whitespace-nowrap">{formatCurrency(costoVendido)}</span>
               </div>
             </div>
           </section>
 
           {/* 3. UTILIDAD BRUTA */}
           <div className={cn(
-            "p-5 rounded-2xl flex justify-between items-center border shadow-lg transition-colors",
+            "p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center border shadow-lg transition-colors gap-4",
             utilidadBruta >= 0 ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"
           )}>
             <div className="flex flex-col">
-              <span className="font-black uppercase tracking-widest text-white text-lg">Utilidad / Pérdida Bruta</span>
+              <span className="font-black uppercase tracking-widest text-white text-base md:text-lg break-words">Utilidad / Pérdida Bruta</span>
               <span className="text-[10px] text-slate-500 font-mono">Ventas Netas - Costo de lo Vendido</span>
             </div>
-            <span className={cn("text-3xl font-black font-mono tabular-nums", utilidadBruta >= 0 ? "text-emerald-400" : "text-rose-400")}>
+            <span className={cn("text-2xl md:text-3xl font-black font-mono tabular-nums", utilidadBruta >= 0 ? "text-emerald-400" : "text-rose-400")}>
               {formatCurrency(utilidadBruta)}
             </span>
           </div>
@@ -1582,21 +1733,21 @@ function ProfitLossView({ accountBalances, accounts, journalName }: { accountBal
             ) : (
               <div className="pl-4 space-y-1">
                 {opExpenseAccounts.map(a => (
-                  <div key={a.id} className="flex justify-between text-[11px] text-slate-400 font-mono">
-                    <span>{a.name}</span>
-                    <span>({formatCurrency(Math.abs(accountBalances[a.id] || 0))})</span>
+                  <div key={a.id} className="flex justify-between text-[11px] text-slate-400 font-mono gap-2">
+                    <span className="break-words">{a.name}</span>
+                    <span className="whitespace-nowrap">({formatCurrency(Math.abs(accountBalances[a.id] || 0))})</span>
                   </div>
                 ))}
-                <div className="flex justify-between border-t border-white/5 pt-1 font-bold text-slate-300 text-xs">
-                  <span>Total Gastos Operativos</span>
-                  <span>({formatCurrency(totalOpExpenses)})</span>
+                <div className="flex justify-between border-t border-white/5 pt-1 font-bold text-slate-300 text-xs gap-2">
+                  <span className="break-words">Total Gastos Operativos</span>
+                  <span className="whitespace-nowrap">({formatCurrency(totalOpExpenses)})</span>
                 </div>
               </div>
             )}
           </section>
 
           {/* 5. UTILIDAD NETA */}
-          <div className="flex justify-between items-center pt-4 border-t border-white/20">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-4 border-t border-white/20 gap-4">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Utilidad / Pérdida Neta del Periodo</span>
             <span className={cn("text-lg font-bold font-mono", netIncome >= 0 ? "text-emerald-500/70" : "text-rose-500/70")}>
               {formatCurrency(netIncome)}
@@ -1649,31 +1800,31 @@ function BalanceSheetView({ accountBalances, accounts, journalName }: { accountB
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold tracking-tight text-white">Balance General</h2>
+            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white">Balance General</h2>
             <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-xs font-mono rounded border border-indigo-500/30 mt-1">{journalName}</span>
           </div>
-          <p className="text-slate-400 text-sm mt-1">Situación financiera al momento actual.</p>
+          <p className="text-slate-400 text-xs md:text-sm mt-1">Situación financiera al momento actual.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <button 
             onClick={handleExportExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-sm text-slate-200"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-sm text-slate-200"
           >
             <Download className="w-4 h-4" /> Excel
           </button>
           <button 
             onClick={handleExportPDF}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 text-sm font-medium"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 text-sm font-medium"
           >
             <FileText className="w-4 h-4" /> PDF
           </button>
         </div>
       </div>
 
-      <div id="balance-sheet-canvas" className="bg-white/5 border border-white/10 p-8 rounded-2xl shadow-2xl backdrop-blur-xl">
+      <div id="balance-sheet-canvas" className="bg-white/5 border border-white/10 p-4 md:p-8 rounded-2xl shadow-2xl backdrop-blur-xl overflow-x-auto">
         <div className="text-center mb-8 pb-4 border-b border-white/10">
           <h3 className="text-xl font-bold uppercase tracking-widest text-emerald-300">Balance General</h3>
           <p className="text-[10px] text-slate-500 mt-1 uppercase font-mono tracking-tighter">Estructura Financiera</p>
@@ -1687,15 +1838,15 @@ function BalanceSheetView({ accountBalances, accounts, journalName }: { accountB
                 <p className="text-xs text-slate-500 italic">Sin activos registrados.</p>
               ) : (
                 assetsAccounts.map(a => (
-                  <div key={a.id} className="flex justify-between items-center text-sm font-mono leading-none text-slate-300">
-                    <span>{a.name}</span>
-                    <span>{formatCurrency(accountBalances[a.id] || 0)}</span>
+                  <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
+                    <span className="break-words py-1">{a.name}</span>
+                    <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
                   </div>
                 ))
               )}
-              <div className="flex justify-between items-center font-bold text-sm pt-4 border-t-2 border-white/20 font-mono text-emerald-400">
-                <span>Suma el Activo</span>
-                <span>{formatCurrency(totalAssets)}</span>
+              <div className="flex justify-between items-center font-bold text-xs md:text-sm pt-4 border-t-2 border-white/20 font-mono text-emerald-400 gap-4">
+                <span className="break-words">Suma el Activo</span>
+                <span className="whitespace-nowrap">{formatCurrency(totalAssets)}</span>
               </div>
             </div>
           </div>
@@ -1707,40 +1858,40 @@ function BalanceSheetView({ accountBalances, accounts, journalName }: { accountB
                 <p className="text-xs text-slate-500 italic">Sin pasivos registrados.</p>
               ) : (
                 liabilityAccounts.map(a => (
-                  <div key={a.id} className="flex justify-between items-center text-sm font-mono leading-none text-slate-400">
-                    <span>{a.name}</span>
-                    <span>{formatCurrency(accountBalances[a.id] || 0)}</span>
+                  <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-400 gap-4">
+                    <span className="break-words py-1">{a.name}</span>
+                    <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
                   </div>
                 ))
               )}
-              <div className="flex justify-between items-center font-bold text-sm pt-2 border-t border-white/10 font-mono text-white">
-                <span>Total Pasivo</span>
-                <span>{formatCurrency(totalLiabilities)}</span>
+              <div className="flex justify-between items-center font-bold text-xs md:text-sm pt-2 border-t border-white/10 font-mono text-white gap-4">
+                <span className="break-words">Total Pasivo</span>
+                <span className="whitespace-nowrap">{formatCurrency(totalLiabilities)}</span>
               </div>
             </div>
 
             <div className="space-y-3">
               <h4 className="font-bold text-sm border-b border-white/20 pb-1 uppercase tracking-wider text-slate-300">Capital Contable</h4>
               {equityAccounts.map(a => (
-                <div key={a.id} className="flex justify-between items-center text-sm font-mono leading-none text-slate-400">
-                  <span>{a.name}</span>
-                  <span>{formatCurrency(accountBalances[a.id] || 0)}</span>
+                <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-400 gap-4">
+                  <span className="break-words py-1">{a.name}</span>
+                  <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
                 </div>
               ))}
-              <div className="flex justify-between items-center text-sm font-mono leading-none italic text-slate-500">
-                <span>Utilidad del Ejercicio (Calculada)</span>
-                <span>{formatCurrency(netIncome)}</span>
+              <div className="flex justify-between items-start text-xs md:text-sm font-mono italic text-slate-500 gap-4">
+                <span className="break-words">Utilidad del Ejercicio (Calculada)</span>
+                <span className="whitespace-nowrap">{formatCurrency(netIncome)}</span>
               </div>
-              <div className="flex justify-between items-center font-bold text-sm pt-2 border-t border-white/10 font-mono text-white">
-                <span>Total Capital</span>
-                <span>{formatCurrency(totalEquity)}</span>
+              <div className="flex justify-between items-center font-bold text-xs md:text-sm pt-2 border-t border-white/10 font-mono text-white gap-4">
+                <span className="break-words">Total Capital</span>
+                <span className="whitespace-nowrap">{formatCurrency(totalEquity)}</span>
               </div>
             </div>
 
-            <div className="flex justify-between items-center font-bold text-sm pt-4 border-t-2 border-white/20 font-mono bg-white/5 p-3 rounded-lg">
-              <span className="text-slate-300">Pasivo + Capital</span>
+            <div className="flex justify-between items-center font-bold text-xs md:text-sm pt-4 border-t-2 border-white/20 font-mono bg-white/5 p-3 rounded-lg gap-4">
+              <span className="text-slate-300 break-words">Pasivo + Capital</span>
               <span className={cn(
-                "px-2 rounded",
+                "px-2 rounded whitespace-nowrap",
                 Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01 
                   ? "text-indigo-400 border border-indigo-400/20 bg-indigo-400/5" 
                   : "text-rose-400 border border-rose-400/20 bg-rose-400/5 underline decoration-double"
