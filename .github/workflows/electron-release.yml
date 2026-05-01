@@ -120,16 +120,41 @@ jobs:
 
       - name: Build signed release APKs
         run: |
+          mkdir -p "$GITHUB_WORKSPACE/build-failure-reports"
           cd android
-          ./gradlew assembleRelease \
+          set -o pipefail
+          ./gradlew assembleRelease --stacktrace \
             -Pandroid.injected.signing.store.file="$GITHUB_WORKSPACE/android/app/release.keystore" \
             -Pandroid.injected.signing.store.password="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
             -Pandroid.injected.signing.key.alias="${{ secrets.ANDROID_KEY_ALIAS }}" \
-            -Pandroid.injected.signing.key.password="${{ secrets.ANDROID_KEY_PASSWORD }}"
+            -Pandroid.injected.signing.key.password="${{ secrets.ANDROID_KEY_PASSWORD }}" \
+            2>&1 | tee "$GITHUB_WORKSPACE/build-failure-reports/gradle-build.log"
 
       - name: Remove keystore
         if: always()
         run: rm -f android/app/release.keystore
+
+      - name: Collect Gradle reports on failure
+        if: failure()
+        run: |
+          if [ -d android/build/reports ]; then
+            cp -r android/build/reports "$GITHUB_WORKSPACE/build-failure-reports/gradle-reports"
+          fi
+          if [ -d android/app/build/reports ]; then
+            cp -r android/app/build/reports "$GITHUB_WORKSPACE/build-failure-reports/app-reports"
+          fi
+          if [ -d android/capacitor-android/build/reports ]; then
+            cp -r android/capacitor-android/build/reports "$GITHUB_WORKSPACE/build-failure-reports/capacitor-android-reports"
+          fi
+
+      - name: Upload build failure reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-failure-reports-${{ github.run_number }}
+          path: build-failure-reports/
+          retention-days: 30
+          if-no-files-found: warn
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
