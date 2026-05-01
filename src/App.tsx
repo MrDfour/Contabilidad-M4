@@ -23,7 +23,8 @@ import {
   Upload,
   FileUp,
   Search,
-  ChevronDown
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -133,6 +134,31 @@ export default function App() {
         ? { ...j, entries: [...j.entries, { ...newEntry, id: crypto.randomUUID() }] }
         : j
     ));
+  };
+
+  const updateEntry = (id: string, updatedEntry: Omit<JournalEntry, 'id'>) => {
+    if (!activeJournalId) return;
+    setJournals(prev => prev.map(j => 
+      j.id === activeJournalId 
+        ? { ...j, entries: j.entries.map(e => e.id === id ? { ...updatedEntry, id } : e) }
+        : j
+    ));
+  };
+
+  const moveEntry = (id: string, direction: 'up' | 'down') => {
+    if (!activeJournalId) return;
+    setJournals(prev => prev.map(j => {
+      if (j.id !== activeJournalId) return j;
+      const index = j.entries.findIndex(e => e.id === id);
+      if (index === -1) return j;
+      if (direction === 'up' && index === 0) return j;
+      if (direction === 'down' && index === j.entries.length - 1) return j;
+
+      const newEntries = [...j.entries];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      [newEntries[index], newEntries[targetIndex]] = [newEntries[targetIndex], newEntries[index]];
+      return { ...j, entries: newEntries };
+    }));
   };
 
   const deleteEntry = (id: string) => {
@@ -264,6 +290,8 @@ export default function App() {
                 entries={entries} 
                 accounts={accounts} 
                 onAdd={addEntry} 
+                onUpdate={updateEntry}
+                onMove={moveEntry}
                 onDelete={(id) => {
                   const e = entries.find(entry => entry.id === id);
                   setConfirmDelete({
@@ -444,6 +472,8 @@ function JournalView({
   entries, 
   accounts, 
   onAdd, 
+  onUpdate,
+  onMove,
   onDelete,
   onImport,
   onSetModal
@@ -457,11 +487,14 @@ function JournalView({
   entries: JournalEntry[], 
   accounts: Account[], 
   onAdd: (e: Omit<JournalEntry, 'id'>) => void,
+  onUpdate: (id: string, e: Omit<JournalEntry, 'id'>) => void,
+  onMove: (id: string, direction: 'up' | 'down') => void,
   onDelete: (id: string) => void,
   onImport: (entries: JournalEntry[]) => void,
   onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void
 }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const activeJournal = journals.find(j => j.id === activeJournalId);
 
   const [editingJournalId, setEditingJournalId] = useState<string | null>(null);
@@ -480,10 +513,11 @@ function JournalView({
   };
 
   const handleExportExcel = async () => {
-    const data = entries.flatMap((entry) => 
+    const data = entries.flatMap((entry, idx) => 
       entry.movements.map(m => {
         const account = accounts.find(a => a.id === m.accountId);
         return {
+          'ID_MOVIMIENTO': idx + 1,
           'FECHA': entry.date,
           'GLOSA_DESCRIPCION': entry.description,
           'CUENTA': account?.name || 'N/A',
@@ -497,9 +531,10 @@ function JournalView({
   };
 
   const handleExportPDF = () => {
-    const headers = [['FECHA', 'CUENTA', 'DESCRIPCIÓN / GLOSA', 'DEBE', 'HABER']];
-    const body = entries.flatMap((entry) => 
+    const headers = [['ID', 'FECHA', 'CUENTA', 'DESCRIPCIÓN / GLOSA', 'DEBE', 'HABER']];
+    const body = entries.flatMap((entry, idx) => 
       entry.movements.map((m) => [
+        idx + 1,
         entry.date,
         accounts.find(a => a.id === m.accountId)?.name || '',
         entry.description,
@@ -772,14 +807,30 @@ function JournalView({
       </div>
 
       <AnimatePresence>
-        {isFormOpen && (
+        {(isFormOpen || editingEntry) && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <JournalEntryForm accounts={accounts} onAdd={(e) => { onAdd(e); setIsFormOpen(false); }} />
+            <JournalEntryForm 
+              accounts={accounts} 
+              initialData={editingEntry || undefined}
+              onCancel={() => {
+                setIsFormOpen(false);
+                setEditingEntry(null);
+              }}
+              onAdd={(e) => { 
+                if (editingEntry) {
+                  onUpdate(editingEntry.id, e);
+                  setEditingEntry(null);
+                } else {
+                  onAdd(e);
+                  setIsFormOpen(false); 
+                }
+              }} 
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -837,12 +888,40 @@ function JournalView({
                         </td>
                         <td className="px-6 py-4 text-center">
                           {mIdx === 0 && (
-                            <button 
-                              onClick={() => onDelete(entry.id)}
-                              className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex flex-col gap-0.5 mr-1">
+                                <button 
+                                  onClick={() => onMove(entry.id, 'up')}
+                                  disabled={idx === 0}
+                                  className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
+                                >
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => onMove(entry.id, 'down')}
+                                  disabled={idx === entries.length - 1}
+                                  className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <button 
+                                onClick={() => {
+                                  setEditingEntry(entry);
+                                  setIsFormOpen(false);
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="p-1.5 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => onDelete(entry.id)}
+                                className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -961,7 +1040,17 @@ function SearchableAccountSelect({
   );
 }
 
-function JournalEntryForm({ accounts, onAdd }: { accounts: Account[], onAdd: (e: Omit<JournalEntry, 'id'>) => void }) {
+function JournalEntryForm({ 
+  accounts, 
+  onAdd, 
+  initialData, 
+  onCancel 
+}: { 
+  accounts: Account[], 
+  onAdd: (e: Omit<JournalEntry, 'id'>) => void,
+  initialData?: JournalEntry,
+  onCancel?: () => void
+}) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
   const [movements, setMovements] = useState<Movement[]>([
@@ -969,9 +1058,17 @@ function JournalEntryForm({ accounts, onAdd }: { accounts: Account[], onAdd: (e:
     { accountId: accounts[1].id, type: 'credit', amount: 0 }
   ]);
 
+  useEffect(() => {
+    if (initialData) {
+      setDate(initialData.date);
+      setDescription(initialData.description);
+      setMovements(initialData.movements);
+    }
+  }, [initialData]);
+
   const totalDebit = movements.filter(m => m.type === 'debit').reduce((sum, m) => sum + m.amount, 0);
   const totalCredit = movements.filter(m => m.type === 'credit').reduce((sum, m) => sum + m.amount, 0);
-  const isOutOfBalance = Math.abs(totalDebit - totalCredit) > 0.01 || totalDebit === 0;
+  const isOutOfBalance = Math.abs(totalDebit - totalCredit) > 0.01 || (totalDebit === 0 && totalCredit === 0);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1015,13 +1112,29 @@ function JournalEntryForm({ accounts, onAdd }: { accounts: Account[], onAdd: (e:
       <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-white/10 pb-2">
           <h3 className="font-semibold text-sm text-indigo-300">Movimientos</h3>
-          <button 
-            type="button" 
-            onClick={addMovement}
-            className="text-xs flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> Añadir partida
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-white/5 border border-white/10 rounded-lg overflow-hidden h-7">
+              <input 
+                type="number" 
+                min="1" 
+                max="20"
+                defaultValue="1"
+                id="batch-rows-input"
+                className="w-10 px-2 text-xs bg-transparent border-none outline-none text-white text-center font-mono"
+              />
+            </div>
+            <button 
+              type="button" 
+              onClick={() => {
+                const count = parseInt((document.getElementById('batch-rows-input') as HTMLInputElement)?.value || "1");
+                const newMovs = Array(count).fill(null).map(() => ({ accountId: accounts[0].id, type: 'debit' as const, amount: 0 }));
+                setMovements([...movements, ...newMovs]);
+              }}
+              className="text-xs flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20"
+            >
+              <Plus className="w-3.5 h-3.5" /> Añadir partida(s)
+            </button>
+          </div>
         </div>
 
         {movements.map((m, idx) => (
@@ -1092,18 +1205,29 @@ function JournalEntryForm({ accounts, onAdd }: { accounts: Account[], onAdd: (e:
           )}
         </div>
 
-        <button 
-          type="submit" 
-          disabled={isOutOfBalance}
-          className={cn(
-            "px-6 py-2.5 rounded-lg font-bold transition-all w-full md:w-auto shadow-lg",
-            isOutOfBalance 
-              ? "bg-white/5 text-slate-500 cursor-not-allowed border border-white/5" 
-              : "bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-500/20 active:scale-95"
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          {onCancel && (
+            <button 
+              type="button" 
+              onClick={onCancel}
+              className="px-6 py-2.5 rounded-lg font-bold bg-white/5 text-slate-300 hover:bg-white/10 transition-all border border-white/10"
+            >
+              Cancelar
+            </button>
           )}
-        >
-          Guardar Asiento
-        </button>
+          <button 
+            type="submit" 
+            disabled={isOutOfBalance}
+            className={cn(
+              "px-6 py-2.5 rounded-lg font-bold transition-all w-full md:w-auto shadow-lg",
+              isOutOfBalance 
+                ? "bg-white/5 text-slate-500 cursor-not-allowed border border-white/5" 
+                : "bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-500/20 active:scale-95"
+            )}
+          >
+            {initialData ? 'Guardar Cambios' : 'Registrar Asiento'}
+          </button>
+        </div>
       </div>
     </form>
   );
@@ -1242,12 +1366,44 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
 
 // 3. Profit & Loss View
 function ProfitLossView({ accountBalances, accounts, journalName }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string }) {
-  const revenueAccounts = accounts.filter(a => a.type === 'revenue' && accountBalances[a.id]);
-  const expenseAccounts = accounts.filter(a => a.type === 'expense' && accountBalances[a.id]);
+  const [finalInventory, setFinalInventory] = useState<number>(0);
 
-  const totalRevenue = revenueAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0);
-  const totalExpense = expenseAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0);
-  const netIncome = totalRevenue - totalExpense;
+  // Helper to get balance by code or name using absolute value
+  const getBal = (name: string) => {
+    const acc = accounts.find(a => a.name.toLowerCase() === name.toLowerCase());
+    return acc ? Math.abs(accountBalances[acc.id] || 0) : 0;
+  };
+
+  // 1. Ingresos
+  const ventasTotales = getBal('Ventas');
+  const devolucionesVentas = getBal('Devoluciones sobre Ventas');
+  const rebajasVentas = getBal('Descuentos sobre Ventas'); 
+  const ventasNetas = ventasTotales - devolucionesVentas - rebajasVentas;
+
+  // 2. Costo de lo Vendido
+  const inventarioInicial = getBal('Inventario Inicial');
+  const compras = getBal('Compras');
+  const gastosCompra = getBal('Gastos de Compra');
+  const comprasTotales = compras + gastosCompra;
+  
+  const devolucionesCompras = getBal('Devoluciones sobre Compras');
+  const rebajasCompras = getBal('Descuentos sobre Compras');
+  const comprasNetas = comprasTotales - devolucionesCompras - rebajasCompras;
+  
+  const sumaMercancias = inventarioInicial + comprasNetas;
+  const costoVendido = sumaMercancias - Math.abs(finalInventory);
+
+  // 3. Resultados
+  const utilidadBruta = ventasNetas - costoVendido;
+
+  // Gastos Operativos (rest of expense accounts)
+  const opExpenseAccounts = accounts.filter(a => 
+    a.type === 'expense' && 
+    !['Compras', 'Gastos de Compra', 'Devoluciones sobre Compras', 'Descuentos sobre Compras', 'Inventario Inicial', 'Inventario Final', 'Costo de Ventas'].includes(a.name) &&
+    accountBalances[a.id]
+  );
+  const totalOpExpenses = opExpenseAccounts.reduce((sum, a) => sum + Math.abs(accountBalances[a.id] || 0), 0);
+  const netIncome = utilidadBruta - totalOpExpenses;
 
   const handleExportPDF = () => {
     exportToPDF('profit-loss-canvas', `Estado_de_Resultados_${journalName}`);
@@ -1255,15 +1411,28 @@ function ProfitLossView({ accountBalances, accounts, journalName }: { accountBal
 
   const handleExportExcel = async () => {
     const data = [
-      { Concepto: 'INGRESOS', Monto: '' },
-      ...revenueAccounts.map(a => ({ Concepto: a.name, Monto: accountBalances[a.id] })),
-      { Concepto: 'TOTAL INGRESOS', Monto: totalRevenue },
+      { Concepto: 'ESTADO DE RESULTADOS', Monto: '' },
+      { Concepto: 'Ventas Totales', Monto: ventasTotales },
+      { Concepto: '(-) Devoluciones sobre Ventas', Monto: -devolucionesVentas },
+      { Concepto: '(-) Rebajas sobre Ventas', Monto: -rebajasVentas },
+      { Concepto: 'VENTAS NETAS', Monto: ventasNetas },
       { Concepto: '', Monto: '' },
-      { Concepto: 'EGRESOS / GASTOS', Monto: '' },
-      ...expenseAccounts.map(a => ({ Concepto: a.name, Monto: -accountBalances[a.id] })),
-      { Concepto: 'TOTAL EGRESOS', Monto: -totalExpense },
+      { Concepto: 'Inventario Inicial', Monto: inventarioInicial },
+      { Concepto: 'Compras', Monto: compras },
+      { Concepto: '(+) Gastos de Compra', Monto: gastosCompra },
+      { Concepto: '(=) Compras Totales', Monto: comprasTotales },
+      { Concepto: '(-) Devoluciones sobre Compras', Monto: -devolucionesCompras },
+      { Concepto: '(-) Rebajas sobre Compras', Monto: -rebajasCompras },
+      { Concepto: '(=) Compras Netas', Monto: comprasNetas },
+      { Concepto: '(=) Suma de Mercancías', Monto: sumaMercancias },
+      { Concepto: '(-) Inventario Final', Monto: -finalInventory },
+      { Concepto: 'COSTO DE LO VENDIDO', Monto: costoVendido },
       { Concepto: '', Monto: '' },
-      { Concepto: 'UTILIDAD / PERDIDA NETA', Monto: netIncome }
+      { Concepto: 'UTILIDAD BRUTA', Monto: utilidadBruta },
+      { Concepto: '', Monto: '' },
+      { Concepto: 'GASTOS OPERATIVOS', Monto: '' },
+      ...opExpenseAccounts.map(a => ({ Concepto: a.name, Monto: -Math.abs(accountBalances[a.id]) })),
+      { Concepto: 'UTILIDAD NETA', Monto: netIncome }
     ];
     await exportToExcel(data, `Estado_Resultados_${journalName}`, 'P&L');
   };
@@ -1276,79 +1445,160 @@ function ProfitLossView({ accountBalances, accounts, journalName }: { accountBal
             <h2 className="text-2xl font-bold tracking-tight text-white">Estado de Resultados</h2>
             <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-xs font-mono rounded border border-indigo-500/30 mt-1">{journalName}</span>
           </div>
-          <p className="text-slate-400 text-sm mt-1">Ingresos vs Egresos del periodo.</p>
+          <p className="text-slate-400 text-sm mt-1">Método Analítico - Desglose detallado.</p>
         </div>
-        <div className="flex gap-3">
-          <button 
-            onClick={handleExportExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-sm text-slate-200"
-          >
-            <Download className="w-4 h-4" /> Excel
-          </button>
-          <button 
-            onClick={handleExportPDF}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 text-sm font-medium"
-          >
-            <FileText className="w-4 h-4" /> PDF
-          </button>
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col">
+            <label className="text-[10px] uppercase font-bold text-slate-500 mb-1 ml-1">Inventario Final</label>
+            <input 
+              type="number"
+              value={finalInventory || ''}
+              onChange={(e) => setFinalInventory(Number(e.target.value))}
+              placeholder="0.00"
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 w-32 font-mono"
+            />
+          </div>
+          <div className="flex gap-3 pt-5">
+            <button 
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-sm text-slate-200"
+            >
+              <Download className="w-4 h-4" /> Excel
+            </button>
+            <button 
+              onClick={handleExportPDF}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 text-sm font-medium"
+            >
+              <FileText className="w-4 h-4" /> PDF
+            </button>
+          </div>
         </div>
       </div>
 
       <div id="profit-loss-canvas" className="bg-white/5 border border-white/10 p-8 rounded-2xl shadow-2xl backdrop-blur-xl max-w-3xl mx-auto">
         <div className="text-center mb-8 pb-4 border-b border-white/10">
           <h3 className="text-xl font-bold uppercase tracking-widest text-indigo-300">Estado de Resultados</h3>
-          <p className="text-[10px] text-slate-500 mt-1 uppercase font-mono tracking-tighter">Resumen Operativo</p>
+          <p className="text-[10px] text-slate-500 mt-1 uppercase font-mono tracking-tighter">Método Analítico</p>
         </div>
 
-        <div className="space-y-8">
-          <div className="space-y-3">
-            <div className="flex justify-between font-bold text-sm border-b border-white/20 pb-1 uppercase tracking-wider text-slate-300">
-              <span>Ingresos</span>
+        <div className="space-y-6 text-sm">
+          {/* 1. SECCION VENTAS */}
+          <section className="space-y-2">
+            <div className="flex justify-between font-bold border-b border-white/10 pb-1 text-slate-300 uppercase tracking-wider">
+              <span>Ingresos por Ventas</span>
               <TrendingUp className="w-4 h-4 text-emerald-400" />
             </div>
-            {revenueAccounts.length === 0 ? (
-              <p className="text-xs text-slate-500 italic">No hay ingresos registrados.</p>
-            ) : (
-              revenueAccounts.map(a => (
-                <div key={a.id} className="flex justify-between items-center text-sm font-mono leading-none text-slate-300">
-                  <span>{a.name}</span>
-                  <span className="text-emerald-400">{formatCurrency(accountBalances[a.id] || 0)}</span>
-                </div>
-              ))
-            )}
-            <div className="flex justify-between items-center font-bold text-sm pt-2 border-t border-white/10 font-mono text-white">
-              <span>Total de Ingresos</span>
-              <span className="text-emerald-400 underline decoration-double">{formatCurrency(totalRevenue)}</span>
+            <div className="pl-4 space-y-1">
+              <div className="flex justify-between text-slate-400">
+                <span>Ventas Totales</span>
+                <span className="font-mono">{formatCurrency(ventasTotales)}</span>
+              </div>
+              <div className="flex justify-between text-rose-400/80 italic pl-4 text-xs">
+                <span>(-) Devoluciones sobre Ventas</span>
+                <span className="font-mono">({formatCurrency(devolucionesVentas)})</span>
+              </div>
+              <div className="flex justify-between text-rose-400/80 italic pl-4 text-xs">
+                <span>(-) Rebajas sobre Ventas</span>
+                <span className="font-mono">({formatCurrency(rebajasVentas)})</span>
+              </div>
+              <div className="flex justify-between border-t border-white/5 pt-1 font-bold text-slate-200">
+                <span>Ventas Netas</span>
+                <span className="font-mono text-emerald-400">{formatCurrency(ventasNetas)}</span>
+              </div>
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-3">
-            <div className="flex justify-between font-bold text-sm border-b border-white/20 pb-1 uppercase tracking-wider text-slate-300">
-              <span>Egresos / Gastos</span>
+          {/* 2. SECCION COSTO DE VENTAS */}
+          <section className="space-y-2">
+            <div className="flex justify-between font-bold border-b border-white/10 pb-1 text-slate-300 uppercase tracking-wider">
+              <span>Costo de lo Vendido</span>
               <TrendingDown className="w-4 h-4 text-rose-400" />
             </div>
-            {expenseAccounts.length === 0 ? (
-              <p className="text-xs text-slate-500 italic">No hay gastos registrados.</p>
-            ) : (
-              expenseAccounts.map(a => (
-                <div key={a.id} className="flex justify-between items-center text-sm font-mono leading-none text-slate-400">
-                  <span>{a.name}</span>
-                  <span className="text-rose-400">({formatCurrency(accountBalances[a.id] || 0)})</span>
-                </div>
-              ))
-            )}
-            <div className="flex justify-between items-center font-bold text-sm pt-2 border-t border-white/10 font-mono text-white">
-              <span>Total de Egresos</span>
-              <span className="text-rose-400">({formatCurrency(totalExpense)})</span>
+            <div className="pl-4 space-y-1">
+              <div className="flex justify-between text-slate-400">
+                <span>Inventario Inicial</span>
+                <span className="font-mono">{formatCurrency(inventarioInicial)}</span>
+              </div>
+              <div className="flex justify-between text-slate-400 pl-4 text-xs">
+                <span>Compras</span>
+                <span className="font-mono">{formatCurrency(compras)}</span>
+              </div>
+              <div className="flex justify-between text-slate-400 pl-4 text-xs">
+                <span>(+) Gastos de Compra</span>
+                <span className="font-mono">{formatCurrency(gastosCompra)}</span>
+              </div>
+              <div className="flex justify-between border-t border-white/5 pt-0.5 text-slate-300 pl-4 font-semibold text-xs">
+                <span>(=) Compras Totales</span>
+                <span className="font-mono">{formatCurrency(comprasTotales)}</span>
+              </div>
+              <div className="flex justify-between text-rose-400/80 italic pl-8 text-xs">
+                <span>(-) Devoluciones sobre Compras</span>
+                <span className="font-mono">({formatCurrency(devolucionesCompras)})</span>
+              </div>
+              <div className="flex justify-between text-rose-400/80 italic pl-8 text-xs">
+                <span>(-) Rebajas sobre Compras</span>
+                <span className="font-mono">({formatCurrency(rebajasCompras)})</span>
+              </div>
+              <div className="flex justify-between border-t border-white/5 pt-0.5 text-slate-200 pl-4 font-bold text-xs">
+                <span>(=) Compras Netas</span>
+                <span className="font-mono">{formatCurrency(comprasNetas)}</span>
+              </div>
+              <div className="flex justify-between border-t border-white/10 pt-1 text-slate-200 font-bold">
+                <span>(=) Suma Total de Mercancías</span>
+                <span className="font-mono">{formatCurrency(sumaMercancias)}</span>
+              </div>
+              <div className="flex justify-between text-emerald-400/80 italic pl-4 text-xs">
+                <span>(-) Inventario Final</span>
+                <span className="font-mono">({formatCurrency(finalInventory)})</span>
+              </div>
+              <div className="flex justify-between border-t border-white/20 pt-1 font-bold text-slate-100 bg-white/5 px-2 rounded">
+                <span>Costo de lo Vendido</span>
+                <span className="font-mono text-rose-400">{formatCurrency(costoVendido)}</span>
+              </div>
             </div>
+          </section>
+
+          {/* 3. UTILIDAD BRUTA */}
+          <div className={cn(
+            "p-5 rounded-2xl flex justify-between items-center border shadow-lg transition-colors",
+            utilidadBruta >= 0 ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"
+          )}>
+            <div className="flex flex-col">
+              <span className="font-black uppercase tracking-widest text-white text-lg">Utilidad / Pérdida Bruta</span>
+              <span className="text-[10px] text-slate-500 font-mono">Ventas Netas - Costo de lo Vendido</span>
+            </div>
+            <span className={cn("text-3xl font-black font-mono tabular-nums", utilidadBruta >= 0 ? "text-emerald-400" : "text-rose-400")}>
+              {formatCurrency(utilidadBruta)}
+            </span>
           </div>
 
-          <div className={cn(
-            "p-6 rounded-2xl flex justify-between items-center border shadow-inner",
-            netIncome >= 0 ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"
-          )}>
-            <span className="font-bold uppercase tracking-tight text-white">Utilidad / Pérdida Neta</span>
-            <span className={cn("text-2xl font-bold font-mono tabular-nums", netIncome >= 0 ? "text-emerald-400" : "text-rose-400")}>
+          {/* 4. GASTOS OPERATIVOS */}
+          <section className="space-y-2 opacity-80">
+            <div className="flex justify-between font-bold border-b border-white/10 pb-1 text-slate-400 uppercase tracking-wider text-xs">
+              <span>Gastos Operativos y Otros</span>
+            </div>
+            {opExpenseAccounts.length === 0 ? (
+              <p className="text-[10px] text-slate-500 italic pl-4">No hay otros gastos registrados.</p>
+            ) : (
+              <div className="pl-4 space-y-1">
+                {opExpenseAccounts.map(a => (
+                  <div key={a.id} className="flex justify-between text-[11px] text-slate-400 font-mono">
+                    <span>{a.name}</span>
+                    <span>({formatCurrency(Math.abs(accountBalances[a.id] || 0))})</span>
+                  </div>
+                ))}
+                <div className="flex justify-between border-t border-white/5 pt-1 font-bold text-slate-300 text-xs">
+                  <span>Total Gastos Operativos</span>
+                  <span>({formatCurrency(totalOpExpenses)})</span>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* 5. UTILIDAD NETA */}
+          <div className="flex justify-between items-center pt-4 border-t border-white/20">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Utilidad / Pérdida Neta del Periodo</span>
+            <span className={cn("text-lg font-bold font-mono", netIncome >= 0 ? "text-emerald-500/70" : "text-rose-500/70")}>
               {formatCurrency(netIncome)}
             </span>
           </div>
