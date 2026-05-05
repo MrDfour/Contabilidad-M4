@@ -55,6 +55,7 @@ export default function App() {
   const [modalInfo, setModalInfo] = useState<{ type: 'success' | 'error', title: string, message: string } | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [finalInventory, setFinalInventory] = useState<number>(0);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
@@ -258,6 +259,7 @@ export default function App() {
                   <BarChart3 className="text-white w-5 h-5" />
                 </div>
                 <h1 className="text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
+                <span className="text-[10px] font-mono text-slate-500">v0.0.4</span>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -316,6 +318,7 @@ export default function App() {
               <BarChart3 className="text-white w-5 h-5" />
             </div>
             <h1 className="text-lg md:text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
+            <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">v0.0.4</span>
           </div>
           
           {!isMobile && (
@@ -440,6 +443,8 @@ export default function App() {
                 accountBalances={accountBalances} 
                 accounts={accounts} 
                 journalName={activeJournal?.name || ''}
+                finalInventory={finalInventory}
+                setFinalInventory={setFinalInventory}
               />
             </motion.div>
           )}
@@ -1271,6 +1276,8 @@ function JournalEntryForm({
                 max="20"
                 defaultValue="1"
                 id="batch-rows-input"
+                onWheel={(e) => e.currentTarget.blur()}
+                onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
                 className="w-10 px-2 text-xs bg-transparent border-none outline-none text-white text-center font-mono"
               />
             </div>
@@ -1320,6 +1327,8 @@ function JournalEntryForm({
                   required
                   value={m.amount || ''} 
                   onChange={e => updateMovement(idx, { amount: parseFloat(e.target.value) || 0 })}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
                   className="w-full pl-6 pr-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm outline-none font-mono text-white"
                 />
               </div>
@@ -1516,8 +1525,7 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
 }
 
 // 3. Profit & Loss View
-function ProfitLossView({ accountBalances, accounts, journalName }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string }) {
-  const [finalInventory, setFinalInventory] = useState<number>(0);
+function ProfitLossView({ accountBalances, accounts, journalName, finalInventory, setFinalInventory }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number, setFinalInventory: (v: number) => void }) {
 
   // Helper to get balance by code or name using absolute value
   const getBal = (name: string) => {
@@ -1605,6 +1613,8 @@ function ProfitLossView({ accountBalances, accounts, journalName }: { accountBal
               type="number"
               value={finalInventory || ''}
               onChange={(e) => setFinalInventory(Number(e.target.value))}
+              onWheel={(e) => e.currentTarget.blur()}
+              onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
               placeholder="0.00"
               className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 w-full sm:w-32 font-mono"
             />
