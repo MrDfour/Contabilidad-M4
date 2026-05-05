@@ -2,7 +2,7 @@
   "name": "contabilidad-m4-pro",
   "author": "Fernando Martinez",
   "private": true,
-  "version": "0.0.4",
+  "version": "0.0.5b",
   "type": "module",
   "main": "electron/main.js",
   "scripts": {

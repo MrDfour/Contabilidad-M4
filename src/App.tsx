@@ -259,7 +259,7 @@ export default function App() {
                   <BarChart3 className="text-white w-5 h-5" />
                 </div>
                 <h1 className="text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-                <span className="text-[10px] font-mono text-slate-500">v0.0.4</span>
+                <span className="text-[10px] font-mono text-slate-500">v0.0.5b</span>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -318,7 +318,7 @@ export default function App() {
               <BarChart3 className="text-white w-5 h-5" />
             </div>
             <h1 className="text-lg md:text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-            <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">v0.0.4</span>
+            <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">v0.0.5b</span>
           </div>
           
           {!isMobile && (
@@ -664,7 +664,7 @@ function JournalView({
         m.type === 'credit' ? formatCurrency(m.amount) : ''
       ])
     );
-    await exportTableToPDF(headers, body, `Libro_Diario_${activeJournal?.name || 'General'}`, `Libro Diario - ${activeJournal?.name || 'Resumen General'}`);
+    await exportTableToPDF(headers, body, `Libro_Diario_${activeJournal?.name || 'General'}`, `Libro Diario - ${activeJournal?.name || 'Resumen General'}`, activeJournal?.name || '');
   };
 
   const handleDownloadTemplate = async () => {
@@ -1400,7 +1400,7 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
   journalName: string
 }) {
   const handleExportPDF = async () => {
-    await exportToPDF('t-accounts-canvas', `Libro_Mayor_Cuentas_T_${journalName}`);
+    await exportToPDF('t-accounts-canvas', `Libro_Mayor_Cuentas_T_${journalName}`, 'Libro Mayor - Cuentas T', journalName);
   };
 
   const handleExportExcel = async () => {
@@ -1565,7 +1565,7 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
   const netIncome = utilidadBruta - totalOpExpenses;
 
   const handleExportPDF = async () => {
-    await exportToPDF('profit-loss-canvas', `Estado_de_Resultados_${journalName}`);
+    await exportToPDF('profit-loss-canvas', `Estado_de_Resultados_${journalName}`, 'Estado de Resultados', journalName);
   };
 
   const handleExportExcel = async () => {
@@ -1785,7 +1785,7 @@ function BalanceSheetView({ accountBalances, accounts, journalName }: { accountB
   const totalEquity = equityAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + netIncome;
 
   const handleExportPDF = async () => {
-    await exportToPDF('balance-sheet-canvas', `Balance_General_${journalName}`);
+    await exportToPDF('balance-sheet-canvas', `Balance_General_${journalName}`, 'Balance General', journalName);
   };
 
   const handleExportExcel = async () => {

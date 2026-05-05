@@ -274,7 +274,7 @@ export const exportTAccountsStyleToExcel = async (
   await saveFile(blob, `${fileName}.xlsx`);
 };
 
-export const exportToPDF = async (elementId: string, fileName: string) => {
+export const exportToPDF = async (elementId: string, fileName: string, docTitle: string = '', journalName: string = '') => {
   const element = document.getElementById(elementId);
   if (!element) return;
 
@@ -282,28 +282,91 @@ export const exportToPDF = async (elementId: string, fileName: string) => {
   const pdfWidth = pdf.internal.pageSize.getWidth();
   const pdfHeight = pdf.internal.pageSize.getHeight();
   const margin = 12;
-  
+  const headerH = 21;
+  const contentStartY = headerH + 5;
+  const SIG_HEIGHT = 42; // mm required for the signature section
+
   const drawPageHeader = (pageNumber: number, totalPages: number) => {
-    pdf.setFontSize(10);
+    // Light background bar
+    pdf.setFillColor(248, 250, 252);
+    pdf.rect(0, 0, pdfWidth, headerH, 'F');
+
+    // Company name
+    pdf.setFontSize(12);
     pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(30, 41, 59); // slate-800
-    pdf.text('Contabilidad M4Pro', margin, margin - 2);
-    
+    pdf.setTextColor(30, 41, 59);
+    pdf.text('Contabilidad M4Pro', margin, 8);
+
+    // Document type subtitle
+    if (docTitle) {
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(79, 70, 229);
+      pdf.text(docTitle, margin, 14);
+    }
+
+    // Page number (right)
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'italic');
+    pdf.setTextColor(100, 116, 139);
+    pdf.text(`Página ${pageNumber} de ${totalPages}`, pdfWidth - margin, 8, { align: 'right' });
+
+    // Journal name (right, smaller)
+    if (journalName) {
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(100, 116, 139);
+      pdf.text(journalName, pdfWidth - margin, 14, { align: 'right' });
+    }
+
+    // Indigo-tinted separator line
+    pdf.setDrawColor(199, 210, 254);
+    pdf.setLineWidth(0.6);
+    pdf.line(margin, headerH - 1, pdfWidth - margin, headerH - 1);
+  };
+
+  const drawSignatureSection = (y: number) => {
+    const lineLen = (pdfWidth - margin * 2) * 0.35;
+    const leftX = margin + 10;
+    const rightX = pdfWidth / 2 + 10;
+
+    // Separator above signature area
+    pdf.setDrawColor(226, 232, 240);
+    pdf.setLineWidth(0.3);
+    pdf.line(margin, y, pdfWidth - margin, y);
+
+    // Date line
+    pdf.setFontSize(8);
     pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(100, 116, 139); // slate-500
-    pdf.text(`Página ${pageNumber} de ${totalPages}`, pdfWidth - margin, margin - 2, { align: 'right' });
-    
-    pdf.setDrawColor(203, 213, 225); // slate-300
-    pdf.setLineWidth(0.5);
-    pdf.line(margin, margin, pdfWidth - margin, margin);
+    pdf.setTextColor(100, 116, 139);
+    pdf.text('Lugar y Fecha: ________________________________', margin + 10, y + 8);
+
+    // Signature lines
+    const sigLineY = y + 22;
+    pdf.setDrawColor(71, 85, 105);
+    pdf.setLineWidth(0.4);
+    pdf.line(leftX, sigLineY, leftX + lineLen, sigLineY);
+    pdf.line(rightX, sigLineY, rightX + lineLen, sigLineY);
+
+    // Labels
+    pdf.setFontSize(8);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(30, 41, 59);
+    pdf.text('Elaboró', leftX + lineLen / 2, sigLineY + 5, { align: 'center' });
+    pdf.text('Revisó y Autorizó', rightX + lineLen / 2, sigLineY + 5, { align: 'center' });
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(100, 116, 139);
+    pdf.setFontSize(7);
+    pdf.text('Nombre y Firma', leftX + lineLen / 2, sigLineY + 9, { align: 'center' });
+    pdf.text('Nombre y Firma', rightX + lineLen / 2, sigLineY + 9, { align: 'center' });
   };
 
   const cards = element.querySelectorAll('.t-account-card');
-  
+
   if (cards.length > 0) {
-    let currentY = margin + 10;
-    
-    // First pass: Draw content and capture page count
+    let currentY = contentStartY;
+
     for (let i = 0; i < cards.length; i += 2) {
       const card1 = cards[i] as HTMLElement;
       const card2 = cards[i + 1] as HTMLElement;
@@ -343,9 +406,13 @@ export const exportToPDF = async (elementId: string, fileName: string) => {
         maxHeightInRow = Math.max(imgHeight1, imgHeight2);
       }
 
-      if (currentY + maxHeightInRow > pdfHeight - margin) {
+      // Reserve space for signature on the last row
+      const isLastRow = (i + 2 >= cards.length);
+      const sigReserve = isLastRow ? SIG_HEIGHT + 4 : 0;
+
+      if (currentY + maxHeightInRow > pdfHeight - margin - sigReserve) {
         pdf.addPage();
-        currentY = margin + 10;
+        currentY = contentStartY;
       }
 
       pdf.addImage(imgData1, 'PNG', margin, currentY, imgWidth, imgHeight1);
@@ -356,49 +423,158 @@ export const exportToPDF = async (elementId: string, fileName: string) => {
       currentY += maxHeightInRow + 12;
     }
 
-    // Second pass: Add headers to all pages
+    // Add signature section
+    if (currentY + SIG_HEIGHT <= pdfHeight - margin) {
+      drawSignatureSection(currentY + 2);
+    } else {
+      pdf.addPage();
+      drawSignatureSection(contentStartY + 10);
+    }
+
+    // Second pass: add headers to all pages
     const totalPages = pdf.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       pdf.setPage(i);
       drawPageHeader(i, totalPages);
     }
   } else {
-    const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      onclone: (clonedDoc: Document) => {
+        const style = clonedDoc.createElement('style');
+        style.innerHTML = `
+          * { color: #1e293b !important; }
+          h3, h4 { color: #1e293b !important; }
+          .text-emerald-300, .text-emerald-400 { color: #059669 !important; }
+          .text-rose-400 { color: #dc2626 !important; }
+          .text-indigo-300 { color: #4f46e5 !important; }
+          .text-slate-300, .text-slate-400, .text-slate-500 { color: #475569 !important; }
+          [class*="border-white"] { border-color: #e2e8f0 !important; }
+          [class*="bg-white"] { background-color: #f8fafc !important; }
+        `;
+        clonedDoc.head.appendChild(style);
+      }
+    });
     const imgData = canvas.toDataURL('image/png');
     const imgWidth = pdfWidth - (margin * 2);
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    drawPageHeader(1, 1);
-    pdf.addImage(imgData, 'PNG', margin, margin + 10, imgWidth, imgHeight);
+
+    pdf.addImage(imgData, 'PNG', margin, contentStartY, imgWidth, imgHeight);
+
+    const afterContentY = contentStartY + imgHeight + 5;
+
+    if (afterContentY + SIG_HEIGHT <= pdfHeight - margin) {
+      drawSignatureSection(afterContentY);
+      drawPageHeader(1, 1);
+    } else {
+      drawPageHeader(1, 2);
+      pdf.addPage();
+      drawSignatureSection(contentStartY + 10);
+      drawPageHeader(2, 2);
+    }
   }
 
   const pdfBlob = pdf.output('blob');
   await saveFile(pdfBlob, `${fileName}.pdf`);
 };
 
-export const exportTableToPDF = async (headers: string[][], body: (string | number)[][], fileName: string, title: string): Promise<void> => {
+export const exportTableToPDF = async (headers: string[][], body: (string | number)[][], fileName: string, title: string, journalName: string = ''): Promise<void> => {
   const doc = new jsPDF();
-  
-  // Header section
-  doc.setFontSize(22);
-  doc.setTextColor(30, 41, 59); // slate-800
-  doc.text(title, 14, 22);
-  
-  doc.setFontSize(10);
-  doc.setTextColor(100, 116, 139); // slate-500
-  doc.text(`Sistema de Gestión Contable - M4 Pro`, 14, 30);
-  doc.text(`Generado: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 14, 35);
-  
-  // Horizontal line
-  doc.setDrawColor(226, 232, 240); // slate-200
-  doc.line(14, 40, 196, 40);
-  
+  const pdfWidth = doc.internal.pageSize.getWidth();
+  const pdfHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const headerH = 22;
+  const SIG_HEIGHT = 42; // mm required for the signature section
+  const generatedDate = new Date();
+
+  const drawHeader = (pageNum: number, totalPages: number) => {
+    // Light header background
+    doc.setFillColor(248, 250, 252);
+    doc.rect(0, 0, pdfWidth, headerH, 'F');
+
+    // Company name
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('Contabilidad M4Pro', margin, 8);
+
+    // Document title (indigo)
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(79, 70, 229);
+    doc.text(title, margin, 15);
+
+    // Page number (right)
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Página ${pageNum} de ${totalPages}`, pdfWidth - margin, 8, { align: 'right' });
+
+    // Journal name (right, smaller)
+    if (journalName) {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text(journalName, pdfWidth - margin, 15, { align: 'right' });
+    }
+
+    // Generation date (right, tiny)
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Generado: ${generatedDate.toLocaleDateString('es-MX')} ${generatedDate.toLocaleTimeString('es-MX')}`, pdfWidth - margin, 20, { align: 'right' });
+
+    // Indigo-tinted separator line
+    doc.setDrawColor(199, 210, 254);
+    doc.setLineWidth(0.6);
+    doc.line(margin, headerH, pdfWidth - margin, headerH);
+  };
+
+  const drawSignature = (y: number) => {
+    const lineLen = (pdfWidth - margin * 2) * 0.35;
+    const leftX = margin + 10;
+    const rightX = pdfWidth / 2 + 10;
+
+    // Separator line above signature
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.line(margin, y, pdfWidth - margin, y);
+
+    // Date field
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text('Lugar y Fecha: ________________________________', margin + 10, y + 8);
+
+    // Signature lines
+    const sigLineY = y + 22;
+    doc.setDrawColor(71, 85, 105);
+    doc.setLineWidth(0.4);
+    doc.line(leftX, sigLineY, leftX + lineLen, sigLineY);
+    doc.line(rightX, sigLineY, rightX + lineLen, sigLineY);
+
+    // Labels
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('Elaboró', leftX + lineLen / 2, sigLineY + 5, { align: 'center' });
+    doc.text('Revisó y Autorizó', rightX + lineLen / 2, sigLineY + 5, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.setFontSize(7);
+    doc.text('Nombre y Firma', leftX + lineLen / 2, sigLineY + 9, { align: 'center' });
+    doc.text('Nombre y Firma', rightX + lineLen / 2, sigLineY + 9, { align: 'center' });
+  };
+
   autoTable(doc, {
-    startY: 48,
+    startY: headerH + 5,
     head: headers,
     body: body as any,
     theme: 'striped',
     headStyles: { 
-      fillColor: [79, 70, 229], // indigo-600
+      fillColor: [79, 70, 229],
       textColor: [255, 255, 255],
       fontSize: 10,
       fontStyle: 'bold',
@@ -407,25 +583,37 @@ export const exportTableToPDF = async (headers: string[][], body: (string | numb
     },
     bodyStyles: {
       fontSize: 9,
-      textColor: [51, 65, 85], // slate-700
+      textColor: [51, 65, 85],
       cellPadding: 3
     },
     alternateRowStyles: {
-      fillColor: [248, 250, 252], // slate-50
+      fillColor: [248, 250, 252],
     },
     columnStyles: {
       [headers[0].length - 1]: { halign: 'right' },
       [headers[0].length - 2]: { halign: 'right' },
     },
-    margin: { top: 48, left: 14, right: 14 },
-    didDrawPage: (data) => {
-      // Footer
-      const str = "Página " + doc.getNumberOfPages();
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184); // slate-400
-      doc.text(str, data.settings.margin.left, doc.internal.pageSize.height - 10);
-    }
+    margin: { top: headerH + 5, left: margin, right: margin },
   });
+
+  const finalY = (doc as any).lastAutoTable.finalY || headerH + 20;
+  const needNewPage = finalY + SIG_HEIGHT > pdfHeight - 10;
+
+  if (needNewPage) {
+    doc.addPage();
+  }
+
+  const totalPages = doc.getNumberOfPages();
+
+  // Draw headers on all pages (two-pass so page count is known)
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    drawHeader(i, totalPages);
+  }
+
+  // Draw signature on the last page
+  doc.setPage(totalPages);
+  drawSignature(needNewPage ? headerH + 15 : finalY + 10);
 
   const pdfBlob = doc.output('blob');
   await saveFile(pdfBlob, `${fileName}.pdf`);
