@@ -284,6 +284,7 @@ export const exportToPDF = async (elementId: string, fileName: string, docTitle:
   const margin = 12;
   const headerH = 21;
   const contentStartY = headerH + 5;
+  const SIG_HEIGHT = 42; // mm required for the signature section
 
   const drawPageHeader = (pageNumber: number, totalPages: number) => {
     // Light background bar
@@ -407,7 +408,7 @@ export const exportToPDF = async (elementId: string, fileName: string, docTitle:
 
       // Reserve space for signature on the last row
       const isLastRow = (i + 2 >= cards.length);
-      const sigReserve = isLastRow ? 46 : 0;
+      const sigReserve = isLastRow ? SIG_HEIGHT + 4 : 0;
 
       if (currentY + maxHeightInRow > pdfHeight - margin - sigReserve) {
         pdf.addPage();
@@ -423,8 +424,7 @@ export const exportToPDF = async (elementId: string, fileName: string, docTitle:
     }
 
     // Add signature section
-    const sigHeight = 42;
-    if (currentY + sigHeight <= pdfHeight - margin) {
+    if (currentY + SIG_HEIGHT <= pdfHeight - margin) {
       drawSignatureSection(currentY + 2);
     } else {
       pdf.addPage();
@@ -464,9 +464,8 @@ export const exportToPDF = async (elementId: string, fileName: string, docTitle:
     pdf.addImage(imgData, 'PNG', margin, contentStartY, imgWidth, imgHeight);
 
     const afterContentY = contentStartY + imgHeight + 5;
-    const sigHeight = 42;
 
-    if (afterContentY + sigHeight <= pdfHeight - margin) {
+    if (afterContentY + SIG_HEIGHT <= pdfHeight - margin) {
       drawSignatureSection(afterContentY);
       drawPageHeader(1, 1);
     } else {
@@ -487,6 +486,8 @@ export const exportTableToPDF = async (headers: string[][], body: (string | numb
   const pdfHeight = doc.internal.pageSize.getHeight();
   const margin = 14;
   const headerH = 22;
+  const SIG_HEIGHT = 42; // mm required for the signature section
+  const generatedDate = new Date();
 
   const drawHeader = (pageNum: number, totalPages: number) => {
     // Light header background
@@ -522,7 +523,7 @@ export const exportTableToPDF = async (headers: string[][], body: (string | numb
     // Generation date (right, tiny)
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    doc.text(`Generado: ${new Date().toLocaleDateString('es-MX')} ${new Date().toLocaleTimeString('es-MX')}`, pdfWidth - margin, 20, { align: 'right' });
+    doc.text(`Generado: ${generatedDate.toLocaleDateString('es-MX')} ${generatedDate.toLocaleTimeString('es-MX')}`, pdfWidth - margin, 20, { align: 'right' });
 
     // Indigo-tinted separator line
     doc.setDrawColor(199, 210, 254);
@@ -596,8 +597,7 @@ export const exportTableToPDF = async (headers: string[][], body: (string | numb
   });
 
   const finalY = (doc as any).lastAutoTable.finalY || headerH + 20;
-  const sigHeight = 42;
-  const needNewPage = finalY + sigHeight > pdfHeight - 10;
+  const needNewPage = finalY + SIG_HEIGHT > pdfHeight - 10;
 
   if (needNewPage) {
     doc.addPage();
