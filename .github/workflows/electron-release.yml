@@ -54,7 +54,7 @@ jobs:
           name: release-${{ matrix.platform }}
           path: |
             release/**/*.AppImage
-            release/**/*.exe
+            release/**/*Setup*.exe
             release/**/*.dmg
           if-no-files-found: warn
           retention-days: 7
@@ -203,7 +203,7 @@ jobs:
           generate_release_notes: true
           files: |
             release-artifacts/**/*.AppImage
-            release-artifacts/**/*.exe
+            release-artifacts/**/*Setup*.exe
             release-artifacts/**/*.dmg
             release-artifacts/**/*.apk
         env:
