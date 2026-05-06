@@ -172,7 +172,7 @@ export default function SyncModal({
     }
 
     const generatedSessionId = crypto.randomUUID();
-    const generatedPin = String(Math.floor(100000 + Math.random() * 900000));
+    const generatedPin = String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000);
     setSessionId(generatedSessionId);
     setPin(generatedPin);
     setRemotePayload(null);
@@ -365,7 +365,7 @@ export default function SyncModal({
                         <p className="text-xs text-slate-300 break-all">Session ID: {sessionId}</p>
                         <div className="w-full border-t border-white/10 pt-3">
                           <p className="text-xs text-slate-400 mb-1">Escanea el QR o ingresa este código de 6 dígitos en tu móvil:</p>
-                          <p className="text-3xl font-bold tracking-[0.25em] text-indigo-300">{pin}</p>
+                          <p className="text-3xl font-bold tracking-[0.25em] text-indigo-300" role="text" aria-label="Código PIN de seis dígitos">{pin}</p>
                         </div>
                       </div>
                     ) : (
@@ -382,6 +382,7 @@ export default function SyncModal({
                       onChange={(e) => setScanInput(e.target.value)}
                       placeholder="Código de 6 dígitos o Session ID completo"
                       inputMode="numeric"
+                      pattern="[0-9]*"
                       className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                     />
                     <p className="text-xs text-slate-500">Escanea el QR o ingresa el código de 6 dígitos que aparece en el escritorio.</p>
