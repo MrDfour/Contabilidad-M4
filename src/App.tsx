@@ -56,6 +56,7 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [finalInventory, setFinalInventory] = useState<number>(0);
+  const [finalInventories, setFinalInventories] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
@@ -90,6 +91,15 @@ export default function App() {
       setJournals([initialJournal]);
       setActiveJournalId(initialJournal.id);
     }
+
+    const savedInventories = localStorage.getItem('contasis_final_inventories');
+    if (savedInventories) {
+      try {
+        setFinalInventories(JSON.parse(savedInventories));
+      } catch (e) {
+        console.error("Failed to load final inventories", e);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -97,6 +107,22 @@ export default function App() {
       localStorage.setItem('contasis_journals', JSON.stringify(journals));
     }
   }, [journals]);
+
+  // Sync finalInventory when active journal changes
+  useEffect(() => {
+    if (activeJournalId) {
+      setFinalInventory(finalInventories[activeJournalId] ?? 0);
+    }
+  }, [activeJournalId, finalInventories]);
+
+  const handleSetFinalInventory = (value: number) => {
+    setFinalInventory(value);
+    if (activeJournalId) {
+      const updated = { ...finalInventories, [activeJournalId]: value };
+      setFinalInventories(updated);
+      localStorage.setItem('contasis_final_inventories', JSON.stringify(updated));
+    }
+  };
 
   // Derived Data: T-Accounts
   const tAccountsData = useMemo(() => {
@@ -444,7 +470,7 @@ export default function App() {
                 accounts={accounts} 
                 journalName={activeJournal?.name || ''}
                 finalInventory={finalInventory}
-                setFinalInventory={setFinalInventory}
+                setFinalInventory={handleSetFinalInventory}
               />
             </motion.div>
           )}
