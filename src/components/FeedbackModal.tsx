@@ -2,14 +2,13 @@ import React, { useState } from 'react';
 import { X, MessageSquare, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import pkgJson from '../../package.json';
 
 const FEEDBACK_URL =
   'https://script.google.com/macros/s/AKfycbzqqTtoQ7fx-F494O-g4y6GE-OvNgUxk7bnW7s0_m_Obs48wAI0xMndwX2VkQBXfxus/exec';
 
-const APP_VERSION = '0.0.8';
-
 function detectPlatform(): string {
-  if (typeof window !== 'undefined' && (window as unknown as Record<string, unknown>)['electronAPI']) {
+  if (typeof window !== 'undefined' && 'electronAPI' in window) {
     return 'Electron';
   }
   return 'Capacitor/Android';
@@ -34,7 +33,7 @@ export default function FeedbackModal({ isOpen, onClose, onSuccess, onError }: F
 
     const payload = {
       message: message.trim(),
-      appVersion: APP_VERSION,
+      appVersion: pkgJson.version,
       platform: detectPlatform(),
       osInfo: navigator.userAgent,
       screenRes: `${window.screen.width}x${window.screen.height}`,
@@ -42,6 +41,8 @@ export default function FeedbackModal({ isOpen, onClose, onSuccess, onError }: F
     };
 
     try {
+      // Google Apps Script does not support CORS, so 'no-cors' is required.
+      // The response will always be opaque; we assume success if no network error is thrown.
       await fetch(FEEDBACK_URL, {
         method: 'POST',
         mode: 'no-cors',
