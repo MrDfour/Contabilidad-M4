@@ -63,11 +63,13 @@ export function useCheckForUpdates(): UpdateInfo {
 
         const currentVersion = typeof __APP_VERSION__ !== 'undefined'
           ? __APP_VERSION__
-          : '0.0.0';
+          : null;
 
-        if (isNewer(currentVersion, tagName)) {
+        if (!currentVersion) return;
+
+        if (isNewer(currentVersion, tagName) && apkAsset?.browser_download_url) {
           setLatestVersion(tagName.replace(/^v/, ''));
-          setDownloadUrl(apkAsset?.browser_download_url ?? '');
+          setDownloadUrl(apkAsset.browser_download_url);
           setIsUpdateAvailable(true);
         }
       } catch {

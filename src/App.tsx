@@ -588,7 +588,13 @@ export default function App() {
               <div className="flex flex-col sm:flex-row gap-3">
                 {downloadUrl ? (
                   <button
-                    onClick={() => Browser.open({ url: downloadUrl })}
+                    onClick={async () => {
+                      try {
+                        await Browser.open({ url: downloadUrl });
+                      } catch {
+                        setModalInfo({ type: 'error', title: 'Error', message: 'No se pudo abrir el enlace de descarga. Por favor, inténtalo de nuevo.' });
+                      }
+                    }}
                     className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-lg shadow-indigo-500/20"
                   >
                     <RefreshCw className="w-4 h-4" /> Actualizar ahora
