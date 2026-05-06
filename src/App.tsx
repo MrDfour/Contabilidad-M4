@@ -603,9 +603,6 @@ export default function App() {
               animate={{ width: `${downloadPercent}%` }}
               transition={{ ease: 'linear', duration: 0.3 }}
             />
-            <span className="absolute right-2 top-1 text-[10px] text-indigo-300 leading-none select-none">
-              {downloadPercent}%
-            </span>
           </motion.div>
         )}
       </AnimatePresence>
