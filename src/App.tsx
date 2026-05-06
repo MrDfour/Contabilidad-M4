@@ -26,7 +26,8 @@ import {
   ChevronDown,
   ChevronUp,
   Menu,
-  RefreshCw
+  RefreshCw,
+  MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Browser } from '@capacitor/browser';
@@ -49,6 +50,7 @@ import {
   readExcel,
   normalizeString
 } from './lib/utils';
+import FeedbackModal from './components/FeedbackModal';
 
 export default function App() {
   const [journals, setJournals] = useState<Journal[]>([]);
@@ -64,6 +66,7 @@ export default function App() {
   const { isUpdateAvailable, latestVersion, downloadUrl } = useCheckForUpdates();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const downloadPercent = useUpdateProgress();
 
   useEffect(() => {
@@ -294,7 +297,7 @@ export default function App() {
                   <BarChart3 className="text-white w-5 h-5" />
                 </div>
                 <h1 className="text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-                <span className="text-[10px] font-mono text-slate-500">v0.0.7</span>
+                <span className="text-[10px] font-mono text-slate-500">v0.0.8</span>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -363,7 +366,7 @@ export default function App() {
               <BarChart3 className="text-white w-5 h-5" />
             </div>
             <h1 className="text-lg md:text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-            <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">v0.0.7</span>
+            <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">v0.0.8</span>
           </div>
           
           {!isMobile && (
@@ -511,6 +514,13 @@ export default function App() {
             >
               <AlertCircle className="w-3.5 h-3.5" />
               Acerca de
+            </button>
+            <button
+              onClick={() => setShowFeedback(true)}
+              className="hidden lg:inline-flex items-center gap-1.5 text-slate-500 hover:text-indigo-300 transition-colors text-xs"
+            >
+              <MessageSquare className="w-3 h-3" />
+              Feedback
             </button>
           </div>
         </div>
@@ -666,11 +676,18 @@ export default function App() {
                 <BarChart3 className="w-8 h-8" />
               </div>
               <h3 className="text-2xl font-bold text-white mb-6">Acerca de</h3>
-              <div className="text-slate-300 space-y-2 mb-8 leading-relaxed">
+              <div className="text-slate-300 space-y-2 mb-6 leading-relaxed">
                 <p>Creado por Fernando Martinez</p>
                 <p>Contacto: <a href="mailto:famr87@hotmail.com" className="text-indigo-400 hover:text-indigo-300 transition-colors">famr87@hotmail.com</a></p>
                 <p className="text-slate-400 text-sm">Derechos Reservados 2026</p>
               </div>
+              <button
+                onClick={() => { setShowAbout(false); setShowFeedback(true); }}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/30 font-semibold transition-all mb-3 text-sm"
+              >
+                <MessageSquare className="w-4 h-4" />
+                Enviar Feedback
+              </button>
               <button
                 onClick={() => setShowAbout(false)}
                 className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-lg shadow-indigo-500/20"
@@ -681,6 +698,14 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={showFeedback}
+        onClose={() => setShowFeedback(false)}
+        onSuccess={(title, message) => setModalInfo({ type: 'success', title, message })}
+        onError={(title, message) => setModalInfo({ type: 'error', title, message })}
+      />
     </div>
   );
 }
