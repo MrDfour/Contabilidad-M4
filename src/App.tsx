@@ -335,7 +335,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* Header */}
-      <header className="border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <header className="border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top))' }}>
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {isMobile && (
