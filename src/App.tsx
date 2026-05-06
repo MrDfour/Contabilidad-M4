@@ -816,10 +816,10 @@ function JournalView({
           <h2 className="text-2xl font-bold tracking-tight text-white">Libro Diario</h2>
           <p className="text-slate-400 text-sm mt-1">Registra aquí todos los movimientos económicos de tu empresa.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 md:gap-3">
           <button 
             onClick={handleDownloadTemplate}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600/10 border border-emerald-500/20 rounded-lg hover:bg-emerald-600/20 transition-colors text-sm text-emerald-400 font-medium"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-emerald-600/10 border border-emerald-500/20 rounded-lg hover:bg-emerald-600/20 transition-colors text-xs md:text-sm text-emerald-400 font-medium"
             title="Descargar plantilla de Excel para importación"
           >
             <FileUp className="w-4 h-4" /> Plantilla
@@ -832,26 +832,26 @@ function JournalView({
               onChange={handleImportExcel}
             />
             <button 
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600/10 border border-indigo-500/20 rounded-lg hover:bg-indigo-600/20 transition-colors text-sm text-indigo-400 font-medium"
+              className="flex items-center gap-2 px-3 md:px-4 py-2 bg-indigo-600/10 border border-indigo-500/20 rounded-lg hover:bg-indigo-600/20 transition-colors text-xs md:text-sm text-indigo-400 font-medium"
             >
               <Upload className="w-4 h-4" /> Importar
             </button>
           </div>
           <button 
             onClick={handleExportExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-sm text-slate-200"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-xs md:text-sm text-slate-200"
           >
             <Download className="w-4 h-4" /> Excel
           </button>
           <button 
             onClick={handleExportPDF}
-            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-sm text-slate-200"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-xs md:text-sm text-slate-200"
           >
             <FileText className="w-4 h-4" /> PDF
           </button>
           <button 
             onClick={() => setIsFormOpen(!isFormOpen)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 text-sm font-medium"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 text-xs md:text-sm font-medium"
           >
             <Plus className="w-4 h-4" /> Nuevo Asiento
           </button>
