@@ -32,7 +32,7 @@ export default function FeedbackModal({ isOpen, onClose, onSuccess, onError }: F
     setIsSending(true);
 
     const payload = {
-      message: message.trim(),
+      feedback: message.trim(),
       appVersion: pkgJson.version,
       platform: detectPlatform(),
       osInfo: navigator.userAgent,
