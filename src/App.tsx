@@ -321,7 +321,7 @@ export default function App() {
                   <BarChart3 className="text-white w-5 h-5" />
                 </div>
                 <h1 className="text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-                <span className="text-[10px] font-mono text-slate-500">v0.1.0</span>
+                <span className="text-[10px] font-mono text-slate-500">v0.2.0</span>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -390,7 +390,7 @@ export default function App() {
               <BarChart3 className="text-white w-5 h-5" />
             </div>
             <h1 className="text-lg md:text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-            <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">v0.1.0</span>
+            <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">v0.2.0</span>
           </div>
           
           {!isMobile && (
