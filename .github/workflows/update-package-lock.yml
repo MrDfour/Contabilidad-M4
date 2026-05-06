@@ -1,0 +1,38 @@
+name: Update package-lock.json
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'package.json'
+
+permissions:
+  contents: write
+
+jobs:
+  update-lock:
+    name: Regenerate package-lock.json
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Regenerate package-lock.json
+        run: npm install --ignore-scripts
+
+      - name: Commit updated lock file
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'chore: update package-lock.json'
+          file_pattern: package-lock.json
