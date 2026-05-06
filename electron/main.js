@@ -17,6 +17,9 @@ autoUpdater.autoDownload = false;
 // Keep a reference to the main window to forward IPC events
 let mainWindow = null;
 
+// Prevent showing multiple simultaneous error dialogs for the same error
+let updateErrorDialogShown = false;
+
 // Auto-updater event listeners
 autoUpdater.on('update-available', (info) => {
   log.info('Actualización disponible:', info);
@@ -37,8 +40,20 @@ autoUpdater.on('update-available', (info) => {
       });
 
       if (response === 0) {
+        // Inform the user that the download is starting before it happens
+        dialog.showMessageBox({
+          type: 'info',
+          title: 'Descargando actualización',
+          message: 'Descarga iniciada',
+          detail:
+            'La actualización se está descargando en segundo plano. Se le notificará cuando esté lista para instalar.',
+          buttons: ['Aceptar'],
+        });
+
         autoUpdater.downloadUpdate().catch((err) => {
-          log.error('Error al descargar la actualización:', err);
+          // The 'error' event handles the user-facing dialog; log here to
+          // avoid an unhandled promise rejection in case the event doesn't fire.
+          log.error('downloadUpdate() promise rejected:', err);
         });
         keepShowing = false;
       } else if (response === 1) {
@@ -80,6 +95,21 @@ autoUpdater.on('download-progress', (progressObj) => {
 
 autoUpdater.on('error', (err) => {
   log.error('Error en el actualizador:', err);
+
+  if (updateErrorDialogShown) return;
+  updateErrorDialogShown = true;
+
+  dialog
+    .showMessageBox({
+      type: 'error',
+      title: 'Error en el actualizador',
+      message: 'No se pudo completar la actualización',
+      detail: `${err.message || err}\n\nPuede intentarlo más tarde o descargar la actualización manualmente desde GitHub.`,
+      buttons: ['Aceptar'],
+    })
+    .finally(() => {
+      updateErrorDialogShown = false;
+    });
 });
 
 function createWindow() {
