@@ -42,6 +42,9 @@ jobs:
 
       - name: Build Vite + Electron
         run: npx vite build && npx electron-builder --${{ matrix.eb_flag }} --publish never
+        env:
+          VITE_UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_URL }}
+          VITE_UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
 
       - name: Generate latest.yml for Windows updater
         if: matrix.platform == 'windows'
@@ -113,6 +116,9 @@ jobs:
 
       - name: Build Vite
         run: npx vite build
+        env:
+          VITE_UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_URL }}
+          VITE_UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
 
       - name: Add Android platform
         run: npx cap add android
