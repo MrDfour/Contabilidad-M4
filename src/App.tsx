@@ -284,6 +284,7 @@ export default function App() {
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="fixed inset-y-0 left-0 w-72 bg-[#0a0f1d] border-r border-white/10 z-[70] p-6 flex flex-col gap-8 shadow-2xl"
+              style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)' }}
             >
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-indigo-600 flex items-center justify-center rounded-lg shadow-lg">
@@ -334,7 +335,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* Header */}
-      <header className="border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50">
+      <header className="border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top))' }}>
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {isMobile && (
