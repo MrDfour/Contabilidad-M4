@@ -14,6 +14,9 @@ autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
 autoUpdater.autoDownload = false;
 
+// Keep a reference to the main window to forward IPC events
+let mainWindow = null;
+
 // Auto-updater event listeners
 autoUpdater.on('update-available', (info) => {
   log.info('Actualización disponible:', info);
@@ -68,27 +71,35 @@ autoUpdater.on('update-downloaded', async (info) => {
   }
 });
 
+autoUpdater.on('download-progress', (progressObj) => {
+  log.info('Progreso de descarga:', progressObj);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('download-progress', progressObj);
+  }
+});
+
 autoUpdater.on('error', (err) => {
   log.error('Error en el actualizador:', err);
 });
 
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     title: 'Contabilidad M4 Pro',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
   // Remove the application menu (File, Edit, View, Window, etc.)
   Menu.setApplicationMenu(null);
 
-  win.loadFile(path.join(__dirname, '../dist/index.html'));
+  mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
 
-  win.webContents.once('did-finish-load', () => {
+  mainWindow.webContents.once('did-finish-load', () => {
     autoUpdater.checkForUpdates().catch((err) => {
       log.error('Error al verificar actualizaciones:', err);
     });
