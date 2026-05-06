@@ -64,11 +64,11 @@ jobs:
           $ymlContent = @"
           version: $version
           files:
-            - url: $($exeFile.Name)
+            - url: "$($exeFile.Name)"
               sha512: $sha512
               size: $size
               blockMapSize: $blockMapSize
-          path: $($exeFile.Name)
+          path: "$($exeFile.Name)"
           sha512: $sha512
           releaseDate: '$releaseDate'
           "@
@@ -122,6 +122,13 @@ jobs:
 
       - name: Add Android platform
         run: npx cap add android
+
+      - name: Add Android camera permission
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q 'android.permission.CAMERA' "$MANIFEST"; then
+            sed -i 's|<manifest|<manifest|; s|<application|<uses-permission android:name="android.permission.CAMERA" />\n    <application|' "$MANIFEST"
+          fi
 
       - name: Decode keystore
         run: |
