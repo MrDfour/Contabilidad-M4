@@ -2,7 +2,7 @@
 
 Sistema de gestión contable profesional para empresas y estudiantes de contabilidad. Permite registrar asientos en el **Libro Diario**, generar **Cuentas T** automáticamente, obtener el **Balance General** y el **Estado de Resultados** (método analítico), todo con exportación a Excel y PDF.
 
-> Versión actual: **v0.1.0** · Autor: Fernando Martinez · Licencia: Apache-2.0
+> Versión actual: **v0.2.0** · Autor: Fernando Martinez · Licencia: Apache-2.0
 
 ---
 

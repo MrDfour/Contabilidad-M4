@@ -2,7 +2,7 @@
   "name": "contabilidad-m4-pro",
   "author": "Fernando Martinez",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
@@ -47,6 +47,7 @@
     }
   },
   "dependencies": {
+    "@capacitor-mlkit/barcode-scanning": "^7.5.0",
     "@capacitor/browser": "^7.0.0",
     "@capacitor/filesystem": "^7.1.8",
     "@capacitor/share": "^7.0.4",
@@ -65,6 +66,8 @@
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "peerjs": "^1.5.5",
+    "qrcode.react": "^4.2.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "tailwind-merge": "^3.5.0",

@@ -27,7 +27,8 @@ import {
   ChevronUp,
   Menu,
   RefreshCw,
-  MessageSquare
+  MessageSquare,
+  Smartphone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Browser } from '@capacitor/browser';
@@ -51,6 +52,8 @@ import {
   normalizeString
 } from './lib/utils';
 import FeedbackModal from './components/FeedbackModal';
+import SyncModal from './components/SyncModal';
+import type { SyncState } from './services/syncService';
 
 export default function App() {
   const [journals, setJournals] = useState<Journal[]>([]);
@@ -67,7 +70,9 @@ export default function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
   const downloadPercent = useUpdateProgress();
+  const isDesktopRuntime = typeof window !== 'undefined' && 'electronAPI' in window;
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
@@ -268,6 +273,25 @@ export default function App() {
     ));
   };
 
+  const applyRemoteSyncState = (state: SyncState) => {
+    const nextJournals = Array.isArray(state.journals) ? state.journals : [];
+    const nextInventories = state.finalInventories ?? {};
+
+    setJournals(nextJournals);
+    setFinalInventories(nextInventories);
+    localStorage.setItem('contasis_journals', JSON.stringify(nextJournals));
+    localStorage.setItem('contasis_final_inventories', JSON.stringify(nextInventories));
+
+    if (nextJournals.length > 0) {
+      const nextActiveId = nextJournals[0].id;
+      setActiveJournalId(nextActiveId);
+      setFinalInventory(nextInventories[nextActiveId] ?? 0);
+    } else {
+      setActiveJournalId(null);
+      setFinalInventory(0);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0f1d] text-slate-100 font-sans selection:bg-indigo-500 selection:text-white relative overflow-x-hidden">
       {/* Background Gradients */}
@@ -297,7 +321,7 @@ export default function App() {
                   <BarChart3 className="text-white w-5 h-5" />
                 </div>
                 <h1 className="text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-                <span className="text-[10px] font-mono text-slate-500">v0.1.0</span>
+                <span className="text-[10px] font-mono text-slate-500">v0.2.0</span>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -366,7 +390,7 @@ export default function App() {
               <BarChart3 className="text-white w-5 h-5" />
             </div>
             <h1 className="text-lg md:text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-            <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">v0.1.0</span>
+            <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">v0.2.0</span>
           </div>
           
           {!isMobile && (
@@ -398,11 +422,20 @@ export default function App() {
             </nav>
           )}
 
-          {isMobile && (
-            <div className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-1 rounded border border-indigo-500/30 uppercase">
-              {activeTab === 'journal' ? 'Diario' : activeTab === 't-accounts' ? 'Cuentas T' : activeTab === 'balance' ? 'Balance' : 'Resultados'}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSyncModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 transition-colors text-xs font-semibold"
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              Sync
+            </button>
+            {isMobile && (
+              <div className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-1 rounded border border-indigo-500/30 uppercase">
+                {activeTab === 'journal' ? 'Diario' : activeTab === 't-accounts' ? 'Cuentas T' : activeTab === 'balance' ? 'Balance' : 'Resultados'}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -705,6 +738,15 @@ export default function App() {
         onClose={() => setShowFeedback(false)}
         onSuccess={(title, message) => setModalInfo({ type: 'success', title, message })}
         onError={(title, message) => setModalInfo({ type: 'error', title, message })}
+      />
+
+      <SyncModal
+        isOpen={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        isDesktop={isDesktopRuntime}
+        localState={{ journals, finalInventories }}
+        onApplyRemoteState={applyRemoteSyncState}
+        onNotify={(type, title, message) => setModalInfo({ type, title, message })}
       />
     </div>
   );
@@ -2084,4 +2126,3 @@ function BalanceSheetView({ accountBalances, accounts, journalName }: { accountB
     </div>
   );
 }
-
