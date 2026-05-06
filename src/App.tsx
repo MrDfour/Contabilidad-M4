@@ -62,6 +62,7 @@ export default function App() {
   const [finalInventories, setFinalInventories] = useState<Record<string, number>>({});
   const { isUpdateAvailable, latestVersion, downloadUrl } = useCheckForUpdates();
   const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
@@ -291,7 +292,7 @@ export default function App() {
                   <BarChart3 className="text-white w-5 h-5" />
                 </div>
                 <h1 className="text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-                <span className="text-[10px] font-mono text-slate-500">v0.0.5b</span>
+                <span className="text-[10px] font-mono text-slate-500">v0.0.7</span>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -319,6 +320,16 @@ export default function App() {
                   onClick={() => { setActiveTab('profit-loss'); setIsMobileMenuOpen(false); }}
                   icon={<TrendingUp className="w-5 h-5" />}
                   label="Estado de Resultados"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <p className="text-[10px] uppercase font-bold text-slate-500 mb-2 pl-1 tracking-widest">Información</p>
+                <MobileNavItem
+                  active={false}
+                  onClick={() => { setShowAbout(true); setIsMobileMenuOpen(false); }}
+                  icon={<AlertCircle className="w-5 h-5" />}
+                  label="Acerca de"
                 />
               </div>
 
@@ -350,7 +361,7 @@ export default function App() {
               <BarChart3 className="text-white w-5 h-5" />
             </div>
             <h1 className="text-lg md:text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-            <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">v0.0.5b</span>
+            <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">v0.0.7</span>
           </div>
           
           {!isMobile && (
@@ -487,11 +498,18 @@ export default function App() {
       <footer className="mt-auto border-t border-white/10 py-8 bg-white/5 backdrop-blur-md relative z-10">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-400">
           <p>© 2026 Contabilidad M4. Sistema de Gestión Contable.</p>
-          <div className="flex gap-6">
+          <div className="flex gap-6 items-center">
             <span className="flex items-center gap-2 italic">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
               Precisión • Integridad • Transparencia
             </span>
+            <button
+              onClick={() => setShowAbout(true)}
+              className="hidden lg:inline-flex items-center gap-1.5 text-slate-400 hover:text-indigo-300 transition-colors text-sm"
+            >
+              <AlertCircle className="w-3.5 h-3.5" />
+              Acerca de
+            </button>
           </div>
         </div>
       </footer>
@@ -608,6 +626,36 @@ export default function App() {
                   Más tarde
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* About Modal */}
+      <AnimatePresence>
+        {showAbout && (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-slate-900 border border-white/10 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center"
+            >
+              <div className="w-16 h-16 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-6">
+                <BarChart3 className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-6">Acerca de</h3>
+              <div className="text-slate-300 space-y-2 mb-8 leading-relaxed">
+                <p>Creado por Fernando Martinez</p>
+                <p>Contacto: <a href="mailto:famr87@hotmail.com" className="text-indigo-400 hover:text-indigo-300 transition-colors">famr87@hotmail.com</a></p>
+                <p className="text-slate-400 text-sm">Derechos Reservados 2026</p>
+              </div>
+              <button
+                onClick={() => setShowAbout(false)}
+                className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-lg shadow-indigo-500/20"
+              >
+                Cerrar
+              </button>
             </motion.div>
           </div>
         )}
