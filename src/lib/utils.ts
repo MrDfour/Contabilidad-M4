@@ -479,16 +479,18 @@ export const exportToPDF = async (elementId: string, fileName: string, docTitle:
       }
     } else {
       // Content is taller than one page — split into vertical slices to avoid cut-off
-      const scaleFactor = canvas.width / imgWidth; // canvas px per PDF mm
+      const scaleFactor = canvas.width / imgWidth; // ratio of canvas pixels to PDF width units
       const pageCanvasH = Math.floor(availableH * scaleFactor);
       const numContentPages = Math.ceil(canvas.height / pageCanvasH);
 
+      let lastSliceImgH = 0;
       for (let p = 0; p < numContentPages; p++) {
         if (p > 0) pdf.addPage();
 
         const srcY = p * pageCanvasH;
         const srcH = Math.min(pageCanvasH, canvas.height - srcY);
         const sliceImgH = srcH / scaleFactor;
+        lastSliceImgH = sliceImgH;
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = canvas.width;
@@ -500,8 +502,7 @@ export const exportToPDF = async (elementId: string, fileName: string, docTitle:
       }
 
       // Place signature after the last content slice
-      const lastSrcH = Math.min(pageCanvasH, canvas.height - (numContentPages - 1) * pageCanvasH);
-      const afterLastY = contentStartY + lastSrcH / scaleFactor + 5;
+      const afterLastY = contentStartY + lastSliceImgH + 5;
 
       if (afterLastY + SIG_HEIGHT <= pdfHeight - margin) {
         drawSignatureSection(afterLastY);
