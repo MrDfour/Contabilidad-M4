@@ -186,7 +186,7 @@ jobs:
       - name: List release artifacts
         run: find release-artifacts -type f
 
-     - name: Determine release tag
+      - name: Determine release tag
         id: tag
         run: |
           # Extrae el valor de "version" del package.json
