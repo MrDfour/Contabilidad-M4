@@ -39,6 +39,8 @@ export interface PeerController {
   close: () => void;
 }
 
+const REDIS_SYNC_TTL_SECONDS = 120;
+
 function toError(error: unknown): Error {
   if (error instanceof Error) return error;
   return new Error(String(error));
@@ -218,7 +220,7 @@ async function parseRedisResponse(response: Response): Promise<unknown> {
 
 export async function setRedisSyncData(key: string, value: SyncPayload): Promise<void> {
   const { url, token } = getRedisConfig();
-  const endpoint = `${url}/set/${encodeURIComponent(key)}?EX=120`;
+  const endpoint = `${url}/set/${encodeURIComponent(key)}?EX=${REDIS_SYNC_TTL_SECONDS}`;
 
   const response = await fetch(endpoint, {
     method: 'POST',
