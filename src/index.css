@@ -10,6 +10,16 @@
   body {
     @apply antialiased bg-[#0a0f1d] text-slate-100;
   }
+
+  /* Remove spinner arrows from number inputs */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
 }
 
 /* T-Account PDF helper styles */
