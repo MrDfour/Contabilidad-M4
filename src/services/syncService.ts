@@ -257,3 +257,40 @@ export async function getRedisSyncData(key: string): Promise<SyncPayload | null>
 
   return parsed as SyncPayload;
 }
+
+const PIN_TTL_SECONDS = 300;
+
+export async function setPinMapping(pin: string, sessionId: string): Promise<void> {
+  const { url, token } = getRedisConfig();
+  const key = `sync_pin_${pin}`;
+  const endpoint = `${url}/set/${encodeURIComponent(key)}/${encodeURIComponent(sessionId)}?EX=${PIN_TTL_SECONDS}`;
+
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  await parseRedisResponse(response);
+}
+
+export async function getSessionIdFromPin(pin: string): Promise<string | null> {
+  const { url, token } = getRedisConfig();
+  const key = `sync_pin_${pin}`;
+  const endpoint = `${url}/get/${encodeURIComponent(key)}`;
+
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const result = await parseRedisResponse(response);
+  if (typeof result !== 'string' || !result) {
+    return null;
+  }
+
+  return result;
+}

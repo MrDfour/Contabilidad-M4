@@ -8,8 +8,10 @@ import {
   connectToSessionPeer,
   createSyncPayload,
   getRedisSyncData,
+  getSessionIdFromPin,
   initializeHostPeer,
   setRedisSyncData,
+  setPinMapping,
   type PeerController,
   type SyncPayload,
   type SyncState,
@@ -49,6 +51,7 @@ export default function SyncModal({
   onNotify,
 }: SyncModalProps) {
   const [sessionId, setSessionId] = useState('');
+  const [pin, setPin] = useState('');
   const [scanInput, setScanInput] = useState('');
   const [status, setStatus] = useState('');
   const [isBusy, setIsBusy] = useState(false);
@@ -153,6 +156,7 @@ export default function SyncModal({
     if (!isOpen) {
       cleanup();
       setSessionId('');
+      setPin('');
       setScanInput('');
       setStatus('');
       setRemotePayload(null);
@@ -168,12 +172,18 @@ export default function SyncModal({
     }
 
     const generatedSessionId = crypto.randomUUID();
+    const generatedPin = String(Math.floor(100000 + Math.random() * 900000));
     setSessionId(generatedSessionId);
+    setPin(generatedPin);
     setRemotePayload(null);
     setRemoteTransport(null);
     setErrorMessage('');
     setIsBusy(true);
     setStatus('Inicializando sincronización...');
+
+    setPinMapping(generatedPin, generatedSessionId).catch(() => {
+      // PIN mapping is best-effort; proceed even if it fails
+    });
 
     startDesktopFlow(generatedSessionId);
 
@@ -208,27 +218,44 @@ export default function SyncModal({
   };
 
   const handleConnectMobile = async () => {
-    const parsedSessionId = parseSessionId(scanInput);
-    if (!parsedSessionId) {
-      setErrorMessage('Ingresa o escanea un Session ID válido.');
+    const rawInput = parseSessionId(scanInput);
+    if (!rawInput) {
+      setErrorMessage('Ingresa o escanea un código PIN o Session ID válido.');
       return;
+    }
+
+    let resolvedSessionId = rawInput;
+
+    if (/^\d{6}$/.test(rawInput)) {
+      setStatus('Resolviendo PIN...');
+      try {
+        const fromPin = await getSessionIdFromPin(rawInput);
+        if (!fromPin) {
+          setErrorMessage('PIN inválido o expirado. Solicita uno nuevo en el escritorio.');
+          return;
+        }
+        resolvedSessionId = fromPin;
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'No se pudo resolver el PIN.');
+        return;
+      }
     }
 
     cleanup();
     setRemotePayload(null);
     setRemoteTransport(null);
-    setSessionId(parsedSessionId);
+    setSessionId(resolvedSessionId);
     setErrorMessage('');
     setIsBusy(true);
     setStatus('Conectando por WebRTC...');
 
     try {
       peerControllerRef.current = await connectToSessionPeer(
-        parsedSessionId,
+        resolvedSessionId,
         {
           onOpen: () => {
             setStatus('Conexión WebRTC establecida. Intercambiando datos...');
-            pushLocalStateToPeer(parsedSessionId);
+            pushLocalStateToPeer(resolvedSessionId);
           },
           onData: (message) => {
             handleIncomingPayload(message.payload, 'peerjs');
@@ -244,7 +271,7 @@ export default function SyncModal({
       setStatus('WebRTC no disponible. Intentando fallback Redis...');
 
       try {
-        const fallbackPayload = await getRedisSyncData(`sync_desktop_${parsedSessionId}`);
+        const fallbackPayload = await getRedisSyncData(`sync_desktop_${resolvedSessionId}`);
         if (!fallbackPayload) {
           throw new Error('No se encontró información en fallback Redis para esta sesión.');
         }
@@ -336,6 +363,10 @@ export default function SyncModal({
                           <QRCodeSVG value={sessionId} size={180} includeMargin />
                         </div>
                         <p className="text-xs text-slate-300 break-all">Session ID: {sessionId}</p>
+                        <div className="w-full border-t border-white/10 pt-3">
+                          <p className="text-xs text-slate-400 mb-1">Escanea el QR o ingresa este código de 6 dígitos en tu móvil:</p>
+                          <p className="text-3xl font-bold tracking-[0.25em] text-indigo-300">{pin}</p>
+                        </div>
                       </div>
                     ) : (
                       <p className="text-sm text-slate-400">Generando sesión...</p>
@@ -345,13 +376,15 @@ export default function SyncModal({
               ) : (
                 <div className="space-y-3">
                   <div className="space-y-2">
-                    <label className="text-xs uppercase tracking-wider font-bold text-slate-400">Session ID</label>
+                    <label className="text-xs uppercase tracking-wider font-bold text-slate-400">Código PIN o Session ID</label>
                     <input
                       value={scanInput}
                       onChange={(e) => setScanInput(e.target.value)}
-                      placeholder="Escanea el QR o pega el Session ID"
+                      placeholder="Código de 6 dígitos o Session ID completo"
+                      inputMode="numeric"
                       className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                     />
+                    <p className="text-xs text-slate-500">Escanea el QR o ingresa el código de 6 dígitos que aparece en el escritorio.</p>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button
