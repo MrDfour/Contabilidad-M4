@@ -48,6 +48,35 @@ jobs:
       - name: Build Vite + Electron
         run: npx vite build && npx electron-builder --${{ matrix.eb_flag }} --publish never
 
+      - name: Generate latest.yml for Windows updater
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $exeFile = Get-ChildItem -Path release -Recurse -Filter "*Setup*.exe" | Select-Object -First 1
+          if (-not $exeFile) { Write-Error "No Setup exe found"; exit 1 }
+          $sha512Bytes = [System.Security.Cryptography.SHA512]::Create().ComputeHash(
+            [System.IO.File]::ReadAllBytes($exeFile.FullName)
+          )
+          $sha512 = [Convert]::ToBase64String($sha512Bytes)
+          $size = $exeFile.Length
+          $version = node -e "process.stdout.write(require('./package.json').version)"
+          $releaseDate = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fffZ")
+          $blockmapFile = Get-ChildItem -Path $exeFile.DirectoryName -Filter "$($exeFile.Name).blockmap" -ErrorAction SilentlyContinue | Select-Object -First 1
+          $blockMapSize = if ($blockmapFile) { $blockmapFile.Length } else { 0 }
+          $ymlContent = @"
+          version: $version
+          files:
+            - url: $($exeFile.Name)
+              sha512: $sha512
+              size: $size
+              blockMapSize: $blockMapSize
+          path: $($exeFile.Name)
+          sha512: $sha512
+          releaseDate: '$releaseDate'
+          "@
+          $ymlPath = Join-Path $exeFile.DirectoryName "latest.yml"
+          Set-Content -Path $ymlPath -Value $ymlContent -Encoding UTF8
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -56,6 +85,8 @@ jobs:
             release/**/*.AppImage
             release/**/*Setup*.exe
             release/**/*.dmg
+            release/**/latest.yml
+            release/**/*.blockmap
           if-no-files-found: warn
           retention-days: 7
 
@@ -91,34 +122,11 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
-      - name: Enable ABI splits in build.gradle
-        run: |
-          python3 - <<'EOF'
-          import re, sys, os
-          path = 'android/app/build.gradle'
-          if not os.path.exists(path):
-              print(f"ERROR: {path} not found", file=sys.stderr)
-              sys.exit(1)
-          content = open(path).read()
-          splits_block = (
-              "\n    splits {"
-              "\n        abi {"
-              "\n            enable true"
-              "\n            reset()"
-              "\n            include 'armeabi-v7a', 'arm64-v8a'"
-              "\n            universalApk false"
-              "\n        }"
-              "\n    }"
-          )
-          content = re.sub(r'(\n[ \t]*buildTypes[ \t]*\{)', splits_block + r'\1', content, count=1)
-          open(path, 'w').write(content)
-          EOF
-
       - name: Decode keystore
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > android/app/release.keystore
 
-      - name: Build signed release APKs
+      - name: Build signed release APK
         run: |
           mkdir -p "$GITHUB_WORKSPACE/build-failure-reports"
           cd android
@@ -206,5 +214,7 @@ jobs:
             release-artifacts/**/*Setup*.exe
             release-artifacts/**/*.dmg
             release-artifacts/**/*.apk
+            release-artifacts/**/latest.yml
+            release-artifacts/**/*.blockmap
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
