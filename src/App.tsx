@@ -97,7 +97,7 @@ export default function App() {
       try {
         setFinalInventories(JSON.parse(savedInventories));
       } catch (e) {
-        console.error("Failed to load final inventories", e);
+        console.error("Failed to load final inventories. Data will be reset to defaults.", e);
       }
     }
   }, []);
