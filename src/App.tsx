@@ -31,6 +31,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Browser } from '@capacitor/browser';
 import { useCheckForUpdates } from './hooks/useCheckForUpdates';
+import { useUpdateProgress } from './hooks/useUpdateProgress';
 import { 
   INITIAL_ACCOUNTS, 
   JournalEntry, 
@@ -63,6 +64,7 @@ export default function App() {
   const { isUpdateAvailable, latestVersion, downloadUrl } = useCheckForUpdates();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const downloadPercent = useUpdateProgress();
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
@@ -583,6 +585,25 @@ export default function App() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Download Progress Bar */}
+      <AnimatePresence>
+        {downloadPercent !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="fixed top-0 left-0 right-0 z-[200] h-1 bg-slate-800"
+          >
+            <motion.div
+              className="h-full bg-indigo-500"
+              initial={{ width: '0%' }}
+              animate={{ width: `${downloadPercent}%` }}
+              transition={{ ease: 'linear', duration: 0.3 }}
+            />
+          </motion.div>
         )}
       </AnimatePresence>
 

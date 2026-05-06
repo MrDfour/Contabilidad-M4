@@ -32,12 +32,20 @@ function isNewer(local: string, remote: string): boolean {
   return rPat > lPat;
 }
 
+// On Electron/desktop, the native electron-updater handles updates. Skip the
+// in-app hook entirely so the modal never duplicates the native dialog and the
+// desktop build never tries to download an Android APK.
+const isElectron = typeof navigator !== 'undefined' &&
+  navigator.userAgent.toLowerCase().includes('electron');
+
 export function useCheckForUpdates(): UpdateInfo {
   const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
   const [latestVersion, setLatestVersion] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
 
   useEffect(() => {
+    if (isElectron) return;
+
     let cancelled = false;
 
     async function checkForUpdates() {
