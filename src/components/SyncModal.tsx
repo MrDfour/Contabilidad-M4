@@ -45,6 +45,21 @@ function parseSessionId(raw: string): string {
   return value;
 }
 
+function generateSixDigitPin(): string {
+  const range = 900000;
+  const maxUint32 = 0x1_0000_0000;
+  const limit = Math.floor(maxUint32 / range) * range;
+  const randomBuffer = new Uint32Array(1);
+
+  while (true) {
+    crypto.getRandomValues(randomBuffer);
+    const value = randomBuffer[0];
+    if (value < limit) {
+      return String((value % range) + 100000);
+    }
+  }
+}
+
 export default function SyncModal({
   isOpen,
   onClose,
@@ -190,7 +205,7 @@ export default function SyncModal({
     await clearActiveDesktopSession();
 
     const generatedSessionId = crypto.randomUUID();
-    const generatedPin = String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000);
+    const generatedPin = generateSixDigitPin();
 
     activeDesktopSessionRef.current = generatedSessionId;
     isBlockedRef.current = false;
@@ -232,6 +247,10 @@ export default function SyncModal({
         if (isBlockedRef.current) {
           isBlockedRef.current = false;
           isRegeneratingSessionRef.current = true;
+          if (securityIntervalRef.current !== null) {
+            window.clearInterval(securityIntervalRef.current);
+            securityIntervalRef.current = null;
+          }
           setBlockedUntil(null);
           setStatus('Tiempo de bloqueo finalizado. Regenerando código de sincronización...');
           setErrorMessage('');
@@ -241,6 +260,10 @@ export default function SyncModal({
 
         if (securityStatus.regenerateRequested) {
           isRegeneratingSessionRef.current = true;
+          if (securityIntervalRef.current !== null) {
+            window.clearInterval(securityIntervalRef.current);
+            securityIntervalRef.current = null;
+          }
           setStatus('Se detectaron intentos inválidos. Regenerando código de sincronización...');
           setErrorMessage('');
           await clearPinRegenerationRequest(generatedSessionId);

@@ -317,7 +317,7 @@ async function handleFailedPinAttempt(): Promise<void> {
   await runRedisCommand(`expire/${encodeURIComponent(failedAttemptsKey)}/${PIN_TTL_SECONDS}`);
 
   const failedAttempts = parseRedisNumber(failedAttemptsResult);
-  if (!failedAttempts || failedAttempts % PIN_MAX_FAILED_ATTEMPTS !== 0) {
+  if (failedAttempts === null || failedAttempts % PIN_MAX_FAILED_ATTEMPTS !== 0) {
     return;
   }
 
@@ -329,7 +329,7 @@ async function handleFailedPinAttempt(): Promise<void> {
   await runRedisCommand(`expire/${encodeURIComponent(PIN_RESET_TOTAL_KEY)}/${PIN_RESET_TOTAL_TTL_SECONDS}`);
 
   const resetTotal = parseRedisNumber(resetTotalResult);
-  if (!resetTotal || resetTotal < PIN_MAX_RESETS_BEFORE_TIMEOUT) {
+  if (resetTotal === null || resetTotal < PIN_MAX_RESETS_BEFORE_TIMEOUT) {
     return;
   }
 
