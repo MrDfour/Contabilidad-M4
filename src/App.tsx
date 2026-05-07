@@ -57,6 +57,50 @@ import type { SyncState } from './services/syncService';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
 
+const normalizeAmount = (value: number) => {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+};
+
+const parseFormattedAmount = (value: string) => {
+  const parsed = Number(value.replace(/,/g, ''));
+  return normalizeAmount(parsed);
+};
+
+const parseImportedAmount = (value: unknown) => {
+  const raw = String(value ?? '0').replace(/,/g, '');
+  const isNegative = raw.includes('-');
+  const numericOnly = raw.replace(/[^0-9.]/g, '');
+  const [integerPartRaw, ...decimalParts] = numericOnly.split('.');
+  const integerPart = integerPartRaw || '0';
+  const decimalPart = decimalParts.join('');
+  const normalized = `${isNegative ? '-' : ''}${integerPart}${decimalPart ? `.${decimalPart}` : ''}`;
+  return normalizeAmount(parseFloat(normalized) || 0);
+};
+
+const formatAmountForInput = (amount: number) => {
+  const normalized = normalizeAmount(amount);
+  if (normalized === 0) return '';
+  return new Intl.NumberFormat('en-US', {
+    useGrouping: true,
+    maximumFractionDigits: 2
+  }).format(normalized);
+};
+
+const formatAmountInput = (value: string) => {
+  const sanitized = value.replace(/[^0-9.]/g, '');
+  if (!sanitized) return '';
+
+  const [integerPartRaw, ...decimalParts] = sanitized.split('.');
+  const hasDecimalPoint = sanitized.includes('.');
+  const normalizedInteger = (integerPartRaw || '0').replace(/^0+(?=\d)/, '') || '0';
+  const formattedInteger = normalizedInteger.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const decimalPart = decimalParts.join('').slice(0, 2);
+
+  if (!hasDecimalPoint) return formattedInteger;
+  return `${formattedInteger}.${decimalPart}`;
+};
+
 export default function App() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
@@ -134,9 +178,10 @@ export default function App() {
   }, [activeJournalId, finalInventories]);
 
   const handleSetFinalInventory = (value: number) => {
-    setFinalInventory(value);
+    const normalizedValue = normalizeAmount(value);
+    setFinalInventory(normalizedValue);
     if (activeJournalId) {
-      const updated = { ...finalInventories, [activeJournalId]: value };
+      const updated = { ...finalInventories, [activeJournalId]: normalizedValue };
       setFinalInventories(updated);
       localStorage.setItem('contasis_final_inventories', JSON.stringify(updated));
     }
@@ -153,9 +198,9 @@ export default function App() {
         }
         const accountData = data[mov.accountId];
         if (mov.type === 'debit') {
-          accountData.debits.push({ amount: mov.amount, ref: index + 1 });
+          accountData.debits.push({ amount: normalizeAmount(mov.amount), ref: index + 1 });
         } else {
-          accountData.credits.push({ amount: mov.amount, ref: index + 1 });
+          accountData.credits.push({ amount: normalizeAmount(mov.amount), ref: index + 1 });
         }
       });
     });
@@ -168,15 +213,15 @@ export default function App() {
     const balances: Record<string, number> = {};
     Object.entries(tAccountsData).forEach(([accountId, data]) => {
       const typedData = data as { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] };
-      const totalDebit = typedData.debits.reduce((sum, d) => sum + d.amount, 0);
-      const totalCredit = typedData.credits.reduce((sum, c) => sum + c.amount, 0);
+      const totalDebit = normalizeAmount(typedData.debits.reduce((sum, d) => sum + d.amount, 0));
+      const totalCredit = normalizeAmount(typedData.credits.reduce((sum, c) => sum + c.amount, 0));
       const account = accounts.find(a => a.id === accountId);
       
       // Standard balance side
       if (account?.type === 'asset' || account?.type === 'expense') {
-        balances[accountId] = totalDebit - totalCredit;
+        balances[accountId] = normalizeAmount(totalDebit - totalCredit);
       } else {
-        balances[accountId] = totalCredit - totalDebit;
+        balances[accountId] = normalizeAmount(totalCredit - totalDebit);
       }
     });
     return balances;
@@ -972,8 +1017,8 @@ function JournalView({
         );
 
         if (account) {
-          const debe = parseFloat(String(row.DEBE || "0").replace(/[^0-9.-]/g, '')) || 0;
-          const haber = parseFloat(String(row.HABER || "0").replace(/[^0-9.-]/g, '')) || 0;
+          const debe = parseImportedAmount(row.DEBE);
+          const haber = parseImportedAmount(row.HABER);
           
           if (debe > 0) {
             groupedEntries[groupKey].movements.push({ accountId: account.id, type: 'debit', amount: debe });
@@ -1426,17 +1471,19 @@ function JournalEntryForm({
     { accountId: accounts[0].id, type: 'debit', amount: 0 },
     { accountId: accounts[1].id, type: 'credit', amount: 0 }
   ]);
+  const [amountInputs, setAmountInputs] = useState<string[]>(['', '']);
 
   useEffect(() => {
     if (initialData) {
       setDate(initialData.date);
       setDescription(initialData.description);
       setMovements(initialData.movements);
+      setAmountInputs(initialData.movements.map(m => formatAmountForInput(m.amount)));
     }
   }, [initialData]);
 
-  const totalDebit = movements.filter(m => m.type === 'debit').reduce((sum, m) => sum + m.amount, 0);
-  const totalCredit = movements.filter(m => m.type === 'credit').reduce((sum, m) => sum + m.amount, 0);
+  const totalDebit = normalizeAmount(movements.filter(m => m.type === 'debit').reduce((sum, m) => sum + m.amount, 0));
+  const totalCredit = normalizeAmount(movements.filter(m => m.type === 'credit').reduce((sum, m) => sum + m.amount, 0));
   const isOutOfBalance = Math.abs(totalDebit - totalCredit) > 0.01 || (totalDebit === 0 && totalCredit === 0);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1445,11 +1492,24 @@ function JournalEntryForm({
     onAdd({ date, description, movements: movements.filter(m => m.amount > 0) });
   };
 
-  const addMovement = () => setMovements([...movements, { accountId: accounts[0].id, type: 'debit', amount: 0 }]);
-  const removeMovement = (idx: number) => setMovements(movements.filter((_, i) => i !== idx));
+  const addMovement = () => {
+    setMovements([...movements, { accountId: accounts[0].id, type: 'debit', amount: 0 }]);
+    setAmountInputs([...amountInputs, '']);
+  };
+  const removeMovement = (idx: number) => {
+    setMovements(movements.filter((_, i) => i !== idx));
+    setAmountInputs(amountInputs.filter((_, i) => i !== idx));
+  };
 
   const updateMovement = (idx: number, updates: Partial<Movement>) => {
-    setMovements(movements.map((m, i) => i === idx ? { ...m, ...updates } : m));
+    setMovements(movements.map((m, i) => {
+      if (i !== idx) return m;
+      const next = { ...m, ...updates };
+      if (typeof updates.amount === 'number') {
+        next.amount = normalizeAmount(updates.amount);
+      }
+      return next;
+    }));
   };
 
   return (
@@ -1500,6 +1560,7 @@ function JournalEntryForm({
                 const count = parseInt((document.getElementById('batch-rows-input') as HTMLInputElement)?.value || "1");
                 const newMovs = Array(count).fill(null).map(() => ({ accountId: accounts[0].id, type: 'debit' as const, amount: 0 }));
                 setMovements([...movements, ...newMovs]);
+                setAmountInputs([...amountInputs, ...Array(count).fill('')]);
               }}
               className="text-xs flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20"
             >
@@ -1534,12 +1595,17 @@ function JournalEntryForm({
               <div className="relative">
                 <span className="absolute left-3 top-1.5 text-slate-400">$</span>
                 <input 
-                  type="number" 
-                  min="0" 
-                  step="0.01" 
+                  type="text" 
+                  inputMode="decimal"
+                  aria-label={`Monto de movimiento ${idx + 1}`}
                   required
-                  value={m.amount || ''} 
-                  onChange={e => updateMovement(idx, { amount: parseFloat(e.target.value) || 0 })}
+                  value={amountInputs[idx] || ''} 
+                  onChange={e => {
+                    const formattedValue = formatAmountInput(e.target.value);
+                    const numericValue = parseFormattedAmount(formattedValue);
+                    setAmountInputs(amountInputs.map((val, i) => i === idx ? formattedValue : val));
+                    updateMovement(idx, { amount: numericValue });
+                  }}
                   onWheel={(e) => e.currentTarget.blur()}
                   onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
                   className="w-full pl-6 pr-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm outline-none font-mono text-white"
@@ -1655,10 +1721,10 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
           Object.entries(tAccountsData).map(([accountId, data]) => {
             const acc = accounts.find(a => a.id === accountId);
             const typedData = data as { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] };
-            const totalD = typedData.debits.reduce((s, d) => s + d.amount, 0);
-            const totalC = typedData.credits.reduce((s, c) => s + c.amount, 0);
+            const totalD = normalizeAmount(typedData.debits.reduce((s, d) => s + d.amount, 0));
+            const totalC = normalizeAmount(typedData.credits.reduce((s, c) => s + c.amount, 0));
             const balanceSide = (acc?.type === 'asset' || acc?.type === 'expense') ? 'left' : 'right';
-            const balance = balanceSide === 'left' ? totalD - totalC : totalC - totalD;
+            const balance = normalizeAmount(balanceSide === 'left' ? totalD - totalC : totalC - totalD);
 
             return (
               <div key={accountId} className="t-account-card bg-white/5 border border-white/10 rounded-2xl shadow-xl backdrop-blur-md overflow-hidden flex flex-col h-fit transition-transform hover:scale-[1.02]">
@@ -1743,30 +1809,30 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
   // Helper to get balance by code or name using absolute value
   const getBal = (name: string) => {
     const acc = accounts.find(a => a.name.toLowerCase() === name.toLowerCase());
-    return acc ? Math.abs(accountBalances[acc.id] || 0) : 0;
+    return acc ? normalizeAmount(Math.abs(accountBalances[acc.id] || 0)) : 0;
   };
 
   // 1. Ingresos
   const ventasTotales = getBal('Ventas');
   const devolucionesVentas = getBal('Devoluciones sobre Ventas');
   const rebajasVentas = getBal('Descuentos sobre Ventas'); 
-  const ventasNetas = ventasTotales - devolucionesVentas - rebajasVentas;
+  const ventasNetas = normalizeAmount(ventasTotales - devolucionesVentas - rebajasVentas);
 
   // 2. Costo de lo Vendido
   const inventarioInicial = getBal('Inventario Inicial');
   const compras = getBal('Compras');
   const gastosCompra = getBal('Gastos de Compra');
-  const comprasTotales = compras + gastosCompra;
+  const comprasTotales = normalizeAmount(compras + gastosCompra);
   
   const devolucionesCompras = getBal('Devoluciones sobre Compras');
   const rebajasCompras = getBal('Descuentos sobre Compras');
-  const comprasNetas = comprasTotales - devolucionesCompras - rebajasCompras;
+  const comprasNetas = normalizeAmount(comprasTotales - devolucionesCompras - rebajasCompras);
   
-  const sumaMercancias = inventarioInicial + comprasNetas;
-  const costoVendido = sumaMercancias - Math.abs(finalInventory);
+  const sumaMercancias = normalizeAmount(inventarioInicial + comprasNetas);
+  const costoVendido = normalizeAmount(sumaMercancias - Math.abs(finalInventory));
 
   // 3. Resultados
-  const utilidadBruta = ventasNetas - costoVendido;
+  const utilidadBruta = normalizeAmount(ventasNetas - costoVendido);
 
   // Gastos Operativos (rest of expense accounts)
   const opExpenseAccounts = accounts.filter(a => 
@@ -1774,8 +1840,8 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
     !['Compras', 'Gastos de Compra', 'Devoluciones sobre Compras', 'Descuentos sobre Compras', 'Inventario Inicial', 'Inventario Final', 'Costo de Ventas'].includes(a.name) &&
     accountBalances[a.id]
   );
-  const totalOpExpenses = opExpenseAccounts.reduce((sum, a) => sum + Math.abs(accountBalances[a.id] || 0), 0);
-  const netIncome = utilidadBruta - totalOpExpenses;
+  const totalOpExpenses = normalizeAmount(opExpenseAccounts.reduce((sum, a) => sum + Math.abs(accountBalances[a.id] || 0), 0));
+  const netIncome = normalizeAmount(utilidadBruta - totalOpExpenses);
 
   const handleExportPDF = async () => {
     await exportToPDF('profit-loss-canvas', `Estado_de_Resultados_${journalName}`, 'Estado de Resultados', journalName);
@@ -1824,8 +1890,9 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
             <label className="text-[10px] uppercase font-bold text-slate-500 mb-1 ml-1">Inventario Final</label>
             <input 
               type="number"
+              aria-label="Inventario final"
               value={finalInventory || ''}
-              onChange={(e) => setFinalInventory(Number(e.target.value))}
+              onChange={(e) => setFinalInventory(normalizeAmount(Number(e.target.value)))}
               onWheel={(e) => e.currentTarget.blur()}
               onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
               placeholder="0.00"
