@@ -76,6 +76,7 @@ export default function SyncModal({
   const [remotePayload, setRemotePayload] = useState<SyncPayload | null>(null);
   const [remoteTransport, setRemoteTransport] = useState<SyncTransport | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [desktopSessionNonce, setDesktopSessionNonce] = useState(0);
 
   const peerControllerRef = useRef<PeerController | null>(null);
   const pollingIntervalRef = useRef<number | null>(null);
@@ -254,7 +255,7 @@ export default function SyncModal({
           setBlockedUntil(null);
           setStatus('Tiempo de bloqueo finalizado. Regenerando código de sincronización...');
           setErrorMessage('');
-          await initializeDesktopSession();
+          setDesktopSessionNonce((current) => current + 1);
           return;
         }
 
@@ -267,7 +268,7 @@ export default function SyncModal({
           setStatus('Se detectaron intentos inválidos. Regenerando código de sincronización...');
           setErrorMessage('');
           await clearPinRegenerationRequest(generatedSessionId);
-          await initializeDesktopSession();
+          setDesktopSessionNonce((current) => current + 1);
         }
       } catch {
         // non-critical security check failure
@@ -302,7 +303,7 @@ export default function SyncModal({
     initializeDesktopSession();
 
     return cleanup;
-  }, [cleanup, clearActiveDesktopSession, initializeDesktopSession, isDesktop, isOpen]);
+  }, [cleanup, clearActiveDesktopSession, desktopSessionNonce, initializeDesktopSession, isDesktop, isOpen]);
 
   const handleScanQr = async () => {
     setErrorMessage('');
