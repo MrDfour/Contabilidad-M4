@@ -696,6 +696,7 @@ export const calculateFiscalDeduction = (
   inpcMesAdquisicion: number
 ): number => {
   const factorActualizacion = inpcUltimoMesMitadPeriodo / inpcMesAdquisicion;
+  // Art. 31 LISR: el factor de actualización fiscal se trunca (no se redondea) a 4 decimales.
   const factorTruncado = Math.trunc(factorActualizacion * 10000) / 10000;
   return (asset.originalAmount * asset.fiscalRate) * factorTruncado;
 };

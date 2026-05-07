@@ -896,6 +896,16 @@ function FixedAssetsView({
     }
   }, [fixedAssets, selectedFiscalAssetId]);
 
+  useEffect(() => {
+    if (!depreciationDescription || depreciationDescription.startsWith('Depreciación del mes de ')) {
+      const [year, month] = depreciationDate.split('-').map(Number);
+      if (year && month) {
+        const monthName = new Date(year, month - 1, 1).toLocaleDateString('es-MX', { month: 'long' });
+        setDepreciationDescription(`Depreciación del mes de ${monthName}`);
+      }
+    }
+  }, [depreciationDate, depreciationDescription]);
+
   const handleAddAsset = (e: React.FormEvent) => {
     e.preventDefault();
     const originalAmount = parseFormattedAmount(originalAmountInput);
@@ -955,7 +965,8 @@ function FixedAssetsView({
     }
 
     // Tratamiento contable NIF C-6: cargo al gasto por depreciación y abono a depreciación acumulada.
-    const movements: Movement[] = activeAssets.flatMap(asset => {
+    const assetsWithMovement = activeAssets.filter(asset => normalizeAmount(calculateMonthlyDepreciation(asset)) > 0);
+    const movements: Movement[] = assetsWithMovement.flatMap(asset => {
       const monthlyAmount = normalizeAmount(calculateMonthlyDepreciation(asset));
       return monthlyAmount > 0 ? [
         { accountId: asset.expenseAccountId, type: 'debit' as const, amount: monthlyAmount },
@@ -982,7 +993,7 @@ function FixedAssetsView({
     onSetModal({
       type: 'success',
       title: 'Depreciación aplicada',
-      message: `Se registró un asiento con ${movements.length / 2} activo(s) depreciado(s).`
+      message: `Se registró un asiento con ${assetsWithMovement.length} activo(s) depreciado(s).`
     });
   };
 
@@ -1015,8 +1026,8 @@ function FixedAssetsView({
               <tr className="text-slate-400 border-b border-white/10">
                 <th className="text-left py-2 font-semibold">Activo</th>
                 <th className="text-left py-2 font-semibold">Fecha</th>
-                <th className="text-right py-2 font-semibold">MOI</th>
-                <th className="text-right py-2 font-semibold">Tasa</th>
+                <th className="text-right py-2 font-semibold" title="Monto Original de la Inversión">MOI</th>
+                <th className="text-right py-2 font-semibold" title="Tasa fiscal anual">Tasa</th>
                 <th className="text-right py-2 font-semibold">Estado</th>
                 <th className="text-right py-2 font-semibold">Acción</th>
               </tr>
