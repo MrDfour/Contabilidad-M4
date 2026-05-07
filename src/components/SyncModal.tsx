@@ -275,7 +275,7 @@ export default function SyncModal({
       } finally {
         securityRequestInFlightRef.current = false;
       }
-    }, 1000);
+    }, 2000);
   }, [cleanup, clearActiveDesktopSession, isDesktop, isOpen, startDesktopFlow, stopSyncRuntime]);
 
   useEffect(() => {

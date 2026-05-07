@@ -372,7 +372,7 @@ export async function getPinSecurityStatus(sessionId: string): Promise<PinSecuri
 
   const blockedUntil = parseRedisNumber(blockedUntilResult);
   return {
-    regenerateRequested: regenerateSignalResult === 1 || regenerateSignalResult === '1',
+    regenerateRequested: parseRedisNumber(regenerateSignalResult) === 1,
     blockedUntil: blockedUntil && blockedUntil > Date.now() ? blockedUntil : null,
   };
 }
