@@ -1420,18 +1420,41 @@ function JournalEntryForm({
   initialData?: JournalEntry,
   onCancel?: () => void
 }) {
+  const formatAmountForInput = (amount: number) => {
+    if (!amount) return '';
+    return new Intl.NumberFormat('en-US', {
+      useGrouping: true,
+      maximumFractionDigits: 20
+    }).format(amount);
+  };
+
+  const formatAmountInput = (value: string) => {
+    const sanitized = value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+    if (!sanitized) return '';
+
+    const [integerPartRaw, ...decimalParts] = sanitized.split('.');
+    const hasDecimalPoint = sanitized.includes('.');
+    const normalizedInteger = (integerPartRaw || '0').replace(/^0+(?=\d)/, '');
+    const formattedInteger = normalizedInteger.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+    if (!hasDecimalPoint) return formattedInteger;
+    return `${formattedInteger}.${decimalParts.join('')}`;
+  };
+
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
   const [movements, setMovements] = useState<Movement[]>([
     { accountId: accounts[0].id, type: 'debit', amount: 0 },
     { accountId: accounts[1].id, type: 'credit', amount: 0 }
   ]);
+  const [amountInputs, setAmountInputs] = useState<string[]>(['', '']);
 
   useEffect(() => {
     if (initialData) {
       setDate(initialData.date);
       setDescription(initialData.description);
       setMovements(initialData.movements);
+      setAmountInputs(initialData.movements.map(m => formatAmountForInput(m.amount)));
     }
   }, [initialData]);
 
@@ -1445,8 +1468,14 @@ function JournalEntryForm({
     onAdd({ date, description, movements: movements.filter(m => m.amount > 0) });
   };
 
-  const addMovement = () => setMovements([...movements, { accountId: accounts[0].id, type: 'debit', amount: 0 }]);
-  const removeMovement = (idx: number) => setMovements(movements.filter((_, i) => i !== idx));
+  const addMovement = () => {
+    setMovements([...movements, { accountId: accounts[0].id, type: 'debit', amount: 0 }]);
+    setAmountInputs([...amountInputs, '']);
+  };
+  const removeMovement = (idx: number) => {
+    setMovements(movements.filter((_, i) => i !== idx));
+    setAmountInputs(amountInputs.filter((_, i) => i !== idx));
+  };
 
   const updateMovement = (idx: number, updates: Partial<Movement>) => {
     setMovements(movements.map((m, i) => i === idx ? { ...m, ...updates } : m));
@@ -1500,6 +1529,7 @@ function JournalEntryForm({
                 const count = parseInt((document.getElementById('batch-rows-input') as HTMLInputElement)?.value || "1");
                 const newMovs = Array(count).fill(null).map(() => ({ accountId: accounts[0].id, type: 'debit' as const, amount: 0 }));
                 setMovements([...movements, ...newMovs]);
+                setAmountInputs([...amountInputs, ...Array(count).fill('')]);
               }}
               className="text-xs flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20"
             >
@@ -1534,12 +1564,16 @@ function JournalEntryForm({
               <div className="relative">
                 <span className="absolute left-3 top-1.5 text-slate-400">$</span>
                 <input 
-                  type="number" 
-                  min="0" 
-                  step="0.01" 
+                  type="text" 
+                  inputMode="decimal"
                   required
-                  value={m.amount || ''} 
-                  onChange={e => updateMovement(idx, { amount: parseFloat(e.target.value) || 0 })}
+                  value={amountInputs[idx] ?? ''} 
+                  onChange={e => {
+                    const formattedValue = formatAmountInput(e.target.value);
+                    const numericValue = Number(formattedValue.replace(/,/g, ''));
+                    setAmountInputs(amountInputs.map((val, i) => i === idx ? formattedValue : val));
+                    updateMovement(idx, { amount: Number.isFinite(numericValue) ? numericValue : 0 });
+                  }}
                   onWheel={(e) => e.currentTarget.blur()}
                   onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
                   className="w-full pl-6 pr-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm outline-none font-mono text-white"
