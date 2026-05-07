@@ -1597,6 +1597,7 @@ function JournalEntryForm({
                 <input 
                   type="text" 
                   inputMode="decimal"
+                  aria-label={`Monto de movimiento ${idx + 1}`}
                   required
                   value={amountInputs[idx] || ''} 
                   onChange={e => {
@@ -1889,6 +1890,7 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
             <label className="text-[10px] uppercase font-bold text-slate-500 mb-1 ml-1">Inventario Final</label>
             <input 
               type="number"
+              aria-label="Inventario final"
               value={finalInventory || ''}
               onChange={(e) => setFinalInventory(normalizeAmount(Number(e.target.value)))}
               onWheel={(e) => e.currentTarget.blur()}
