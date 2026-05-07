@@ -57,6 +57,28 @@ import type { SyncState } from './services/syncService';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
 
+const formatAmountForInput = (amount: number) => {
+  if (!amount) return '';
+  return new Intl.NumberFormat('en-US', {
+    useGrouping: true,
+    maximumFractionDigits: 2
+  }).format(amount);
+};
+
+const formatAmountInput = (value: string) => {
+  const sanitized = value.replace(/[^0-9.]/g, '');
+  if (!sanitized) return '';
+
+  const [integerPartRaw, ...decimalParts] = sanitized.split('.');
+  const hasDecimalPoint = sanitized.includes('.');
+  const normalizedInteger = (integerPartRaw || '0').replace(/^0+(?=\d)/, '');
+  const formattedInteger = normalizedInteger.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const decimalPart = decimalParts.join('').slice(0, 2);
+
+  if (!hasDecimalPoint) return formattedInteger;
+  return `${formattedInteger}.${decimalPart}`;
+};
+
 export default function App() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
@@ -1420,27 +1442,6 @@ function JournalEntryForm({
   initialData?: JournalEntry,
   onCancel?: () => void
 }) {
-  const formatAmountForInput = (amount: number) => {
-    if (!amount) return '';
-    return new Intl.NumberFormat('en-US', {
-      useGrouping: true,
-      maximumFractionDigits: 20
-    }).format(amount);
-  };
-
-  const formatAmountInput = (value: string) => {
-    const sanitized = value.replace(/,/g, '').replace(/[^0-9.]/g, '');
-    if (!sanitized) return '';
-
-    const [integerPartRaw, ...decimalParts] = sanitized.split('.');
-    const hasDecimalPoint = sanitized.includes('.');
-    const normalizedInteger = (integerPartRaw || '0').replace(/^0+(?=\d)/, '');
-    const formattedInteger = normalizedInteger.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-    if (!hasDecimalPoint) return formattedInteger;
-    return `${formattedInteger}.${decimalParts.join('')}`;
-  };
-
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
   const [movements, setMovements] = useState<Movement[]>([
@@ -1567,7 +1568,7 @@ function JournalEntryForm({
                   type="text" 
                   inputMode="decimal"
                   required
-                  value={amountInputs[idx] ?? ''} 
+                  value={amountInputs[idx] || ''} 
                   onChange={e => {
                     const formattedValue = formatAmountInput(e.target.value);
                     const numericValue = Number(formattedValue.replace(/,/g, ''));
