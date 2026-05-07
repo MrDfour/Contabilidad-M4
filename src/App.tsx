@@ -880,12 +880,21 @@ function FixedAssetsView({
   const [assetAccountId, setAssetAccountId] = useState(assetAccounts[0]?.id || '');
   const [accumulatedDeprAccountId, setAccumulatedDeprAccountId] = useState(assetAccounts[0]?.id || '');
   const [expenseAccountId, setExpenseAccountId] = useState(expenseAccounts[0]?.id || '');
-  const [showDepreciationModal, setShowDepreciationModal] = useState(false);
-  const [depreciationDate, setDepreciationDate] = useState(() => {
+  const getDefaultDepreciationDate = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-  });
-  const [depreciationDescription, setDepreciationDescription] = useState(`Depreciación del mes de ${new Date().toLocaleDateString('es-MX', { month: 'long' })}`);
+  };
+  const getDefaultDepreciationDescription = (dateStr: string) => {
+    const [year, month] = dateStr.split('-').map(Number);
+    if (!year || !month) return 'Depreciación mensual de activos fijos';
+    const monthName = new Date(year, month - 1, 1).toLocaleDateString('es-MX', { month: 'long' });
+    return `Depreciación del mes de ${monthName}`;
+  };
+  const initialDepreciationDate = getDefaultDepreciationDate();
+  const [showDepreciationModal, setShowDepreciationModal] = useState(false);
+  const [depreciationDate, setDepreciationDate] = useState(initialDepreciationDate);
+  const [depreciationDescription, setDepreciationDescription] = useState(getDefaultDepreciationDescription(initialDepreciationDate));
+  const [isDepreciationDescriptionManuallyEdited, setIsDepreciationDescriptionManuallyEdited] = useState(false);
   const [selectedFiscalAssetId, setSelectedFiscalAssetId] = useState('');
   const [inpcUltimoMesMitadPeriodo, setInpcUltimoMesMitadPeriodo] = useState('');
   const [inpcMesAdquisicion, setInpcMesAdquisicion] = useState('');
@@ -897,14 +906,10 @@ function FixedAssetsView({
   }, [fixedAssets, selectedFiscalAssetId]);
 
   useEffect(() => {
-    if (!depreciationDescription || depreciationDescription.startsWith('Depreciación del mes de ')) {
-      const [year, month] = depreciationDate.split('-').map(Number);
-      if (year && month) {
-        const monthName = new Date(year, month - 1, 1).toLocaleDateString('es-MX', { month: 'long' });
-        setDepreciationDescription(`Depreciación del mes de ${monthName}`);
-      }
+    if (!isDepreciationDescriptionManuallyEdited) {
+      setDepreciationDescription(getDefaultDepreciationDescription(depreciationDate));
     }
-  }, [depreciationDate, depreciationDescription]);
+  }, [depreciationDate, isDepreciationDescriptionManuallyEdited]);
 
   const handleAddAsset = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1215,7 +1220,10 @@ function FixedAssetsView({
                 <input
                   type="text"
                   value={depreciationDescription}
-                  onChange={e => setDepreciationDescription(e.target.value)}
+                  onChange={e => {
+                    setDepreciationDescription(e.target.value);
+                    setIsDepreciationDescriptionManuallyEdited(true);
+                  }}
                   className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-slate-600"
                 />
               </div>
