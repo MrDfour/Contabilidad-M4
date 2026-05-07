@@ -876,12 +876,13 @@ function FixedAssetsView({
   const [name, setName] = useState('');
   const [acquisitionDate, setAcquisitionDate] = useState(new Date().toISOString().split('T')[0]);
   const [originalAmountInput, setOriginalAmountInput] = useState('');
-  const [fiscalRatePercent, setFiscalRatePercent] = useState('30');
+  const [fiscalRatePercentInput, setFiscalRatePercentInput] = useState('30');
   const [assetAccountId, setAssetAccountId] = useState(assetAccounts[0]?.id || '');
   const [accumulatedDeprAccountId, setAccumulatedDeprAccountId] = useState(assetAccounts[0]?.id || '');
   const [expenseAccountId, setExpenseAccountId] = useState(expenseAccounts[0]?.id || '');
   const getDefaultDepreciationDate = () => {
     const now = new Date();
+    // Día 0 del mes siguiente = último día del mes actual.
     return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
   };
   const getDefaultDepreciationDescription = (dateStr: string) => {
@@ -914,7 +915,7 @@ function FixedAssetsView({
   const handleAddAsset = (e: React.FormEvent) => {
     e.preventDefault();
     const originalAmount = parseFormattedAmount(originalAmountInput);
-    const fiscalRate = normalizeAmount(Number(fiscalRatePercent) / 100);
+    const fiscalRate = normalizeAmount(Number(fiscalRatePercentInput) / 100);
     if (!name.trim() || !acquisitionDate || originalAmount <= 0 || fiscalRate <= 0 || !assetAccountId || !accumulatedDeprAccountId || !expenseAccountId) {
       onSetModal({
         type: 'error',
@@ -941,7 +942,7 @@ function FixedAssetsView({
 
     setName('');
     setOriginalAmountInput('');
-    setFiscalRatePercent('30');
+    setFiscalRatePercentInput('30');
     onSetModal({
       type: 'success',
       title: 'Activo registrado',
@@ -998,7 +999,7 @@ function FixedAssetsView({
     onSetModal({
       type: 'success',
       title: 'Depreciación aplicada',
-      message: `Se registró un asiento con ${assetsWithMovement.length} activo(s) depreciado(s).`
+      message: `Se registró un asiento con ${assetsWithMovement.length} ${assetsWithMovement.length === 1 ? 'activo depreciado' : 'activos depreciados'}.`
     });
   };
 
@@ -1119,8 +1120,8 @@ function FixedAssetsView({
               type="number"
               min="0.01"
               step="0.01"
-              value={fiscalRatePercent}
-              onChange={e => setFiscalRatePercent(e.target.value)}
+              value={fiscalRatePercentInput}
+              onChange={e => setFiscalRatePercentInput(e.target.value)}
               className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               required
             />
