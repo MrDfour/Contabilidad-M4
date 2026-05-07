@@ -5,11 +5,14 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Capacitor } from '@capacitor/core';
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
 import {
+  clearPinRegenerationRequest,
   connectToSessionPeer,
   createSyncPayload,
+  getPinSecurityStatus,
   getRedisSyncData,
   getSessionIdFromPin,
   initializeHostPeer,
+  resetPinMappingForSession,
   setRedisSyncData,
   setPinMapping,
   type PeerController,
@@ -42,6 +45,21 @@ function parseSessionId(raw: string): string {
   return value;
 }
 
+function generateSixDigitPin(): string {
+  const range = 900000;
+  const maxUint32 = 0x1_0000_0000;
+  const limit = Math.floor(maxUint32 / range) * range;
+  const randomBuffer = new Uint32Array(1);
+
+  while (true) {
+    crypto.getRandomValues(randomBuffer);
+    const value = randomBuffer[0];
+    if (value < limit) {
+      return String((value % range) + 100000);
+    }
+  }
+}
+
 export default function SyncModal({
   isOpen,
   onClose,
@@ -58,13 +76,20 @@ export default function SyncModal({
   const [remotePayload, setRemotePayload] = useState<SyncPayload | null>(null);
   const [remoteTransport, setRemoteTransport] = useState<SyncTransport | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [desktopSessionNonce, setDesktopSessionNonce] = useState(0);
 
   const peerControllerRef = useRef<PeerController | null>(null);
   const pollingIntervalRef = useRef<number | null>(null);
+  const securityIntervalRef = useRef<number | null>(null);
   const pollingAttemptsRef = useRef(0);
+  const securityRequestInFlightRef = useRef(false);
   const isPollingRequestInFlight = useRef(false);
+  const activeDesktopSessionRef = useRef('');
+  const isRegeneratingSessionRef = useRef(false);
+  const isBlockedRef = useRef(false);
+  const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
 
-  const cleanup = useCallback(() => {
+  const stopSyncRuntime = useCallback(() => {
     if (pollingIntervalRef.current !== null) {
       window.clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
@@ -76,6 +101,17 @@ export default function SyncModal({
     pollingAttemptsRef.current = 0;
     isPollingRequestInFlight.current = false;
   }, []);
+
+  const cleanup = useCallback(() => {
+    stopSyncRuntime();
+    if (securityIntervalRef.current !== null) {
+      window.clearInterval(securityIntervalRef.current);
+      securityIntervalRef.current = null;
+    }
+    securityRequestInFlightRef.current = false;
+    isRegeneratingSessionRef.current = false;
+    isBlockedRef.current = false;
+  }, [stopSyncRuntime]);
 
   const pushLocalStateToPeer = useCallback((activeSessionId: string) => {
     if (!peerControllerRef.current) return;
@@ -152,27 +188,29 @@ export default function SyncModal({
     }
   }, [handleIncomingPayload, localState, pushLocalStateToPeer]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      cleanup();
-      setSessionId('');
-      setPin('');
-      setScanInput('');
-      setStatus('');
-      setRemotePayload(null);
-      setRemoteTransport(null);
-      setErrorMessage('');
-      setIsBusy(false);
-      return;
+  const clearActiveDesktopSession = useCallback(async () => {
+    if (!activeDesktopSessionRef.current) return;
+    const sessionToClear = activeDesktopSessionRef.current;
+    activeDesktopSessionRef.current = '';
+    try {
+      await resetPinMappingForSession(sessionToClear);
+    } catch {
+      // best-effort cleanup
     }
+  }, []);
 
-    if (!isDesktop) {
-      setStatus('Escanea el QR de escritorio para iniciar la sincronización.');
-      return;
-    }
+  const initializeDesktopSession = useCallback(async () => {
+    if (!isDesktop || !isOpen) return;
+
+    cleanup();
+    await clearActiveDesktopSession();
 
     const generatedSessionId = crypto.randomUUID();
-    const generatedPin = String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000);
+    const generatedPin = generateSixDigitPin();
+
+    activeDesktopSessionRef.current = generatedSessionId;
+    isBlockedRef.current = false;
+    setBlockedUntil(null);
     setSessionId(generatedSessionId);
     setPin(generatedPin);
     setRemotePayload(null);
@@ -187,8 +225,85 @@ export default function SyncModal({
 
     startDesktopFlow(generatedSessionId);
 
+    securityIntervalRef.current = window.setInterval(async () => {
+      if (securityRequestInFlightRef.current || isRegeneratingSessionRef.current) return;
+      securityRequestInFlightRef.current = true;
+
+      try {
+        const securityStatus = await getPinSecurityStatus(generatedSessionId);
+
+        if (securityStatus.blockedUntil) {
+          isBlockedRef.current = true;
+          setBlockedUntil(securityStatus.blockedUntil);
+          setIsBusy(false);
+          setSessionId('');
+          setPin('');
+          stopSyncRuntime();
+          const remainingSeconds = Math.max(1, Math.ceil((securityStatus.blockedUntil - Date.now()) / 1000));
+          setStatus(`Bloqueado temporalmente por seguridad. Reintenta en ${remainingSeconds} segundos.`);
+          setErrorMessage('Se detectaron múltiples intentos inválidos de PIN.');
+          return;
+        }
+
+        if (isBlockedRef.current) {
+          isBlockedRef.current = false;
+          isRegeneratingSessionRef.current = true;
+          if (securityIntervalRef.current !== null) {
+            window.clearInterval(securityIntervalRef.current);
+            securityIntervalRef.current = null;
+          }
+          setBlockedUntil(null);
+          setStatus('Tiempo de bloqueo finalizado. Regenerando código de sincronización...');
+          setErrorMessage('');
+          setDesktopSessionNonce((current) => current + 1);
+          return;
+        }
+
+        if (securityStatus.regenerateRequested) {
+          isRegeneratingSessionRef.current = true;
+          if (securityIntervalRef.current !== null) {
+            window.clearInterval(securityIntervalRef.current);
+            securityIntervalRef.current = null;
+          }
+          setStatus('Se detectaron intentos inválidos. Regenerando código de sincronización...');
+          setErrorMessage('');
+          await clearPinRegenerationRequest(generatedSessionId);
+          setDesktopSessionNonce((current) => current + 1);
+        }
+      } catch {
+        // non-critical security check failure
+      } finally {
+        securityRequestInFlightRef.current = false;
+      }
+    }, 2000);
+  }, [cleanup, clearActiveDesktopSession, isDesktop, isOpen, startDesktopFlow, stopSyncRuntime]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      cleanup();
+      clearActiveDesktopSession();
+      activeDesktopSessionRef.current = '';
+      setSessionId('');
+      setPin('');
+      setScanInput('');
+      setStatus('');
+      setRemotePayload(null);
+      setRemoteTransport(null);
+      setErrorMessage('');
+      setIsBusy(false);
+      setBlockedUntil(null);
+      return;
+    }
+
+    if (!isDesktop) {
+      setStatus('Escanea el QR de escritorio para iniciar la sincronización.');
+      return;
+    }
+
+    initializeDesktopSession();
+
     return cleanup;
-  }, [cleanup, isDesktop, isOpen, startDesktopFlow]);
+  }, [cleanup, clearActiveDesktopSession, desktopSessionNonce, initializeDesktopSession, isDesktop, isOpen]);
 
   const handleScanQr = async () => {
     setErrorMessage('');
@@ -357,7 +472,11 @@ export default function SyncModal({
               {isDesktop ? (
                 <div className="space-y-4">
                   <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
-                    {sessionId ? (
+                    {blockedUntil && blockedUntil > Date.now() ? (
+                      <p className="text-sm text-rose-300">
+                        Bloqueado temporalmente por seguridad. Espera a que termine el tiempo de bloqueo para generar un nuevo PIN.
+                      </p>
+                    ) : sessionId ? (
                       <div className="inline-flex flex-col items-center gap-3">
                         <div className="bg-white p-3 rounded-xl">
                           <QRCodeSVG value={sessionId} size={180} includeMargin />
