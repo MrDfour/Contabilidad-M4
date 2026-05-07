@@ -17,9 +17,6 @@ autoUpdater.autoDownload = false;
 // Keep a reference to the main window to forward IPC events
 let mainWindow = null;
 
-// Prevent showing multiple simultaneous error dialogs for the same error
-let updateErrorDialogShown = false;
-
 // Auto-updater event listeners
 autoUpdater.on('update-available', (info) => {
   log.info('Actualización disponible:', info);
@@ -95,21 +92,6 @@ autoUpdater.on('download-progress', (progressObj) => {
 
 autoUpdater.on('error', (err) => {
   log.error('Error en el actualizador:', err);
-
-  if (updateErrorDialogShown) return;
-  updateErrorDialogShown = true;
-
-  dialog
-    .showMessageBox({
-      type: 'error',
-      title: 'Error en el actualizador',
-      message: 'No se pudo completar la actualización',
-      detail: `${err.message || err}\n\nPuede intentarlo más tarde o descargar la actualización manualmente desde GitHub.`,
-      buttons: ['Aceptar'],
-    })
-    .finally(() => {
-      updateErrorDialogShown = false;
-    });
 });
 
 function createWindow() {

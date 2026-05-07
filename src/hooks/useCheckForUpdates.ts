@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 
-declare const __APP_VERSION__: string;
-
 const GITHUB_RELEASES_API =
   'https://api.github.com/repos/mrdfour/contabilidad-m4/releases/latest';
 
