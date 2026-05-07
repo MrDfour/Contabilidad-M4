@@ -259,38 +259,145 @@ export async function getRedisSyncData(key: string): Promise<SyncPayload | null>
 }
 
 const PIN_TTL_SECONDS = 300;
+const PIN_MAX_FAILED_ATTEMPTS = 3;
+const PIN_MAX_RESETS_BEFORE_TIMEOUT = 3;
+const PIN_TIMEOUT_SECONDS = 300;
+const PIN_RESET_SIGNAL_TTL_SECONDS = 300;
+const PIN_RESET_TOTAL_TTL_SECONDS = 3600;
+const ACTIVE_PIN_SESSION_KEY = 'sync_pin_active_session';
+const PIN_BLOCKED_UNTIL_KEY = 'sync_pin_blocked_until';
+const PIN_RESET_TOTAL_KEY = 'sync_pin_reset_total';
 
-export async function setPinMapping(pin: string, sessionId: string): Promise<void> {
+export interface PinSecurityStatus {
+  regenerateRequested: boolean;
+  blockedUntil: number | null;
+}
+
+function parseRedisNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+async function runRedisCommand(path: string): Promise<unknown> {
   const { url, token } = getRedisConfig();
-  const key = `sync_pin_${pin}`;
-  const endpoint = `${url}/set/${encodeURIComponent(key)}/${encodeURIComponent(sessionId)}?EX=${PIN_TTL_SECONDS}`;
-
-  const response = await fetch(endpoint, {
+  const response = await fetch(`${url}/${path}`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
     },
   });
+  return parseRedisResponse(response);
+}
 
-  await parseRedisResponse(response);
+function getPinSessionKey(sessionId: string): string {
+  return `sync_session_pin_${sessionId}`;
+}
+
+function getPinFailedAttemptsKey(sessionId: string): string {
+  return `sync_pin_failed_attempts_${sessionId}`;
+}
+
+function getPinRegenerateSignalKey(sessionId: string): string {
+  return `sync_pin_regenerate_${sessionId}`;
+}
+
+async function handleFailedPinAttempt(): Promise<void> {
+  const activeSessionResult = await runRedisCommand(`get/${encodeURIComponent(ACTIVE_PIN_SESSION_KEY)}`);
+  if (typeof activeSessionResult !== 'string' || !activeSessionResult) {
+    return;
+  }
+
+  const sessionId = activeSessionResult;
+  const failedAttemptsKey = getPinFailedAttemptsKey(sessionId);
+  const failedAttemptsResult = await runRedisCommand(`incr/${encodeURIComponent(failedAttemptsKey)}`);
+  await runRedisCommand(`expire/${encodeURIComponent(failedAttemptsKey)}/${PIN_TTL_SECONDS}`);
+
+  const failedAttempts = parseRedisNumber(failedAttemptsResult);
+  if (!failedAttempts || failedAttempts % PIN_MAX_FAILED_ATTEMPTS !== 0) {
+    return;
+  }
+
+  await runRedisCommand(
+    `set/${encodeURIComponent(getPinRegenerateSignalKey(sessionId))}/1?EX=${PIN_RESET_SIGNAL_TTL_SECONDS}`,
+  );
+
+  const resetTotalResult = await runRedisCommand(`incr/${encodeURIComponent(PIN_RESET_TOTAL_KEY)}`);
+  await runRedisCommand(`expire/${encodeURIComponent(PIN_RESET_TOTAL_KEY)}/${PIN_RESET_TOTAL_TTL_SECONDS}`);
+
+  const resetTotal = parseRedisNumber(resetTotalResult);
+  if (!resetTotal || resetTotal < PIN_MAX_RESETS_BEFORE_TIMEOUT) {
+    return;
+  }
+
+  const blockedUntil = Date.now() + PIN_TIMEOUT_SECONDS * 1000;
+  await runRedisCommand(`set/${encodeURIComponent(PIN_BLOCKED_UNTIL_KEY)}/${blockedUntil}?EX=${PIN_TIMEOUT_SECONDS}`);
+}
+
+export async function setPinMapping(pin: string, sessionId: string): Promise<void> {
+  const key = `sync_pin_${pin}`;
+  await runRedisCommand(`set/${encodeURIComponent(key)}/${encodeURIComponent(sessionId)}?EX=${PIN_TTL_SECONDS}`);
+  await runRedisCommand(
+    `set/${encodeURIComponent(getPinSessionKey(sessionId))}/${encodeURIComponent(pin)}?EX=${PIN_TTL_SECONDS}`,
+  );
+  await runRedisCommand(`set/${encodeURIComponent(ACTIVE_PIN_SESSION_KEY)}/${encodeURIComponent(sessionId)}?EX=${PIN_TTL_SECONDS}`);
 }
 
 export async function getSessionIdFromPin(pin: string): Promise<string | null> {
-  const { url, token } = getRedisConfig();
+  const blockedUntilResult = await runRedisCommand(`get/${encodeURIComponent(PIN_BLOCKED_UNTIL_KEY)}`);
+  const blockedUntil = parseRedisNumber(blockedUntilResult);
+  if (blockedUntil && blockedUntil > Date.now()) {
+    const remainingSeconds = Math.max(1, Math.ceil((blockedUntil - Date.now()) / 1000));
+    throw new Error(`Demasiados intentos inválidos. Intenta nuevamente en ${remainingSeconds} segundos.`);
+  }
+
   const key = `sync_pin_${pin}`;
-  const endpoint = `${url}/get/${encodeURIComponent(key)}`;
-
-  const response = await fetch(endpoint, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  const result = await parseRedisResponse(response);
+  const result = await runRedisCommand(`get/${encodeURIComponent(key)}`);
   if (typeof result !== 'string' || !result) {
+    await handleFailedPinAttempt();
     return null;
   }
 
   return result;
+}
+
+export async function getPinSecurityStatus(sessionId: string): Promise<PinSecurityStatus> {
+  const [regenerateSignalResult, blockedUntilResult] = await Promise.all([
+    runRedisCommand(`get/${encodeURIComponent(getPinRegenerateSignalKey(sessionId))}`),
+    runRedisCommand(`get/${encodeURIComponent(PIN_BLOCKED_UNTIL_KEY)}`),
+  ]);
+
+  const blockedUntil = parseRedisNumber(blockedUntilResult);
+  return {
+    regenerateRequested: regenerateSignalResult === 1 || regenerateSignalResult === '1',
+    blockedUntil: blockedUntil && blockedUntil > Date.now() ? blockedUntil : null,
+  };
+}
+
+export async function clearPinRegenerationRequest(sessionId: string): Promise<void> {
+  await runRedisCommand(`del/${encodeURIComponent(getPinRegenerateSignalKey(sessionId))}`);
+}
+
+export async function resetPinMappingForSession(sessionId: string): Promise<void> {
+  const sessionPinKey = getPinSessionKey(sessionId);
+  const pinResult = await runRedisCommand(`get/${encodeURIComponent(sessionPinKey)}`);
+  const keysToDelete = [
+    sessionPinKey,
+    getPinFailedAttemptsKey(sessionId),
+    getPinRegenerateSignalKey(sessionId),
+  ];
+
+  if (typeof pinResult === 'string' && pinResult) {
+    keysToDelete.push(`sync_pin_${pinResult}`);
+  }
+
+  await Promise.all(keysToDelete.map((key) => runRedisCommand(`del/${encodeURIComponent(key)}`)));
+
+  const activeSessionResult = await runRedisCommand(`get/${encodeURIComponent(ACTIVE_PIN_SESSION_KEY)}`);
+  if (activeSessionResult === sessionId) {
+    await runRedisCommand(`del/${encodeURIComponent(ACTIVE_PIN_SESSION_KEY)}`);
+  }
 }
