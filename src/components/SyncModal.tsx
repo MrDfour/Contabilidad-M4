@@ -150,7 +150,7 @@ export default function SyncModal({
       const payload = createSyncPayload(activeSessionId, 'desktop', 'redis', localState);
       await setRedisSyncData(desktopKey, payload);
 
-      setStatus('Datos publicados en fallback Redis. Esperando respuesta móvil...');
+      setStatus('Datos publicados en respaldo Redis. Esperando respuesta móvil...');
 
       pollingAttemptsRef.current = 0;
       pollingIntervalRef.current = window.setInterval(async () => {
@@ -160,7 +160,7 @@ export default function SyncModal({
             window.clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
           }
-          setStatus('Fallback Redis finalizado (sin respuesta móvil).');
+          setStatus('Respaldo Redis finalizado (sin respuesta móvil).');
           return;
         }
 
@@ -177,7 +177,7 @@ export default function SyncModal({
             handleIncomingPayload(mobilePayload, 'redis');
           }
         } catch (error) {
-          setErrorMessage(error instanceof Error ? error.message : 'Error consultando fallback Redis.');
+          setErrorMessage(error instanceof Error ? error.message : 'Error consultando respaldo Redis.');
         } finally {
           isPollingRequestInFlight.current = false;
         }
@@ -310,7 +310,7 @@ export default function SyncModal({
 
     try {
       if (Capacitor.getPlatform() === 'web') {
-        throw new Error('Escáner nativo no disponible en web. Ingresa el Session ID manualmente.');
+        throw new Error('Escáner nativo no disponible en web. Ingresa el ID de sesión manualmente.');
       }
 
       const permission = await BarcodeScanner.requestPermissions();
@@ -322,11 +322,11 @@ export default function SyncModal({
       const rawValue = result.barcodes?.[0]?.displayValue?.trim() ?? '';
       const parsedSession = parseSessionId(rawValue);
       if (!parsedSession) {
-        throw new Error('No se detectó un Session ID válido en el QR.');
+        throw new Error('No se detectó un ID de sesión válido en el QR.');
       }
 
       setScanInput(parsedSession);
-      setStatus('Session ID detectado. Presiona “Conectar”.');
+      setStatus('ID de sesión detectado. Presiona “Conectar”.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'No se pudo escanear el QR.');
     }
@@ -335,7 +335,7 @@ export default function SyncModal({
   const handleConnectMobile = async () => {
     const rawInput = parseSessionId(scanInput);
     if (!rawInput) {
-      setErrorMessage('Ingresa o escanea un código PIN o Session ID válido.');
+      setErrorMessage('Ingresa o escanea un código PIN o ID de sesión válido.');
       return;
     }
 
@@ -371,6 +371,10 @@ export default function SyncModal({
           onOpen: () => {
             setStatus('Conexión WebRTC establecida. Intercambiando datos...');
             pushLocalStateToPeer(resolvedSessionId);
+            const mobileReply = createSyncPayload(resolvedSessionId, 'mobile', 'redis', localState);
+            setRedisSyncData(`sync_mobile_${resolvedSessionId}`, mobileReply).catch(() => {
+              // best-effort mirror reply for desktop Redis polling
+            });
           },
           onData: (message) => {
             handleIncomingPayload(message.payload, 'peerjs');
@@ -383,12 +387,12 @@ export default function SyncModal({
       );
       setIsBusy(false);
     } catch {
-      setStatus('WebRTC no disponible. Intentando fallback Redis...');
+      setStatus('WebRTC no disponible. Intentando respaldo Redis...');
 
       try {
         const fallbackPayload = await getRedisSyncData(`sync_desktop_${resolvedSessionId}`);
         if (!fallbackPayload) {
-          throw new Error('No se encontró información en fallback Redis para esta sesión.');
+          throw new Error('No se encontró información en respaldo Redis para esta sesión.');
         }
 
         handleIncomingPayload(fallbackPayload, 'redis');
@@ -399,6 +403,12 @@ export default function SyncModal({
     }
   };
 
+  const publishMobileRedisReply = useCallback(async (stateToShare: SyncState) => {
+    if (isDesktop || !sessionId) return;
+    const payload = createSyncPayload(sessionId, 'mobile', 'redis', stateToShare);
+    await setRedisSyncData(`sync_mobile_${sessionId}`, payload);
+  }, [isDesktop, sessionId]);
+
   const handleKeepLocal = async () => {
     if (!sessionId) return;
 
@@ -406,15 +416,13 @@ export default function SyncModal({
     setStatus('Aplicando decisión: mantener datos locales...');
 
     try {
-      if (remoteTransport === 'redis' && !isDesktop) {
-        const payload = createSyncPayload(sessionId, 'mobile', 'redis', localState);
-        await setRedisSyncData(`sync_mobile_${sessionId}`, payload);
-      }
+      await publishMobileRedisReply(localState);
 
       pushLocalStateToPeer(sessionId);
       setRemotePayload(null);
       onNotify('success', 'Sincronización completada', 'Se conservaron los datos locales en este dispositivo.');
       setStatus('Sincronización completada.');
+      onClose();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'No se pudo enviar la decisión.');
     } finally {
@@ -422,14 +430,18 @@ export default function SyncModal({
     }
   };
 
-  const handleOverwriteWithRemote = () => {
+  const handleOverwriteWithRemote = async () => {
     if (!remotePayload) return;
 
     try {
       onApplyRemoteState(remotePayload.state);
+      if (!isDesktop && sessionId) {
+        await publishMobileRedisReply(remotePayload.state);
+      }
       setRemotePayload(null);
       onNotify('success', 'Datos actualizados', 'Se aplicaron correctamente los datos remotos.');
       setStatus('Datos remotos aplicados correctamente.');
+      onClose();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'No se pudieron aplicar los datos remotos.');
     }
@@ -455,7 +467,7 @@ export default function SyncModal({
                 <div>
                   <h3 className="text-lg font-bold text-white">Sincronización de datos</h3>
                   <p className="text-xs text-slate-400">
-                    {isDesktop ? 'Modo Escritorio' : 'Modo Móvil'} • WebRTC + Redis fallback
+                    {isDesktop ? 'Modo Escritorio' : 'Modo Móvil'} • WebRTC + respaldo Redis
                   </p>
                 </div>
               </div>
@@ -481,7 +493,7 @@ export default function SyncModal({
                         <div className="bg-white p-3 rounded-xl">
                           <QRCodeSVG value={sessionId} size={180} includeMargin />
                         </div>
-                        <p className="text-xs text-slate-300 break-all">Session ID: {sessionId}</p>
+                        <p className="text-xs text-slate-300 break-all">ID de sesión: {sessionId}</p>
                         <div className="w-full border-t border-white/10 pt-3">
                           <p className="text-xs text-slate-400 mb-1">Escanea el QR o ingresa este código de 6 dígitos en tu móvil:</p>
                           <p className="text-3xl font-bold tracking-[0.25em] text-indigo-300" role="text" aria-label="Código PIN de seis dígitos">{pin}</p>
@@ -495,11 +507,11 @@ export default function SyncModal({
               ) : (
                 <div className="space-y-3">
                   <div className="space-y-2">
-                    <label className="text-xs uppercase tracking-wider font-bold text-slate-400">Código PIN o Session ID</label>
+                    <label className="text-xs uppercase tracking-wider font-bold text-slate-400">Código PIN o ID de sesión</label>
                     <input
                       value={scanInput}
                       onChange={(e) => setScanInput(e.target.value)}
-                      placeholder="Código de 6 dígitos o Session ID completo"
+                      placeholder="Código de 6 dígitos o ID de sesión completo"
                       inputMode="numeric"
                       pattern="[0-9]*"
                       className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
@@ -526,13 +538,13 @@ export default function SyncModal({
 
               <div className="rounded-xl border border-white/10 bg-white/5 p-3 min-h-[64px]">
                 <p className="text-sm text-slate-200">{status || 'Esperando acción...'}</p>
-                {isBusy && <p className="text-xs text-indigo-300 mt-1">Connecting...</p>}
+                {isBusy && <p className="text-xs text-indigo-300 mt-1">Conectando...</p>}
                 {errorMessage && <p className="text-xs text-rose-400 mt-1">{errorMessage}</p>}
               </div>
 
               {isConflictVisible && remotePayload && (
                 <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 space-y-3">
-                  <h4 className="text-sm font-semibold text-indigo-200">Account data conflict detected. Which version do you want to keep across both devices?</h4>
+                  <h4 className="text-sm font-semibold text-indigo-200">Se detectó un conflicto de datos contables. ¿Qué versión deseas conservar en ambos dispositivos?</h4>
                   <p className="text-xs text-slate-300">
                     Datos remotos desde: <span className="font-mono">{remoteTransport}</span> · origen: <span className="font-mono">{remotePayload.origin}</span>
                   </p>
@@ -542,17 +554,17 @@ export default function SyncModal({
                       disabled={isBusy}
                       className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-slate-100 text-sm font-medium border border-white/10 disabled:opacity-60"
                     >
-                      Keep Local Data
+                      Conservar datos locales
                     </button>
                     <button
                       onClick={handleOverwriteWithRemote}
                       disabled={isBusy}
                       className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
                     >
-                      Overwrite with Remote Data
+                      Sobrescribir con datos remotos
                     </button>
                   </div>
-                  {isBusy && <p className="text-xs text-indigo-300">Waiting for decision...</p>}
+                  {isBusy && <p className="text-xs text-indigo-300">Esperando decisión...</p>}
                 </div>
               )}
             </div>
