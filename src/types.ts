@@ -31,6 +31,18 @@ export interface Journal {
   entries: JournalEntry[];
 }
 
+export interface FixedAsset {
+  id: string;
+  name: string;
+  acquisitionDate: string; // YYYY-MM-DD
+  originalAmount: number; // Monto Original de la Inversión (MOI)
+  assetAccountId: string; // ID de la cuenta de activo (ej. anc-4)
+  accumulatedDeprAccountId: string; // ID de la contra-cuenta
+  expenseAccountId: string; // ID de la cuenta de gasto
+  fiscalRate: number; // Porcentaje anual (ej. 0.30)
+  isDisposed: boolean;
+}
+
 export const INITIAL_ACCOUNTS: Account[] = [
   // Activo Circulante
   { id: 'ac-1', code: '1101', name: 'Caja', type: 'asset' },
@@ -58,6 +70,11 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { id: 'anc-10', code: '1210', name: 'Primas de Seguros', type: 'asset' },
   { id: 'anc-11', code: '1211', name: 'Rentas Pagadas por Anticipado', type: 'asset' },
   { id: 'anc-12', code: '1212', name: 'Intereses Pagados por Anticipado', type: 'asset' },
+  { id: 'anc-13', code: '1213', name: 'Depreciación Acumulada de Edificios', type: 'asset' },
+  { id: 'anc-14', code: '1214', name: 'Depreciación Acumulada de Mobiliario', type: 'asset' },
+  { id: 'anc-15', code: '1215', name: 'Depreciación Acumulada de Eq. Cómputo', type: 'asset' },
+  { id: 'anc-16', code: '1216', name: 'Depreciación Acumulada de Eq. Reparto', type: 'asset' },
+  { id: 'anc-17', code: '1217', name: 'Deterioro Acumulado de Activos Fijos', type: 'asset' },
 
   // Pasivo a Corto Plazo
   { id: 'pcp-1', code: '2101', name: 'Proveedores', type: 'liability' },
@@ -103,4 +120,6 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { id: 're-9', code: '5109', name: 'Gastos de Administración', type: 'expense' },
   { id: 're-10', code: '5110', name: 'Gastos Financieros', type: 'expense' },
   { id: 're-11', code: '5111', name: 'Otros Gastos', type: 'expense' },
+  { id: 're-12', code: '5112', name: 'Gasto por Depreciación', type: 'expense' },
+  { id: 're-13', code: '5113', name: 'Pérdida por Deterioro', type: 'expense' },
 ];
