@@ -68,8 +68,14 @@ const parseFormattedAmount = (value: string) => {
 };
 
 const parseImportedAmount = (value: unknown) => {
-  const sanitized = String(value ?? '0').replace(/,/g, '').replace(/[^0-9.-]/g, '');
-  return normalizeAmount(parseFloat(sanitized) || 0);
+  const raw = String(value ?? '0').replace(/,/g, '');
+  const isNegative = raw.includes('-');
+  const numericOnly = raw.replace(/[^0-9.]/g, '');
+  const [integerPartRaw, ...decimalParts] = numericOnly.split('.');
+  const integerPart = integerPartRaw || '0';
+  const decimalPart = decimalParts.join('');
+  const normalized = `${isNegative ? '-' : ''}${integerPart}${decimalPart ? `.${decimalPart}` : ''}`;
+  return normalizeAmount(parseFloat(normalized) || 0);
 };
 
 const formatAmountForInput = (amount: number) => {
