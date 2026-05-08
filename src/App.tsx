@@ -64,7 +64,6 @@ const APP_VERSION = `v${__APP_VERSION__}`;
 type AppMode = 'basic' | 'fiscal';
 type FiscalAccount = Account & { satGroupCode?: string };
 const FISCAL_BALANCE_ACCOUNT_IDS = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-16', 'anc-17', 're-12', 're-13']);
-const CURRENT_ASSET_ACCOUNT_IDS = new Set(['ac-1', 'ac-2', 'ac-3', 'ac-4', 'ac-5', 'ac-6', 'ac-7', 'ac-8', 'ac-9', 'ac-10']);
 const SAT_GROUP_PREFIX_LENGTH = 2;
 const SAT_GROUP_MINIMUM_LENGTH = 4;
 const getStoredAppMode = (): AppMode => {
@@ -72,7 +71,6 @@ const getStoredAppMode = (): AppMode => {
   const savedMode = localStorage.getItem('contasis_app_mode');
   return savedMode === 'fiscal' ? 'fiscal' : 'basic';
 };
-const getAssetSubtype = (accountId: string) => CURRENT_ASSET_ACCOUNT_IDS.has(accountId) ? 'circulante' : 'no_circulante';
 const getSatGroupCode = (account: FiscalAccount) => account.satGroupCode;
 const formatSatGroupCode = (code: string) => {
   // Formato visual SAT tipo XX.XX para códigos de 4 o más caracteres.
@@ -2562,8 +2560,6 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
   });
 
   const assetsAccounts = visibleAccounts.filter(a => a.type === 'asset');
-  const assetsCirculanteAccounts = assetsAccounts.filter(a => getAssetSubtype(a.id) === 'circulante');
-  const assetsNoCirculanteAccounts = assetsAccounts.filter(a => getAssetSubtype(a.id) === 'no_circulante');
   const circulatingAssets = assetsAccounts.filter(a => a.subtype === 'circulante');
   const nonCirculatingAssets = assetsAccounts.filter(a => a.subtype === 'no_circulante');
   const unclassifiedAssets = assetsAccounts.filter(a => !a.subtype);
@@ -2646,17 +2642,22 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
               <h4 className="font-bold text-sm border-b border-white/20 pb-1 uppercase tracking-wider text-slate-300">Activo</h4>
               {assetsAccounts.length === 0 && finalInventory === 0 ? (
                 <p className="text-xs text-slate-500 italic">Sin activos registrados.</p>
-              ) : appMode === 'basic' ? (
+              ) : (
                 <>
                   <div className="space-y-2">
                     <p className="text-[10px] uppercase tracking-widest font-semibold text-slate-500">Activo Circulante</p>
-                    {assetsCirculanteAccounts.length === 0 && finalInventory === 0 ? (
+                    {circulatingAssets.length === 0 && finalInventory === 0 ? (
                       <p className="text-xs text-slate-500 italic">Sin activo circulante registrado.</p>
                     ) : (
                       <>
-                        {assetsCirculanteAccounts.map(a => (
+                        {circulatingAssets.map(a => (
                           <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
-                            <span className="break-words py-1">{a.name}</span>
+                            <span className="break-words py-1">
+                              {a.name}
+                              {appMode === 'fiscal' && getSatGroupCode(a) && (
+                                <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(a) || '')})</span>
+                              )}
+                            </span>
                             <span className={cn(
                               "whitespace-nowrap pt-1",
                               (accountBalances[a.id] || 0) < 0 && "text-rose-300"
@@ -2679,12 +2680,17 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
 
                   <div className="space-y-2 pt-2">
                     <p className="text-[10px] uppercase tracking-widest font-semibold text-slate-500">Activo No Circulante</p>
-                    {assetsNoCirculanteAccounts.length === 0 ? (
+                    {nonCirculatingAssets.length === 0 ? (
                       <p className="text-xs text-slate-500 italic">Sin activo no circulante registrado.</p>
                     ) : (
-                      assetsNoCirculanteAccounts.map(a => (
+                      nonCirculatingAssets.map(a => (
                         <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
-                          <span className="break-words py-1">{a.name}</span>
+                          <span className="break-words py-1">
+                            {a.name}
+                            {appMode === 'fiscal' && getSatGroupCode(a) && (
+                              <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(a) || '')})</span>
+                            )}
+                          </span>
                           <span className={cn(
                             "whitespace-nowrap pt-1",
                             (accountBalances[a.id] || 0) < 0 && "text-rose-300"
@@ -2697,51 +2703,6 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
                       ))
                     )}
                   </div>
-                </>
-              ) : (
-                <>
-                  <h5 className="text-[11px] uppercase tracking-wider text-slate-500 pt-1">Corto Plazo / Circulante</h5>
-                  {circulatingAssets.length === 0 ? (
-                    <p className="text-[11px] text-slate-500 italic pl-2">Sin cuentas circulantes.</p>
-                  ) : (
-                    circulatingAssets.map(a => (
-                      <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
-                        <span className="break-words py-1">
-                          {a.name}
-                          {a.satGroupCode && <span className="ml-1 text-[10px] text-slate-500">({a.satGroupCode})</span>}
-                        </span>
-                        <span className={cn(
-                          "whitespace-nowrap pt-1",
-                          (accountBalances[a.id] || 0) < 0 && "text-rose-300"
-                        )}>
-                          {(accountBalances[a.id] || 0) < 0
-                            ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
-                            : formatCurrency(accountBalances[a.id] || 0)}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                  <h5 className="text-[11px] uppercase tracking-wider text-slate-500 pt-2">Largo Plazo / No Circulante</h5>
-                  {nonCirculatingAssets.length === 0 ? (
-                    <p className="text-[11px] text-slate-500 italic pl-2">Sin cuentas no circulantes.</p>
-                  ) : (
-                    nonCirculatingAssets.map(a => (
-                      <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
-                        <span className="break-words py-1">
-                          {a.name}
-                          {a.satGroupCode && <span className="ml-1 text-[10px] text-slate-500">({a.satGroupCode})</span>}
-                        </span>
-                        <span className={cn(
-                          "whitespace-nowrap pt-1",
-                          (accountBalances[a.id] || 0) < 0 && "text-rose-300"
-                        )}>
-                          {(accountBalances[a.id] || 0) < 0
-                            ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
-                            : formatCurrency(accountBalances[a.id] || 0)}
-                        </span>
-                      </div>
-                    ))
-                  )}
                   {unclassifiedAssets.length > 0 && (
                     <>
                       <h5 className="text-[11px] uppercase tracking-wider text-slate-500 pt-2">Sin Clasificación</h5>
@@ -2749,7 +2710,9 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
                         <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
                           <span className="break-words py-1">
                             {a.name}
-                            {a.satGroupCode && <span className="ml-1 text-[10px] text-slate-500">({a.satGroupCode})</span>}
+                            {appMode === 'fiscal' && getSatGroupCode(a) && (
+                              <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(a) || '')})</span>
+                            )}
                           </span>
                           <span className={cn(
                             "whitespace-nowrap pt-1",
@@ -2783,16 +2746,9 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
               <h4 className="font-bold text-sm border-b border-white/20 pb-1 uppercase tracking-wider text-slate-300">Pasivo</h4>
               {liabilityAccounts.length === 0 ? (
                 <p className="text-xs text-slate-500 italic">Sin pasivos registrados.</p>
-              ) : appMode === 'basic' ? (
-                liabilityAccounts.map(a => (
-                  <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-400 gap-4">
-                    <span className="break-words py-1">{a.name}</span>
-                    <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
-                  </div>
-                ))
               ) : (
                 <>
-                  <h5 className="text-[11px] uppercase tracking-wider text-slate-500 pt-1">Corto Plazo / Circulante</h5>
+                  <h5 className="text-[11px] uppercase tracking-wider text-slate-500 pt-1">Pasivo a Corto Plazo / Circulante</h5>
                   {circulatingLiabilities.length === 0 ? (
                     <p className="text-[11px] text-slate-500 italic pl-2">Sin cuentas circulantes.</p>
                   ) : (
@@ -2800,13 +2756,22 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
                       <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-400 gap-4">
                         <span className="break-words py-1">
                           {a.name}
-                          {a.satGroupCode && <span className="ml-1 text-[10px] text-slate-500">({a.satGroupCode})</span>}
+                          {appMode === 'fiscal' && getSatGroupCode(a) && (
+                            <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(a) || '')})</span>
+                          )}
                         </span>
-                        <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
+                        <span className={cn(
+                          "whitespace-nowrap pt-1",
+                          (accountBalances[a.id] || 0) < 0 && "text-rose-300"
+                        )}>
+                          {(accountBalances[a.id] || 0) < 0
+                            ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
+                            : formatCurrency(accountBalances[a.id] || 0)}
+                        </span>
                       </div>
                     ))
                   )}
-                  <h5 className="text-[11px] uppercase tracking-wider text-slate-500 pt-2">Largo Plazo / No Circulante</h5>
+                  <h5 className="text-[11px] uppercase tracking-wider text-slate-500 pt-2">Pasivo a Largo Plazo / No Circulante</h5>
                   {nonCirculatingLiabilities.length === 0 ? (
                     <p className="text-[11px] text-slate-500 italic pl-2">Sin cuentas no circulantes.</p>
                   ) : (
@@ -2814,9 +2779,18 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
                       <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-400 gap-4">
                         <span className="break-words py-1">
                           {a.name}
-                          {a.satGroupCode && <span className="ml-1 text-[10px] text-slate-500">({a.satGroupCode})</span>}
+                          {appMode === 'fiscal' && getSatGroupCode(a) && (
+                            <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(a) || '')})</span>
+                          )}
                         </span>
-                        <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
+                        <span className={cn(
+                          "whitespace-nowrap pt-1",
+                          (accountBalances[a.id] || 0) < 0 && "text-rose-300"
+                        )}>
+                          {(accountBalances[a.id] || 0) < 0
+                            ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
+                            : formatCurrency(accountBalances[a.id] || 0)}
+                        </span>
                       </div>
                     ))
                   )}
@@ -2827,9 +2801,18 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
                         <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-400 gap-4">
                           <span className="break-words py-1">
                             {a.name}
-                            {a.satGroupCode && <span className="ml-1 text-[10px] text-slate-500">({a.satGroupCode})</span>}
+                            {appMode === 'fiscal' && getSatGroupCode(a) && (
+                              <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(a) || '')})</span>
+                            )}
                           </span>
-                          <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
+                          <span className={cn(
+                            "whitespace-nowrap pt-1",
+                            (accountBalances[a.id] || 0) < 0 && "text-rose-300"
+                          )}>
+                            {(accountBalances[a.id] || 0) < 0
+                              ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
+                              : formatCurrency(accountBalances[a.id] || 0)}
+                          </span>
                         </div>
                       ))}
                     </>
