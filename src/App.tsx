@@ -593,6 +593,7 @@ export default function App() {
                     <JournalView
                       journals={journals}
                       activeJournalId={activeJournalId}
+                      appMode={appMode}
                       onSelectJournal={setActiveJournalId}
                       onCreateJournal={createJournal}
                       onRenameJournal={renameJournal}
@@ -1356,6 +1357,7 @@ function SidebarTabButton({ active, onClick, icon, label }: { active: boolean, o
 function JournalView({ 
   journals, 
   activeJournalId, 
+  appMode,
   onSelectJournal, 
   onCreateJournal, 
   onRenameJournal, 
@@ -1371,6 +1373,7 @@ function JournalView({
 }: { 
   journals: Journal[],
   activeJournalId: string | null,
+  appMode: AppMode,
   onSelectJournal: (id: string) => void,
   onCreateJournal: () => void,
   onRenameJournal: (id: string, name: string) => void,
@@ -1713,6 +1716,7 @@ function JournalView({
           >
             <JournalEntryForm 
               accounts={accounts} 
+              appMode={appMode}
               initialData={editingEntry || undefined}
               onCancel={() => {
                 setIsFormOpen(false);
@@ -1973,17 +1977,20 @@ function SearchableAccountSelect({
 
 function JournalEntryForm({ 
   accounts, 
+  appMode,
   onAdd, 
   initialData, 
   onCancel 
 }: { 
   accounts: Account[], 
+  appMode: AppMode,
   onAdd: (e: Omit<JournalEntry, 'id'>) => void,
   initialData?: JournalEntry,
   onCancel?: () => void
 }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
+  const [policyType, setPolicyType] = useState<'diario' | 'ingreso' | 'egreso'>('diario');
   const [movements, setMovements] = useState<Movement[]>([
     { accountId: accounts[0].id, type: 'debit', amount: 0 },
     { accountId: accounts[1].id, type: 'credit', amount: 0 }
@@ -1994,6 +2001,7 @@ function JournalEntryForm({
     if (initialData) {
       setDate(initialData.date);
       setDescription(initialData.description);
+      setPolicyType(initialData.policyType ?? 'diario');
       setMovements(initialData.movements);
       setAmountInputs(initialData.movements.map(m => formatAmountForInput(m.amount)));
     }
@@ -2006,7 +2014,12 @@ function JournalEntryForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isOutOfBalance) return;
-    onAdd({ date, description, movements: movements.filter(m => m.amount > 0) });
+    onAdd({
+      date,
+      description,
+      movements: movements.filter(m => m.amount > 0),
+      policyType: appMode === 'fiscal' ? policyType : initialData?.policyType
+    });
   };
 
   const addMovement = () => {
@@ -2053,6 +2066,20 @@ function JournalEntryForm({
             className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-white placeholder-slate-600"
           />
         </div>
+        {appMode === 'fiscal' && (
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tipo de Póliza</label>
+            <select
+              value={policyType}
+              onChange={e => setPolicyType(e.target.value as 'diario' | 'ingreso' | 'egreso')}
+              className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-white appearance-none"
+            >
+              <option value="diario" className="bg-[#1e293b]">Diario</option>
+              <option value="ingreso" className="bg-[#1e293b]">Ingreso</option>
+              <option value="egreso" className="bg-[#1e293b]">Egreso</option>
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -2139,6 +2166,34 @@ function JournalEntryForm({
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
+            {appMode === 'fiscal' && (
+              <>
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-slate-500">UUID CFDI</label>
+                  <input
+                    type="text"
+                    maxLength={36}
+                    placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+                    value={m.uuidCFDI || ''}
+                    onChange={e => updateMovement(idx, { uuidCFDI: e.target.value })}
+                    onBlur={e => updateMovement(idx, { uuidCFDI: e.target.value.trim() })}
+                    className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm outline-none text-white placeholder-slate-600"
+                  />
+                </div>
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <label className="text-[9px] uppercase font-bold text-slate-500">RFC Tercero</label>
+                  <input
+                    type="text"
+                    maxLength={13}
+                    placeholder="XAXX010101000"
+                    value={m.rfcTercero || ''}
+                    onChange={e => updateMovement(idx, { rfcTercero: e.target.value })}
+                    onBlur={e => updateMovement(idx, { rfcTercero: e.target.value.toUpperCase().trim() })}
+                    className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm outline-none text-white placeholder-slate-600"
+                  />
+                </div>
+              </>
+            )}
           </div>
         ))}
       </div>
