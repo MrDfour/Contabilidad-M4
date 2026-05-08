@@ -61,6 +61,7 @@ import { generateCatalogoXML, generateBalanzaXML, generateDIOTTxt } from './lib/
 import FeedbackModal from './components/FeedbackModal';
 import SyncModal from './components/SyncModal';
 import type { SyncState } from './services/syncService';
+import { saveToStorage, loadFromStorage, migrateFromLocalStorage } from './services/storageService';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
 type AppMode = 'basic' | 'fiscal';
@@ -156,55 +157,63 @@ export default function App() {
 
   // Persistence
   useEffect(() => {
-    const saved = localStorage.getItem('contasis_journals');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setJournals(parsed);
-        if (parsed.length > 0) {
-          setActiveJournalId(parsed[0].id);
+    const loadData = async () => {
+      await migrateFromLocalStorage();
+
+      const saved = await loadFromStorage('contasis_journals');
+      if (saved) {
+        try {
+          const parsed = Array.isArray(saved) ? saved : JSON.parse(saved);
+          setJournals(parsed);
+          if (parsed.length > 0) {
+            setActiveJournalId(parsed[0].id);
+          }
+        } catch (e) {
+          console.error("Failed to load journals", e);
         }
-      } catch (e) {
-        console.error("Failed to load journals", e);
+      } else {
+        // Create initial journal if none exists
+        const initialJournal: Journal = {
+          id: crypto.randomUUID(),
+          name: 'Diario Inicial',
+          entries: []
+        };
+        setJournals([initialJournal]);
+        setActiveJournalId(initialJournal.id);
       }
-    } else {
-      // Create initial journal if none exists
-      const initialJournal: Journal = {
-        id: crypto.randomUUID(),
-        name: 'Diario Inicial',
-        entries: []
-      };
-      setJournals([initialJournal]);
-      setActiveJournalId(initialJournal.id);
-    }
 
-    const savedInventories = localStorage.getItem('contasis_final_inventories');
-    if (savedInventories) {
-      try {
-        setFinalInventories(JSON.parse(savedInventories));
-      } catch (e) {
-        console.error("Failed to load final inventories. Data will be reset to defaults.", e);
+      const savedInventories = await loadFromStorage('contasis_final_inventories');
+      if (savedInventories) {
+        try {
+          const parsed = typeof savedInventories === 'string' ? JSON.parse(savedInventories) : savedInventories;
+          setFinalInventories(parsed);
+        } catch (e) {
+          console.error("Failed to load final inventories. Data will be reset to defaults.", e);
+        }
       }
-    }
 
-    const savedFixedAssets = localStorage.getItem('contasis_fixed_assets');
-    if (savedFixedAssets) {
-      try {
-        setFixedAssets(JSON.parse(savedFixedAssets));
-      } catch (e) {
-        console.error("Failed to load fixed assets. Data will be reset to defaults.", e);
+      const savedFixedAssets = await loadFromStorage('contasis_fixed_assets');
+      if (savedFixedAssets) {
+        try {
+          const parsed = typeof savedFixedAssets === 'string' ? JSON.parse(savedFixedAssets) : savedFixedAssets;
+          setFixedAssets(parsed);
+        } catch (e) {
+          console.error("Failed to load fixed assets. Data will be reset to defaults.", e);
+        }
       }
-    }
+    };
+
+    loadData();
   }, []);
 
   useEffect(() => {
     if (journals.length > 0) {
-      localStorage.setItem('contasis_journals', JSON.stringify(journals));
+      saveToStorage('contasis_journals', journals);
     }
   }, [journals]);
 
   useEffect(() => {
-    localStorage.setItem('contasis_fixed_assets', JSON.stringify(fixedAssets));
+    saveToStorage('contasis_fixed_assets', fixedAssets);
   }, [fixedAssets]);
 
   useEffect(() => {
@@ -224,7 +233,7 @@ export default function App() {
     if (activeJournalId) {
       const updated = { ...finalInventories, [activeJournalId]: normalizedValue };
       setFinalInventories(updated);
-      localStorage.setItem('contasis_final_inventories', JSON.stringify(updated));
+      saveToStorage('contasis_final_inventories', updated);
     }
   };
 

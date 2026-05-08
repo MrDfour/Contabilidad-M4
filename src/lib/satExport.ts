@@ -45,7 +45,7 @@ export const generateBalanzaXML = (
   anio: string,
   mes: string,
   accounts: Account[],
-  tAccountsData: Record<string, { debits: { amount: number; ref: number }[]; credits: { amount: number; ref: number }[] }>
+  tAccountsData: Record<string, { debits: { amount: number, ref?: number }[], credits: { amount: number, ref?: number }[] }>
 ) => {
   const cuentasXML = accounts
     .filter(a => a.satGroupCode && tAccountsData[a.id])
