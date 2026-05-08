@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Account } from '../types';
+import { Account, JournalEntry } from '../types';
 
 export const downloadXML = (filename: string, content: string) => {
   const blob = new Blob([content], { type: 'application/xml;charset=utf-8;' });
@@ -68,4 +68,77 @@ ${cuentasXML}
 </BCE:Balanza>`;
 
   downloadXML(`${rfc.toUpperCase()}${anio}${mes}BN.xml`, xml);
+};
+
+export const downloadTXT = (filename: string, content: string) => {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+};
+
+const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{2,3}$/;
+const DIOT_FIELDS_COUNT = 54;
+
+const formatDIOTAmount = (amount: number) => {
+  const normalized = Math.round((amount + Number.EPSILON) * 100) / 100;
+  return normalized === 0 ? '' : normalized.toFixed(2);
+};
+
+export const generateDIOTTxt = (
+  rfc: string,
+  anio: string,
+  mes: string,
+  entries: JournalEntry[],
+  accounts: Account[]
+) => {
+  const ivaAccount = accounts.find(a => a.satGroupCode === '118.01');
+  if (!ivaAccount) {
+    alert('No se encontró la cuenta de IVA Acreditable (118.01) en el catálogo.');
+    return;
+  }
+
+  const periodPrefix = `${anio}-${mes}`;
+  const ivaPorRFC: Record<string, number> = {};
+
+  entries
+    .filter(entry => entry.date.startsWith(periodPrefix))
+    .forEach(entry => {
+      entry.movements.forEach(movement => {
+        const supplierRfc = movement.rfcTercero?.trim().toUpperCase();
+
+        if (movement.accountId !== ivaAccount.id || !supplierRfc || !RFC_REGEX.test(supplierRfc)) {
+          return;
+        }
+
+        const signedAmount = movement.type === 'debit' ? movement.amount : -movement.amount;
+        ivaPorRFC[supplierRfc] = (ivaPorRFC[supplierRfc] || 0) + signedAmount;
+      });
+    });
+
+  const rows = Object.entries(ivaPorRFC)
+    .filter(([, amount]) => amount > 0)
+    .sort(([rfcA], [rfcB]) => rfcA.localeCompare(rfcB))
+    .map(([supplierRfc, amount]) => {
+      const fields = Array.from<string>({ length: DIOT_FIELDS_COUNT }).fill('');
+      fields[0] = '04'; // Tipo de tercero: nacional
+      fields[1] = '85'; // Tipo de operación: otros
+      fields[2] = supplierRfc;
+      fields[21] = formatDIOTAmount(amount); // IVA acreditable pagado resto del país
+      fields[22] = '100.00'; // Proporción acreditable
+      fields[53] = '01'; // Efectos fiscales: sí
+      return fields.join('|');
+    });
+
+  if (rows.length === 0) {
+    alert('No se encontraron movimientos de IVA acreditable con RFC de proveedor para el periodo seleccionado.');
+    return;
+  }
+
+  const filename = `${rfc.trim().toUpperCase()}${anio}${mes}DIOT.txt`;
+  downloadTXT(filename, rows.join('\n'));
 };
