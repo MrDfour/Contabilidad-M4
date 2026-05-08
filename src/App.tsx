@@ -61,6 +61,7 @@ import type { SyncState } from './services/syncService';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
 type AppMode = 'basic' | 'fiscal';
+type FiscalAccount = Account & { satGroupCode?: string };
 const FISCAL_BALANCE_ACCOUNT_IDS = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-16', 'anc-17', 're-12', 're-13']);
 const CURRENT_ASSET_ACCOUNT_IDS = new Set(['ac-1', 'ac-2', 'ac-3', 'ac-4', 'ac-5', 'ac-6', 'ac-7', 'ac-8', 'ac-9', 'ac-10']);
 const SAT_GROUP_PREFIX_LENGTH = 2;
@@ -71,7 +72,7 @@ const getStoredAppMode = (): AppMode => {
   return savedMode === 'fiscal' ? 'fiscal' : 'basic';
 };
 const getAssetSubtype = (accountId: string) => CURRENT_ASSET_ACCOUNT_IDS.has(accountId) ? 'circulante' : 'no_circulante';
-const getSatGroupCode = (account: Account) => (account as Account & { satGroupCode?: string }).satGroupCode;
+const getSatGroupCode = (account: FiscalAccount) => account.satGroupCode;
 const formatSatGroupCode = (code: string) => {
   // Formato visual SAT tipo XX.XX para códigos de 4 o más caracteres.
   if (code.length >= SAT_GROUP_MINIMUM_LENGTH) return `${code.slice(0, SAT_GROUP_PREFIX_LENGTH)}.${code.slice(SAT_GROUP_PREFIX_LENGTH)}`;
@@ -2545,7 +2546,7 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
 }
 
 // 4. Balance Sheet View
-function BalanceSheetView({ accountBalances, accounts, journalName, finalInventory, appMode }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number, appMode: AppMode }) {
+function BalanceSheetView({ accountBalances, accounts, journalName, finalInventory, appMode }: { accountBalances: Record<string, number>, accounts: FiscalAccount[], journalName: string, finalInventory: number, appMode: AppMode }) {
   const visibleAccounts = accounts.filter(a => {
     if (!accountBalances[a.id]) return false;
     if (appMode === 'basic' && FISCAL_BALANCE_ACCOUNT_IDS.has(a.id)) return false;
