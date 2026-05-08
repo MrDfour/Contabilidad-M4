@@ -2175,7 +2175,8 @@ function JournalEntryForm({
                     maxLength={36}
                     placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
                     value={m.uuidCFDI || ''}
-                    onChange={e => updateMovement(idx, { uuidCFDI: e.target.value.trim() })}
+                    onChange={e => updateMovement(idx, { uuidCFDI: e.target.value })}
+                    onBlur={e => updateMovement(idx, { uuidCFDI: e.target.value.trim() })}
                     className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm outline-none text-white placeholder-slate-600"
                   />
                 </div>
@@ -2186,7 +2187,8 @@ function JournalEntryForm({
                     maxLength={13}
                     placeholder="XAXX010101000"
                     value={m.rfcTercero || ''}
-                    onChange={e => updateMovement(idx, { rfcTercero: e.target.value.toUpperCase().trim() })}
+                    onChange={e => updateMovement(idx, { rfcTercero: e.target.value })}
+                    onBlur={e => updateMovement(idx, { rfcTercero: e.target.value.toUpperCase().trim() })}
                     className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm outline-none text-white placeholder-slate-600"
                   />
                 </div>
