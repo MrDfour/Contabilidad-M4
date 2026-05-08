@@ -18,6 +18,8 @@ export interface Movement {
   accountId: string;
   type: 'debit' | 'credit';
   amount: number;
+  uuidCFDI?: string; // Folio fiscal de 36 caracteres
+  rfcTercero?: string; // RFC del proveedor o cliente
 }
 
 export interface JournalEntry {
@@ -25,6 +27,7 @@ export interface JournalEntry {
   date: string;
   description: string;
   movements: Movement[];
+  policyType?: 'diario' | 'ingreso' | 'egreso';
 }
 
 export interface Journal {
