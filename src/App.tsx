@@ -71,7 +71,7 @@ const getStoredAppMode = (): AppMode => {
 };
 const getSatGroupCode = (account: FiscalAccount) => account.satGroupCode;
 const formatSatGroupCode = (code: string) => {
-  // Formato visual SAT tipo XX.XX para códigos de 4 o más caracteres.
+  // Regla SAT: códigos de 4+ dígitos se muestran como XX.XX.
   if (code.length >= 4) return `${code.slice(0, 2)}.${code.slice(2)}`;
   return code;
 };
@@ -2608,12 +2608,6 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
     unclassified: liabilityAccounts.filter(a => !a.subtype),
   };
 
-  const renderAmount = (amount: number, negativeClass = "text-rose-300") => (
-    <span className={cn("whitespace-nowrap pt-1", amount < 0 && negativeClass)}>
-      {amount < 0 ? `(${formatCurrency(Math.abs(amount))})` : formatCurrency(amount)}
-    </span>
-  );
-
   const renderAccountLine = (account: FiscalAccount, textClass: string) => {
     const balance = accountBalances[account.id] || 0;
     return (
@@ -2624,7 +2618,9 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
             <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(account) || '')})</span>
           )}
         </span>
-        {renderAmount(balance)}
+        <span className={cn("whitespace-nowrap pt-1", balance < 0 && "text-rose-300")}>
+          {balance < 0 ? `(${formatCurrency(Math.abs(balance))})` : formatCurrency(balance)}
+        </span>
       </div>
     );
   };
