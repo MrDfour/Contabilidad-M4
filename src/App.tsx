@@ -71,6 +71,7 @@ const getStoredAppMode = (): AppMode => {
   return savedMode === 'fiscal' ? 'fiscal' : 'basic';
 };
 const getAssetSubtype = (accountId: string) => CURRENT_ASSET_ACCOUNT_IDS.has(accountId) ? 'circulante' : 'no_circulante';
+const getSatGroupCode = (account: Account) => (account as Account & { satGroupCode?: string }).satGroupCode;
 const formatSatGroupCode = (code: string) => {
   // Formato visual SAT tipo XX.XX para códigos de 4 o más caracteres.
   if (code.length >= SAT_GROUP_MINIMUM_LENGTH) return `${code.slice(0, SAT_GROUP_PREFIX_LENGTH)}.${code.slice(SAT_GROUP_PREFIX_LENGTH)}`;
@@ -122,8 +123,7 @@ const formatAmountInput = (value: string) => {
 };
 
 export default function App() {
-  const [appMode, setAppMode] = useState<AppMode>('basic');
-  const [appModeHydrated, setAppModeHydrated] = useState(false);
+  const [appMode, setAppMode] = useState<AppMode>(getStoredAppMode);
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
   const [accounts] = useState<Account[]>(INITIAL_ACCOUNTS);
@@ -207,14 +207,8 @@ export default function App() {
   }, [fixedAssets]);
 
   useEffect(() => {
-    setAppMode(getStoredAppMode());
-    setAppModeHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!appModeHydrated) return;
     localStorage.setItem('contasis_app_mode', appMode);
-  }, [appMode, appModeHydrated]);
+  }, [appMode]);
 
   // Sync finalInventory when active journal changes
   useEffect(() => {
@@ -2650,8 +2644,8 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
                           <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
                             <span className="break-words py-1">
                               {a.name}
-                              {appMode === 'fiscal' && (
-                                <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(a.code)})</span>
+                              {appMode === 'fiscal' && getSatGroupCode(a) && (
+                                <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(a) || '')})</span>
                               )}
                             </span>
                             <span className={cn(
@@ -2683,8 +2677,8 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
                         <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
                           <span className="break-words py-1">
                             {a.name}
-                            {appMode === 'fiscal' && (
-                              <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(a.code)})</span>
+                            {appMode === 'fiscal' && getSatGroupCode(a) && (
+                              <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(a) || '')})</span>
                             )}
                           </span>
                           <span className={cn(
@@ -2718,8 +2712,8 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
                   <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-400 gap-4">
                     <span className="break-words py-1">
                       {a.name}
-                      {appMode === 'fiscal' && (
-                        <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(a.code)})</span>
+                      {appMode === 'fiscal' && getSatGroupCode(a) && (
+                        <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(a) || '')})</span>
                       )}
                     </span>
                     <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
@@ -2738,8 +2732,8 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
                 <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-400 gap-4">
                   <span className="break-words py-1">
                     {a.name}
-                    {appMode === 'fiscal' && (
-                      <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(a.code)})</span>
+                    {appMode === 'fiscal' && getSatGroupCode(a) && (
+                      <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(a) || '')})</span>
                     )}
                   </span>
                   <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
