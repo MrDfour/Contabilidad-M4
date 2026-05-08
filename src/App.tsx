@@ -715,6 +715,7 @@ export default function App() {
                       accounts={accounts}
                       entries={entries}
                       tAccountsData={tAccountsData}
+                      onSetModal={setModalInfo}
                     />
                   </motion.div>
                 )}
@@ -2652,10 +2653,12 @@ function ContabilidadElectronicaView({
   accounts,
   entries,
   tAccountsData,
+  onSetModal
 }: {
   accounts: Account[];
   entries: JournalEntry[];
   tAccountsData: Record<string, { debits: { amount: number; ref: number }[]; credits: { amount: number; ref: number }[] }>;
+  onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void;
 }) {
   const now = React.useMemo(() => new Date(), []);
   const currentYear = now.getFullYear().toString();
@@ -2697,7 +2700,18 @@ function ContabilidadElectronicaView({
 
   const handleDIOT = () => {
     if (!isValid) return;
-    generateDIOTTxt(rfc.trim(), anio, mes, entries, accounts);
+    try {
+      generateDIOTTxt(rfc.trim(), anio, mes, entries, accounts);
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : 'Ocurrió un error al generar el archivo DIOT.';
+      onSetModal({
+        type: 'error',
+        title: 'No se pudo generar la DIOT',
+        message,
+      });
+    }
   };
 
   return (
