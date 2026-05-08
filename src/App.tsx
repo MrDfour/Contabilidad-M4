@@ -57,7 +57,7 @@ import {
   calculateMonthlyDepreciation,
   calculateFiscalDeduction
 } from './lib/utils';
-import { generateCatalogoXML, generateBalanzaXML } from './lib/satExport';
+import { generateCatalogoXML, generateBalanzaXML, generateDIOTTxt } from './lib/satExport';
 import FeedbackModal from './components/FeedbackModal';
 import SyncModal from './components/SyncModal';
 import type { SyncState } from './services/syncService';
@@ -711,6 +711,7 @@ export default function App() {
                   >
                     <ContabilidadElectronicaView
                       accounts={accounts}
+                      entries={entries}
                       tAccountsData={tAccountsData}
                     />
                   </motion.div>
@@ -2647,9 +2648,11 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
 // 4. Balance Sheet View
 function ContabilidadElectronicaView({
   accounts,
+  entries,
   tAccountsData,
 }: {
   accounts: Account[];
+  entries: JournalEntry[];
   tAccountsData: Record<string, { debits: { amount: number; ref: number }[]; credits: { amount: number; ref: number }[] }>;
 }) {
   const now = React.useMemo(() => new Date(), []);
@@ -2690,6 +2693,11 @@ function ContabilidadElectronicaView({
     generateBalanzaXML(rfc.trim(), anio, mes, accounts, tAccountsData);
   };
 
+  const handleDIOT = () => {
+    if (!isValid) return;
+    generateDIOTTxt(rfc.trim(), anio, mes, entries, accounts);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
@@ -2698,7 +2706,7 @@ function ContabilidadElectronicaView({
             <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white">Contabilidad Electrónica</h2>
             <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-xs font-mono rounded border border-indigo-500/30 mt-1">Anexo 24 SAT</span>
           </div>
-          <p className="text-slate-400 text-xs md:text-sm mt-1">Genera y descarga los archivos XML oficiales del SAT (versión 1.3).</p>
+          <p className="text-slate-400 text-xs md:text-sm mt-1">Genera y descarga los archivos fiscales del SAT en XML y TXT para el período seleccionado.</p>
         </div>
       </div>
 
@@ -2745,7 +2753,7 @@ function ContabilidadElectronicaView({
         </div>
 
         <div className="border-t border-white/10 pt-6 space-y-3">
-          <p className="text-[10px] uppercase tracking-widest font-semibold text-slate-400 mb-3">Archivos XML</p>
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-slate-400 mb-3">Archivos SAT</p>
           <button
             onClick={handleCatalogo}
             disabled={!isValid}
@@ -2772,10 +2780,23 @@ function ContabilidadElectronicaView({
             <Download className="w-4 h-4" />
             Balanza de Comprobación (BN)
           </button>
+          <button
+            onClick={handleDIOT}
+            disabled={!isValid}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all",
+              isValid
+                ? "bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-500/20"
+                : "bg-white/5 border border-white/10 text-slate-500 cursor-not-allowed"
+            )}
+          >
+            <FileText className="w-4 h-4" />
+            Declaración DIOT (.txt)
+          </button>
         </div>
 
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-300 leading-relaxed">
-          <strong>Nota:</strong> El archivo CT contiene el catálogo de todas las cuentas con código agrupador SAT. El archivo BN contiene la balanza con saldos del período seleccionado. Los archivos se nombran siguiendo el estándar del SAT: <span className="font-mono">[RFC][AÑO][MES]CT.xml</span> y <span className="font-mono">[RFC][AÑO][MES]BN.xml</span>.
+          <strong>Nota:</strong> El archivo CT contiene el catálogo de cuentas, BN la balanza del período y DIOT el TXT de carga batch para proveedores con IVA acreditable registrado. Los archivos se nombran como <span className="font-mono">[RFC][AÑO][MES]CT.xml</span>, <span className="font-mono">[RFC][AÑO][MES]BN.xml</span> y <span className="font-mono">[RFC][AÑO][MES]DIOT.txt</span>.
         </div>
       </div>
     </div>
