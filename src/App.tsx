@@ -211,6 +211,13 @@ export default function App() {
     localStorage.setItem('contasis_app_mode', appMode);
   }, [appMode]);
 
+  // Redireccionar al Diario si se cambia a modo básico estando en una pestaña fiscal
+  useEffect(() => {
+    if (appMode === 'basic' && (activeTab === 'assets' || activeTab === 'electronic')) {
+      setActiveTab('journal');
+    }
+  }, [appMode, activeTab]);
+
   // Sync finalInventory when active journal changes
   useEffect(() => {
     if (activeJournalId) {
@@ -387,8 +394,10 @@ export default function App() {
     { id: 't-accounts', label: 'Cuentas T', shortLabel: 'Cuentas T', icon: TableIcon },
     { id: 'balance', label: 'Balance General', shortLabel: 'Balance', icon: Briefcase },
     { id: 'profit-loss', label: 'Estado de Resultados', shortLabel: 'Resultados', icon: TrendingUp },
-    { id: 'assets', label: 'Activos Fijos', shortLabel: 'Activos', icon: Monitor },
-    { id: 'electronic', label: 'Cont. Electrónica', shortLabel: 'SAT XML', icon: FileCode }
+    ...(appMode === 'fiscal' ? [
+      { id: 'assets', label: 'Activos Fijos', shortLabel: 'Activos', icon: Monitor },
+      { id: 'electronic', label: 'Cont. Electrónica', shortLabel: 'SAT XML', icon: FileCode }
+    ] as const : [])
   ];
   const activeMobileTabLabel = navigationTabs.find(tab => tab.id === activeTab)?.shortLabel ?? 'Diario';
 
@@ -450,18 +459,22 @@ export default function App() {
                   icon={<TrendingUp className="w-5 h-5" />}
                   label="Estado de Resultados"
                 />
-                <MobileNavItem
-                  active={activeTab === 'assets'}
-                  onClick={() => { setActiveTab('assets'); setIsMobileMenuOpen(false); }}
-                  icon={<Monitor className="w-5 h-5" />}
-                  label="Activos Fijos"
-                />
-                <MobileNavItem
-                  active={activeTab === 'electronic'}
-                  onClick={() => { setActiveTab('electronic'); setIsMobileMenuOpen(false); }}
-                  icon={<FileCode className="w-5 h-5" />}
-                  label="Cont. Electrónica"
-                />
+                {appMode === 'fiscal' && (
+                  <>
+                    <MobileNavItem
+                      active={activeTab === 'assets'}
+                      onClick={() => { setActiveTab('assets'); setIsMobileMenuOpen(false); }}
+                      icon={<Monitor className="w-5 h-5" />}
+                      label="Activos Fijos"
+                    />
+                    <MobileNavItem
+                      active={activeTab === 'electronic'}
+                      onClick={() => { setActiveTab('electronic'); setIsMobileMenuOpen(false); }}
+                      icon={<FileCode className="w-5 h-5" />}
+                      label="Cont. Electrónica"
+                    />
+                  </>
+                )}
               </div>
 
               <div className="flex flex-col gap-2">
@@ -2726,7 +2739,7 @@ function ContabilidadElectronicaView({
         </div>
       </div>
 
-      <div className="bg-white/5 border border-white/10 p-6 md:p-8 rounded-2xl shadow-2xl backdrop-blur-xl space-y-6 max-w-xl">
+      <div className="bg-white/5 border border-white/10 p-6 md:p-8 rounded-2xl shadow-2xl backdrop-blur-xl space-y-6 max-w-xl mx-auto">
         <div className="space-y-1">
           <label className="text-[10px] uppercase tracking-widest font-semibold text-slate-400">RFC del Contribuyente</label>
           <input
