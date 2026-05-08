@@ -2004,9 +2004,7 @@ function JournalEntryForm({
       setPolicyType(initialData.policyType ?? 'diario');
       setMovements(initialData.movements);
       setAmountInputs(initialData.movements.map(m => formatAmountForInput(m.amount)));
-      return;
     }
-    setPolicyType('diario');
   }, [initialData]);
 
   const totalDebit = normalizeAmount(movements.filter(m => m.type === 'debit').reduce((sum, m) => sum + m.amount, 0));
