@@ -61,6 +61,24 @@ import SyncModal from './components/SyncModal';
 import type { SyncState } from './services/syncService';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
+type AppMode = 'basic' | 'fiscal';
+type FiscalAccount = Account & { satGroupCode?: string };
+const FISCAL_BALANCE_ACCOUNT_IDS = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-16', 'anc-17', 're-12', 're-13']);
+const CURRENT_ASSET_ACCOUNT_IDS = new Set(['ac-1', 'ac-2', 'ac-3', 'ac-4', 'ac-5', 'ac-6', 'ac-7', 'ac-8', 'ac-9', 'ac-10']);
+const SAT_GROUP_PREFIX_LENGTH = 2;
+const SAT_GROUP_MINIMUM_LENGTH = 4;
+const getStoredAppMode = (): AppMode => {
+  if (typeof window === 'undefined') return 'basic';
+  const savedMode = localStorage.getItem('contasis_app_mode');
+  return savedMode === 'fiscal' ? 'fiscal' : 'basic';
+};
+const getAssetSubtype = (accountId: string) => CURRENT_ASSET_ACCOUNT_IDS.has(accountId) ? 'circulante' : 'no_circulante';
+const getSatGroupCode = (account: FiscalAccount) => account.satGroupCode;
+const formatSatGroupCode = (code: string) => {
+  // Formato visual SAT tipo XX.XX para códigos de 4 o más caracteres.
+  if (code.length >= SAT_GROUP_MINIMUM_LENGTH) return `${code.slice(0, SAT_GROUP_PREFIX_LENGTH)}.${code.slice(SAT_GROUP_PREFIX_LENGTH)}`;
+  return code;
+};
 
 const normalizeAmount = (value: number) => {
   if (!Number.isFinite(value)) return 0;
@@ -107,6 +125,7 @@ const formatAmountInput = (value: string) => {
 };
 
 export default function App() {
+  const [appMode, setAppMode] = useState<AppMode>(getStoredAppMode);
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
   const [accounts] = useState<Account[]>(INITIAL_ACCOUNTS);
@@ -123,7 +142,6 @@ export default function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
-  const [appMode, setAppMode] = useState<'basic' | 'fiscal'>('basic');
   const downloadPercent = useUpdateProgress();
   const isDesktopRuntime = typeof window !== 'undefined' && ('electronAPI' in window || navigator.userAgent.toLowerCase().includes('electron'));
 
@@ -177,11 +195,6 @@ export default function App() {
       } catch (e) {
         console.error("Failed to load fixed assets. Data will be reset to defaults.", e);
       }
-    }
-
-    const savedAppMode = localStorage.getItem('contasis_app_mode');
-    if (savedAppMode === 'basic' || savedAppMode === 'fiscal') {
-      setAppMode(savedAppMode);
     }
   }, []);
 
@@ -511,6 +524,26 @@ export default function App() {
           )}
 
           <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center rounded-lg border border-white/10 bg-white/5 p-1">
+              <button
+                onClick={() => setAppMode('basic')}
+                className={cn(
+                  "px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors",
+                  appMode === 'basic' ? "bg-indigo-600 text-white" : "text-slate-300 hover:text-white"
+                )}
+              >
+                Básico
+              </button>
+              <button
+                onClick={() => setAppMode('fiscal')}
+                className={cn(
+                  "px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors",
+                  appMode === 'fiscal' ? "bg-indigo-600 text-white" : "text-slate-300 hover:text-white"
+                )}
+              >
+                Fiscal
+              </button>
+            </div>
             <button
               onClick={() => setShowSyncModal(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 transition-colors text-xs font-semibold"
@@ -2521,19 +2554,28 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
 }
 
 // 4. Balance Sheet View
-function BalanceSheetView({ accountBalances, accounts, journalName, finalInventory, appMode }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number, appMode: 'basic' | 'fiscal' }) {
-  const assetsAccounts = accounts.filter(a => a.type === 'asset' && accountBalances[a.id]);
-  const liabilityAccounts = accounts.filter(a => a.type === 'liability' && accountBalances[a.id]);
-  const equityAccounts = accounts.filter(a => a.type === 'equity' && accountBalances[a.id]);
+function BalanceSheetView({ accountBalances, accounts, journalName, finalInventory, appMode }: { accountBalances: Record<string, number>, accounts: FiscalAccount[], journalName: string, finalInventory: number, appMode: AppMode }) {
+  const visibleAccounts = accounts.filter(a => {
+    if (!accountBalances[a.id]) return false;
+    if (appMode === 'basic' && FISCAL_BALANCE_ACCOUNT_IDS.has(a.id)) return false;
+    return true;
+  });
+
+  const assetsAccounts = visibleAccounts.filter(a => a.type === 'asset');
+  const assetsCirculanteAccounts = assetsAccounts.filter(a => getAssetSubtype(a.id) === 'circulante');
+  const assetsNoCirculanteAccounts = assetsAccounts.filter(a => getAssetSubtype(a.id) === 'no_circulante');
   const circulatingAssets = assetsAccounts.filter(a => a.subtype === 'circulante');
   const nonCirculatingAssets = assetsAccounts.filter(a => a.subtype === 'no_circulante');
   const unclassifiedAssets = assetsAccounts.filter(a => !a.subtype);
+
+  const liabilityAccounts = visibleAccounts.filter(a => a.type === 'liability');
+  const equityAccounts = visibleAccounts.filter(a => a.type === 'equity');
   const circulatingLiabilities = liabilityAccounts.filter(a => a.subtype === 'circulante');
   const nonCirculatingLiabilities = liabilityAccounts.filter(a => a.subtype === 'no_circulante');
   const unclassifiedLiabilities = liabilityAccounts.filter(a => !a.subtype);
   
-  const revenueAccounts = accounts.filter(a => a.type === 'revenue' && accountBalances[a.id]);
-  const expenseAccounts = accounts.filter(a => a.type === 'expense' && accountBalances[a.id]);
+  const revenueAccounts = visibleAccounts.filter(a => a.type === 'revenue');
+  const expenseAccounts = visibleAccounts.filter(a => a.type === 'expense');
   const netIncome = revenueAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) - 
                     expenseAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + finalInventory;
 
@@ -2606,25 +2648,55 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
                 <p className="text-xs text-slate-500 italic">Sin activos registrados.</p>
               ) : appMode === 'basic' ? (
                 <>
-                  {assetsAccounts.map(a => (
-                    <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
-                      <span className="break-words py-1">{a.name}</span>
-                      <span className={cn(
-                        "whitespace-nowrap pt-1",
-                        (accountBalances[a.id] || 0) < 0 && "text-rose-300"
-                      )}>
-                        {(accountBalances[a.id] || 0) < 0
-                          ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
-                          : formatCurrency(accountBalances[a.id] || 0)}
-                      </span>
-                    </div>
-                  ))}
-                  {finalInventory > 0 && (
-                    <div className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
-                      <span className="break-words py-1">Inventario Final (Almacén)</span>
-                      <span className="whitespace-nowrap pt-1">{formatCurrency(finalInventory)}</span>
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest font-semibold text-slate-500">Activo Circulante</p>
+                    {assetsCirculanteAccounts.length === 0 && finalInventory === 0 ? (
+                      <p className="text-xs text-slate-500 italic">Sin activo circulante registrado.</p>
+                    ) : (
+                      <>
+                        {assetsCirculanteAccounts.map(a => (
+                          <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
+                            <span className="break-words py-1">{a.name}</span>
+                            <span className={cn(
+                              "whitespace-nowrap pt-1",
+                              (accountBalances[a.id] || 0) < 0 && "text-rose-300"
+                            )}>
+                              {(accountBalances[a.id] || 0) < 0
+                                ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
+                                : formatCurrency(accountBalances[a.id] || 0)}
+                            </span>
+                          </div>
+                        ))}
+                        {finalInventory > 0 && (
+                          <div className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
+                            <span className="break-words py-1">Inventario Final (Almacén)</span>
+                            <span className="whitespace-nowrap pt-1">{formatCurrency(finalInventory)}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <p className="text-[10px] uppercase tracking-widest font-semibold text-slate-500">Activo No Circulante</p>
+                    {assetsNoCirculanteAccounts.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic">Sin activo no circulante registrado.</p>
+                    ) : (
+                      assetsNoCirculanteAccounts.map(a => (
+                        <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
+                          <span className="break-words py-1">{a.name}</span>
+                          <span className={cn(
+                            "whitespace-nowrap pt-1",
+                            (accountBalances[a.id] || 0) < 0 && "text-rose-300"
+                          )}>
+                            {(accountBalances[a.id] || 0) < 0
+                              ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
+                              : formatCurrency(accountBalances[a.id] || 0)}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </>
               ) : (
                 <>
@@ -2774,7 +2846,12 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
               <h4 className="font-bold text-sm border-b border-white/20 pb-1 uppercase tracking-wider text-slate-300">Capital Contable</h4>
               {equityAccounts.map(a => (
                 <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-400 gap-4">
-                  <span className="break-words py-1">{a.name}</span>
+                  <span className="break-words py-1">
+                    {a.name}
+                    {appMode === 'fiscal' && getSatGroupCode(a) && (
+                      <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(getSatGroupCode(a) || '')})</span>
+                    )}
+                  </span>
                   <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
                 </div>
               ))}
