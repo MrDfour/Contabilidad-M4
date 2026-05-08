@@ -72,11 +72,11 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { id: 'anc-10', code: '1210', name: 'Primas de Seguros', type: 'asset', subtype: 'no_circulante', satGroupCode: '174.01' },
   { id: 'anc-11', code: '1211', name: 'Rentas Pagadas por Anticipado', type: 'asset', subtype: 'no_circulante', satGroupCode: '175.01' },
   { id: 'anc-12', code: '1212', name: 'Intereses Pagados por Anticipado', type: 'asset', subtype: 'no_circulante', satGroupCode: '176.01' },
-  { id: 'anc-13', code: '1213', name: 'Depreciación Acumulada de Edificios', type: 'asset' },
-  { id: 'anc-14', code: '1214', name: 'Depreciación Acumulada de Mobiliario', type: 'asset' },
-  { id: 'anc-15', code: '1215', name: 'Depreciación Acumulada de Eq. Cómputo', type: 'asset' },
-  { id: 'anc-16', code: '1216', name: 'Depreciación Acumulada de Eq. Reparto', type: 'asset' },
-  { id: 'anc-17', code: '1217', name: 'Deterioro Acumulado de Activos Fijos', type: 'asset' },
+  { id: 'anc-13', code: '1213', name: 'Depreciación Acumulada de Edificios', type: 'asset', subtype: 'no_circulante' },
+  { id: 'anc-14', code: '1214', name: 'Depreciación Acumulada de Mobiliario', type: 'asset', subtype: 'no_circulante' },
+  { id: 'anc-15', code: '1215', name: 'Depreciación Acumulada de Eq. Cómputo', type: 'asset', subtype: 'no_circulante' },
+  { id: 'anc-16', code: '1216', name: 'Depreciación Acumulada de Eq. Reparto', type: 'asset', subtype: 'no_circulante' },
+  { id: 'anc-17', code: '1217', name: 'Deterioro Acumulado de Activos Fijos', type: 'asset', subtype: 'no_circulante' },
 
   // Pasivo a Corto Plazo
   { id: 'pcp-1', code: '2101', name: 'Proveedores', type: 'liability', subtype: 'circulante', satGroupCode: '201.01' },
