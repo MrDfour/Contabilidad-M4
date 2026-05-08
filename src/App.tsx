@@ -2706,7 +2706,7 @@ function ContabilidadElectronicaView({
             <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white">Contabilidad Electrónica</h2>
             <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-xs font-mono rounded border border-indigo-500/30 mt-1">Anexo 24 SAT</span>
           </div>
-          <p className="text-slate-400 text-xs md:text-sm mt-1">Genera y descarga los archivos XML oficiales del SAT (versión 1.3).</p>
+          <p className="text-slate-400 text-xs md:text-sm mt-1">Genera y descarga los archivos fiscales del SAT en XML y TXT para el período seleccionado.</p>
         </div>
       </div>
 
@@ -2753,7 +2753,7 @@ function ContabilidadElectronicaView({
         </div>
 
         <div className="border-t border-white/10 pt-6 space-y-3">
-          <p className="text-[10px] uppercase tracking-widest font-semibold text-slate-400 mb-3">Archivos XML</p>
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-slate-400 mb-3">Archivos SAT</p>
           <button
             onClick={handleCatalogo}
             disabled={!isValid}
