@@ -208,12 +208,12 @@ export default function App() {
 
   useEffect(() => {
     if (journals.length > 0) {
-      saveToStorage('contasis_journals', journals);
+      saveToStorage('contasis_journals', journals).catch(console.error);
     }
   }, [journals]);
 
   useEffect(() => {
-    saveToStorage('contasis_fixed_assets', fixedAssets);
+    saveToStorage('contasis_fixed_assets', fixedAssets).catch(console.error);
   }, [fixedAssets]);
 
   useEffect(() => {
@@ -233,7 +233,7 @@ export default function App() {
     if (activeJournalId) {
       const updated = { ...finalInventories, [activeJournalId]: normalizedValue };
       setFinalInventories(updated);
-      saveToStorage('contasis_final_inventories', updated);
+      saveToStorage('contasis_final_inventories', updated).catch(console.error);
     }
   };
 

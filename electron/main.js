@@ -137,13 +137,22 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('save-data', async (event, key, data) => {
   const filePath = path.join(app.getPath('userData'), `${key}.json`);
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    log.error('save-data error:', err);
+    throw err;
+  }
 });
 
 ipcMain.handle('load-data', async (event, key) => {
   const filePath = path.join(app.getPath('userData'), `${key}.json`);
-  if (fs.existsSync(filePath)) {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  try {
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
+  } catch (err) {
+    log.error('load-data error:', err);
   }
   return null;
 });
