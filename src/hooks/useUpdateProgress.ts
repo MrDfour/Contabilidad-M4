@@ -14,6 +14,12 @@ declare global {
       onDownloadProgress: (
         callback: (progress: DownloadProgress) => void
       ) => () => void;
+      saveData: (key: string, data: any) => Promise<void>;
+      loadData: (key: string) => Promise<any>;
+    };
+    Capacitor?: {
+      isNativePlatform: () => boolean;
+      [key: string]: any;
     };
   }
 }

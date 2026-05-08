@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, shell } from 'electron';
+import { app, BrowserWindow, Menu, dialog, shell, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
@@ -6,6 +6,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
+const fs = require('fs');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -132,4 +133,26 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+ipcMain.handle('save-data', async (event, key, data) => {
+  const filePath = path.join(app.getPath('userData'), `${key}.json`);
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    log.error('save-data error:', err);
+    throw err;
+  }
+});
+
+ipcMain.handle('load-data', async (event, key) => {
+  const filePath = path.join(app.getPath('userData'), `${key}.json`);
+  try {
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
+  } catch (err) {
+    log.error('load-data error:', err);
+  }
+  return null;
 });
