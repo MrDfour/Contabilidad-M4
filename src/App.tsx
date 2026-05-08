@@ -60,6 +60,7 @@ import SyncModal from './components/SyncModal';
 import type { SyncState } from './services/syncService';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
+type AppMode = 'basic' | 'fiscal';
 
 const normalizeAmount = (value: number) => {
   if (!Number.isFinite(value)) return 0;
@@ -106,6 +107,11 @@ const formatAmountInput = (value: string) => {
 };
 
 export default function App() {
+  const [appMode, setAppMode] = useState<AppMode>(() => {
+    if (typeof window === 'undefined') return 'basic';
+    const savedMode = localStorage.getItem('contasis_app_mode');
+    return savedMode === 'fiscal' ? 'fiscal' : 'basic';
+  });
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
   const [accounts] = useState<Account[]>(INITIAL_ACCOUNTS);
@@ -187,6 +193,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('contasis_fixed_assets', JSON.stringify(fixedAssets));
   }, [fixedAssets]);
+
+  useEffect(() => {
+    localStorage.setItem('contasis_app_mode', appMode);
+  }, [appMode]);
 
   // Sync finalInventory when active journal changes
   useEffect(() => {
@@ -500,6 +510,26 @@ export default function App() {
           )}
 
           <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center rounded-lg border border-white/10 bg-white/5 p-1">
+              <button
+                onClick={() => setAppMode('basic')}
+                className={cn(
+                  "px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors",
+                  appMode === 'basic' ? "bg-indigo-600 text-white" : "text-slate-300 hover:text-white"
+                )}
+              >
+                Básico
+              </button>
+              <button
+                onClick={() => setAppMode('fiscal')}
+                className={cn(
+                  "px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors",
+                  appMode === 'fiscal' ? "bg-indigo-600 text-white" : "text-slate-300 hover:text-white"
+                )}
+              >
+                Fiscal
+              </button>
+            </div>
             <button
               onClick={() => setShowSyncModal(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 transition-colors text-xs font-semibold"
@@ -595,6 +625,7 @@ export default function App() {
                 accounts={accounts} 
                 journalName={activeJournal?.name || ''}
                 finalInventory={finalInventory}
+                appMode={appMode}
               />
             </motion.div>
           )}
@@ -2502,19 +2533,36 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
 }
 
 // 4. Balance Sheet View
-function BalanceSheetView({ accountBalances, accounts, journalName, finalInventory }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number }) {
-  const assetsAccounts = accounts.filter(a => a.type === 'asset' && accountBalances[a.id]);
-  const liabilityAccounts = accounts.filter(a => a.type === 'liability' && accountBalances[a.id]);
-  const equityAccounts = accounts.filter(a => a.type === 'equity' && accountBalances[a.id]);
+function BalanceSheetView({ accountBalances, accounts, journalName, finalInventory, appMode }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number, appMode: AppMode }) {
+  const fiscalAccountIds = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-16', 'anc-17', 're-12', 're-13']);
+  const visibleAccounts = accounts.filter(a => {
+    if (!accountBalances[a.id]) return false;
+    if (appMode === 'basic' && fiscalAccountIds.has(a.id)) return false;
+    return true;
+  });
+
+  const assetsAccounts = visibleAccounts
+    .filter(a => a.type === 'asset')
+    .map(a => ({ ...a, subtype: a.id.startsWith('ac-') ? 'circulante' as const : 'no_circulante' as const }));
+  const assetsCirculanteAccounts = assetsAccounts.filter(a => a.subtype === 'circulante');
+  const assetsNoCirculanteAccounts = assetsAccounts.filter(a => a.subtype === 'no_circulante');
+
+  const liabilityAccounts = visibleAccounts.filter(a => a.type === 'liability');
+  const equityAccounts = visibleAccounts.filter(a => a.type === 'equity');
   
-  const revenueAccounts = accounts.filter(a => a.type === 'revenue' && accountBalances[a.id]);
-  const expenseAccounts = accounts.filter(a => a.type === 'expense' && accountBalances[a.id]);
+  const revenueAccounts = visibleAccounts.filter(a => a.type === 'revenue');
+  const expenseAccounts = visibleAccounts.filter(a => a.type === 'expense');
   const netIncome = revenueAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) - 
                     expenseAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + finalInventory;
 
   const totalAssets = assetsAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + finalInventory;
   const totalLiabilities = liabilityAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0);
   const totalEquity = equityAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + netIncome;
+
+  const formatSatGroupCode = (code: string) => {
+    if (code.length >= 4) return `${code.slice(0, 2)}.${code.slice(2)}`;
+    return code;
+  };
 
   const handleExportPDF = async () => {
     await exportToPDF('balance-sheet-canvas', `Balance_General_${journalName}`, 'Balance General', journalName);
@@ -2581,25 +2629,65 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
                 <p className="text-xs text-slate-500 italic">Sin activos registrados.</p>
               ) : (
                 <>
-                  {assetsAccounts.map(a => (
-                    <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
-                      <span className="break-words py-1">{a.name}</span>
-                      <span className={cn(
-                        "whitespace-nowrap pt-1",
-                        (accountBalances[a.id] || 0) < 0 && "text-rose-300"
-                      )}>
-                        {(accountBalances[a.id] || 0) < 0
-                          ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
-                          : formatCurrency(accountBalances[a.id] || 0)}
-                      </span>
-                    </div>
-                  ))}
-                  {finalInventory > 0 && (
-                    <div className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
-                      <span className="break-words py-1">Inventario Final (Almacén)</span>
-                      <span className="whitespace-nowrap pt-1">{formatCurrency(finalInventory)}</span>
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest font-semibold text-slate-500">Activo Circulante</p>
+                    {assetsCirculanteAccounts.length === 0 && finalInventory === 0 ? (
+                      <p className="text-xs text-slate-500 italic">Sin activo circulante registrado.</p>
+                    ) : (
+                      <>
+                        {assetsCirculanteAccounts.map(a => (
+                          <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
+                            <span className="break-words py-1">
+                              {a.name}
+                              {appMode === 'fiscal' && (
+                                <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(a.code)})</span>
+                              )}
+                            </span>
+                            <span className={cn(
+                              "whitespace-nowrap pt-1",
+                              (accountBalances[a.id] || 0) < 0 && "text-rose-300"
+                            )}>
+                              {(accountBalances[a.id] || 0) < 0
+                                ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
+                                : formatCurrency(accountBalances[a.id] || 0)}
+                            </span>
+                          </div>
+                        ))}
+                        {finalInventory > 0 && (
+                          <div className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
+                            <span className="break-words py-1">Inventario Final (Almacén)</span>
+                            <span className="whitespace-nowrap pt-1">{formatCurrency(finalInventory)}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <p className="text-[10px] uppercase tracking-widest font-semibold text-slate-500">Activo No Circulante</p>
+                    {assetsNoCirculanteAccounts.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic">Sin activo no circulante registrado.</p>
+                    ) : (
+                      assetsNoCirculanteAccounts.map(a => (
+                        <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
+                          <span className="break-words py-1">
+                            {a.name}
+                            {appMode === 'fiscal' && (
+                              <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(a.code)})</span>
+                            )}
+                          </span>
+                          <span className={cn(
+                            "whitespace-nowrap pt-1",
+                            (accountBalances[a.id] || 0) < 0 && "text-rose-300"
+                          )}>
+                            {(accountBalances[a.id] || 0) < 0
+                              ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
+                              : formatCurrency(accountBalances[a.id] || 0)}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </>
               )}
               <div className="flex justify-between items-center font-bold text-xs md:text-sm pt-4 border-t-2 border-white/20 font-mono text-emerald-400 gap-4">
@@ -2617,7 +2705,12 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
               ) : (
                 liabilityAccounts.map(a => (
                   <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-400 gap-4">
-                    <span className="break-words py-1">{a.name}</span>
+                    <span className="break-words py-1">
+                      {a.name}
+                      {appMode === 'fiscal' && (
+                        <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(a.code)})</span>
+                      )}
+                    </span>
                     <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
                   </div>
                 ))
@@ -2632,7 +2725,12 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
               <h4 className="font-bold text-sm border-b border-white/20 pb-1 uppercase tracking-wider text-slate-300">Capital Contable</h4>
               {equityAccounts.map(a => (
                 <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-400 gap-4">
-                  <span className="break-words py-1">{a.name}</span>
+                  <span className="break-words py-1">
+                    {a.name}
+                    {appMode === 'fiscal' && (
+                      <span className="ml-2 text-[10px] text-slate-500">({formatSatGroupCode(a.code)})</span>
+                    )}
+                  </span>
                   <span className="whitespace-nowrap pt-1">{formatCurrency(accountBalances[a.id] || 0)}</span>
                 </div>
               ))}
