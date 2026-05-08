@@ -61,6 +61,10 @@ import type { SyncState } from './services/syncService';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
 type AppMode = 'basic' | 'fiscal';
+const FISCAL_BALANCE_ACCOUNT_IDS = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-16', 'anc-17', 're-12', 're-13']);
+const CURRENT_ASSET_ACCOUNT_IDS = new Set(['ac-1', 'ac-2', 'ac-3', 'ac-4', 'ac-5', 'ac-6', 'ac-7', 'ac-8', 'ac-9', 'ac-10']);
+const SAT_GROUP_PREFIX_LENGTH = 2;
+const SAT_GROUP_MINIMUM_LENGTH = 4;
 
 const normalizeAmount = (value: number) => {
   if (!Number.isFinite(value)) return 0;
@@ -2534,19 +2538,15 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
 
 // 4. Balance Sheet View
 function BalanceSheetView({ accountBalances, accounts, journalName, finalInventory, appMode }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number, appMode: AppMode }) {
-  const fiscalAccountIds = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-16', 'anc-17', 're-12', 're-13']);
-  const currentAssetIds = new Set(['ac-1', 'ac-2', 'ac-3', 'ac-4', 'ac-5', 'ac-6', 'ac-7', 'ac-8', 'ac-9', 'ac-10']);
-  const satGroupPrefixLength = 2;
-  const satGroupMinimumLength = 4;
   const visibleAccounts = accounts.filter(a => {
     if (!accountBalances[a.id]) return false;
-    if (appMode === 'basic' && fiscalAccountIds.has(a.id)) return false;
+    if (appMode === 'basic' && FISCAL_BALANCE_ACCOUNT_IDS.has(a.id)) return false;
     return true;
   });
 
   const assetsAccounts = visibleAccounts
     .filter(a => a.type === 'asset')
-    .map(a => ({ ...a, subtype: currentAssetIds.has(a.id) ? 'circulante' as const : 'no_circulante' as const }));
+    .map(a => ({ ...a, subtype: CURRENT_ASSET_ACCOUNT_IDS.has(a.id) ? 'circulante' as const : 'no_circulante' as const }));
   const assetsCirculanteAccounts = assetsAccounts.filter(a => a.subtype === 'circulante');
   const assetsNoCirculanteAccounts = assetsAccounts.filter(a => a.subtype === 'no_circulante');
 
@@ -2563,7 +2563,8 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
   const totalEquity = equityAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + netIncome;
 
   const formatSatGroupCode = (code: string) => {
-    if (code.length >= satGroupMinimumLength) return `${code.slice(0, satGroupPrefixLength)}.${code.slice(satGroupPrefixLength)}`;
+    // Formato visual SAT tipo XX.XX para códigos de 4 o más caracteres.
+    if (code.length >= SAT_GROUP_MINIMUM_LENGTH) return `${code.slice(0, SAT_GROUP_PREFIX_LENGTH)}.${code.slice(SAT_GROUP_PREFIX_LENGTH)}`;
     return code;
   };
 
