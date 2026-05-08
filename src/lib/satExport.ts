@@ -86,7 +86,7 @@ const DIOT_FIELDS_COUNT = 54;
 const DEFAULT_CREDITABLE_PROPORTION = '100.00';
 
 const formatDIOTAmount = (amount: number) => {
-  const normalized = Math.round((amount + Number.EPSILON) * 100) / 100;
+  const normalized = Math.round(amount * 100) / 100;
   return normalized === 0 ? '' : normalized.toFixed(2);
 };
 
@@ -99,7 +99,7 @@ export const generateDIOTTxt = (
 ) => {
   const ivaAccount = accounts.find(a => a.satGroupCode === '118.01');
   if (!ivaAccount) {
-    alert('No se encontró la cuenta de IVA Acreditable (118.01) en el catálogo.');
+    alert('No se encontró la cuenta de IVA Acreditable (118.01) en el catálogo. Por favor, agregue esta cuenta antes de generar el reporte DIOT.');
     return;
   }
 
@@ -136,7 +136,7 @@ export const generateDIOTTxt = (
     });
 
   if (rows.length === 0) {
-    alert('No se encontraron movimientos de IVA acreditable con RFC de proveedor para el periodo seleccionado.');
+    alert('No se encontraron movimientos de IVA acreditable con RFC de proveedor para el periodo seleccionado. Verifique que las pólizas incluyan RFC de terceros válidos.');
     return;
   }
 
