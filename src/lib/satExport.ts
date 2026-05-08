@@ -102,8 +102,7 @@ export const generateDIOTTxt = (
 ) => {
   const ivaAccount = accounts.find(a => a.satGroupCode === '118.01');
   if (!ivaAccount) {
-    alert('No se encontró la cuenta de IVA Acreditable (118.01) en el catálogo. Por favor, agregue esta cuenta antes de generar el reporte DIOT.');
-    return;
+    throw new Error('No se encontró la cuenta de IVA Acreditable (118.01) en el catálogo. Por favor, agregue esta cuenta antes de generar el reporte DIOT.');
   }
 
   const periodPrefix = `${anio}-${mes}`;
@@ -139,8 +138,7 @@ export const generateDIOTTxt = (
     });
 
   if (rows.length === 0) {
-    alert('No se encontraron movimientos de IVA acreditable con RFC de proveedor para el periodo seleccionado. Verifique que las pólizas incluyan RFC de terceros válidos.');
-    return;
+    throw new Error('No se encontraron movimientos de IVA acreditable con RFC de proveedor para el periodo seleccionado. Verifique que las pólizas incluyan RFC de terceros válidos.');
   }
 
   const filename = `${rfc.trim().toUpperCase()}${anio}${mes}DIOT.txt`;
