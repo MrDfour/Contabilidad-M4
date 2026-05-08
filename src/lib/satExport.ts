@@ -104,7 +104,7 @@ export const generateDIOTTxt = (
   }
 
   const periodPrefix = `${anio}-${mes}`;
-  const ivaPorRFC: Record<string, number> = {};
+  const ivaByRFC: Record<string, number> = {};
 
   entries
     .filter(entry => entry.date.startsWith(periodPrefix))
@@ -117,11 +117,11 @@ export const generateDIOTTxt = (
         }
 
         const signedAmount = movement.type === 'debit' ? movement.amount : -movement.amount;
-        ivaPorRFC[supplierRfc] = (ivaPorRFC[supplierRfc] || 0) + signedAmount;
+        ivaByRFC[supplierRfc] = (ivaByRFC[supplierRfc] || 0) + signedAmount;
       });
     });
 
-  const rows = Object.entries(ivaPorRFC)
+  const rows = Object.entries(ivaByRFC)
     .filter(([, amount]) => amount > 0)
     .sort(([rfcA], [rfcB]) => rfcA.localeCompare(rfcB))
     .map(([supplierRfc, amount]) => {
