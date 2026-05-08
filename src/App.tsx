@@ -594,6 +594,7 @@ export default function App() {
                 accountBalances={accountBalances} 
                 accounts={accounts} 
                 journalName={activeJournal?.name || ''}
+                finalInventory={finalInventory}
               />
             </motion.div>
           )}
@@ -2501,7 +2502,7 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
 }
 
 // 4. Balance Sheet View
-function BalanceSheetView({ accountBalances, accounts, journalName }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string }) {
+function BalanceSheetView({ accountBalances, accounts, journalName, finalInventory }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number }) {
   const assetsAccounts = accounts.filter(a => a.type === 'asset' && accountBalances[a.id]);
   const liabilityAccounts = accounts.filter(a => a.type === 'liability' && accountBalances[a.id]);
   const equityAccounts = accounts.filter(a => a.type === 'equity' && accountBalances[a.id]);
@@ -2509,9 +2510,9 @@ function BalanceSheetView({ accountBalances, accounts, journalName }: { accountB
   const revenueAccounts = accounts.filter(a => a.type === 'revenue' && accountBalances[a.id]);
   const expenseAccounts = accounts.filter(a => a.type === 'expense' && accountBalances[a.id]);
   const netIncome = revenueAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) - 
-                    expenseAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0);
+                    expenseAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + finalInventory;
 
-  const totalAssets = assetsAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0);
+  const totalAssets = assetsAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + finalInventory;
   const totalLiabilities = liabilityAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0);
   const totalEquity = equityAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + netIncome;
 
@@ -2523,6 +2524,7 @@ function BalanceSheetView({ accountBalances, accounts, journalName }: { accountB
     const data = [
       { Sección: 'ACTIVOS', Concepto: '', Monto: '' },
       ...assetsAccounts.map(a => ({ Sección: 'Activo', Concepto: a.name, Monto: accountBalances[a.id] })),
+      ...(finalInventory > 0 ? [{ Sección: 'Activo', Concepto: 'Inventario Final (Almacén)', Monto: finalInventory }] : []),
       { Sección: 'TOTAL ACTIVOS', Concepto: '', Monto: totalAssets },
       { Sección: '', Concepto: '', Monto: '' },
       { Sección: 'PASIVOS', Concepto: '', Monto: '' },
@@ -2575,22 +2577,30 @@ function BalanceSheetView({ accountBalances, accounts, journalName }: { accountB
           <div className="space-y-6">
             <div className="space-y-3">
               <h4 className="font-bold text-sm border-b border-white/20 pb-1 uppercase tracking-wider text-slate-300">Activo</h4>
-              {assetsAccounts.length === 0 ? (
+              {assetsAccounts.length === 0 && finalInventory === 0 ? (
                 <p className="text-xs text-slate-500 italic">Sin activos registrados.</p>
               ) : (
-                assetsAccounts.map(a => (
-                  <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
-                    <span className="break-words py-1">{a.name}</span>
-                    <span className={cn(
-                      "whitespace-nowrap pt-1",
-                      (accountBalances[a.id] || 0) < 0 && "text-rose-300"
-                    )}>
-                      {(accountBalances[a.id] || 0) < 0
-                        ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
-                        : formatCurrency(accountBalances[a.id] || 0)}
-                    </span>
-                  </div>
-                ))
+                <>
+                  {assetsAccounts.map(a => (
+                    <div key={a.id} className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
+                      <span className="break-words py-1">{a.name}</span>
+                      <span className={cn(
+                        "whitespace-nowrap pt-1",
+                        (accountBalances[a.id] || 0) < 0 && "text-rose-300"
+                      )}>
+                        {(accountBalances[a.id] || 0) < 0
+                          ? `(${formatCurrency(Math.abs(accountBalances[a.id] || 0))})`
+                          : formatCurrency(accountBalances[a.id] || 0)}
+                      </span>
+                    </div>
+                  ))}
+                  {finalInventory > 0 && (
+                    <div className="flex justify-between items-start text-xs md:text-sm font-mono text-slate-300 gap-4">
+                      <span className="break-words py-1">Inventario Final (Almacén)</span>
+                      <span className="whitespace-nowrap pt-1">{formatCurrency(finalInventory)}</span>
+                    </div>
+                  )}
+                </>
               )}
               <div className="flex justify-between items-center font-bold text-xs md:text-sm pt-4 border-t-2 border-white/20 font-mono text-emerald-400 gap-4">
                 <span className="break-words">Suma el Activo</span>
