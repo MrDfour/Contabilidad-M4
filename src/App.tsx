@@ -2535,6 +2535,9 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
 // 4. Balance Sheet View
 function BalanceSheetView({ accountBalances, accounts, journalName, finalInventory, appMode }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number, appMode: AppMode }) {
   const fiscalAccountIds = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-16', 'anc-17', 're-12', 're-13']);
+  const currentAssetIds = new Set(['ac-1', 'ac-2', 'ac-3', 'ac-4', 'ac-5', 'ac-6', 'ac-7', 'ac-8', 'ac-9', 'ac-10']);
+  const satGroupPrefixLength = 2;
+  const satGroupMinimumLength = 4;
   const visibleAccounts = accounts.filter(a => {
     if (!accountBalances[a.id]) return false;
     if (appMode === 'basic' && fiscalAccountIds.has(a.id)) return false;
@@ -2543,7 +2546,7 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
 
   const assetsAccounts = visibleAccounts
     .filter(a => a.type === 'asset')
-    .map(a => ({ ...a, subtype: a.id.startsWith('ac-') ? 'circulante' as const : 'no_circulante' as const }));
+    .map(a => ({ ...a, subtype: currentAssetIds.has(a.id) ? 'circulante' as const : 'no_circulante' as const }));
   const assetsCirculanteAccounts = assetsAccounts.filter(a => a.subtype === 'circulante');
   const assetsNoCirculanteAccounts = assetsAccounts.filter(a => a.subtype === 'no_circulante');
 
@@ -2560,7 +2563,7 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
   const totalEquity = equityAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + netIncome;
 
   const formatSatGroupCode = (code: string) => {
-    if (code.length >= 4) return `${code.slice(0, 2)}.${code.slice(2)}`;
+    if (code.length >= satGroupMinimumLength) return `${code.slice(0, satGroupPrefixLength)}.${code.slice(satGroupPrefixLength)}`;
     return code;
   };
 
