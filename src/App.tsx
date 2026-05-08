@@ -158,48 +158,39 @@ export default function App() {
   // Persistence
   useEffect(() => {
     const loadData = async () => {
-      await migrateFromLocalStorage();
+      try {
+        await migrateFromLocalStorage();
 
-      const saved = await loadFromStorage('contasis_journals');
-      if (saved) {
-        try {
+        const saved = await loadFromStorage('contasis_journals');
+        if (saved) {
           const parsed = Array.isArray(saved) ? saved : JSON.parse(saved);
           setJournals(parsed);
-          if (parsed.length > 0) {
-            setActiveJournalId(parsed[0].id);
-          }
-        } catch (e) {
-          console.error("Failed to load journals", e);
+          if (parsed.length > 0) setActiveJournalId(parsed[0].id);
+        } else {
+          // Crear diario inicial si no existe nada
+          const initialJournal: Journal = { id: crypto.randomUUID(), name: 'Diario Inicial', entries: [] };
+          setJournals([initialJournal]);
+          setActiveJournalId(initialJournal.id);
         }
-      } else {
-        // Create initial journal if none exists
-        const initialJournal: Journal = {
-          id: crypto.randomUUID(),
-          name: 'Diario Inicial',
-          entries: []
-        };
-        setJournals([initialJournal]);
-        setActiveJournalId(initialJournal.id);
-      }
 
-      const savedInventories = await loadFromStorage('contasis_final_inventories');
-      if (savedInventories) {
-        try {
+        const savedInventories = await loadFromStorage('contasis_final_inventories');
+        if (savedInventories) {
           const parsed = typeof savedInventories === 'string' ? JSON.parse(savedInventories) : savedInventories;
           setFinalInventories(parsed);
-        } catch (e) {
-          console.error("Failed to load final inventories. Data will be reset to defaults.", e);
         }
-      }
+ 
 
-      const savedFixedAssets = await loadFromStorage('contasis_fixed_assets');
-      if (savedFixedAssets) {
-        try {
+        const savedFixedAssets = await loadFromStorage('contasis_fixed_assets');
+        if (savedFixedAssets) {
           const parsed = typeof savedFixedAssets === 'string' ? JSON.parse(savedFixedAssets) : savedFixedAssets;
           setFixedAssets(parsed);
-        } catch (e) {
-          console.error("Failed to load fixed assets. Data will be reset to defaults.", e);
         }
+      } catch (error) {
+        console.error("Error crítico al cargar datos desde el almacenamiento:", error);
+        // Fallback seguro
+        const initialJournal: Journal = { id: crypto.randomUUID(), name: 'Diario Inicial', entries: [] };
+        setJournals([initialJournal]);
+        setActiveJournalId(initialJournal.id);
       }
     };
 
@@ -376,8 +367,10 @@ export default function App() {
 
     setJournals(nextJournals);
     setFinalInventories(nextInventories);
-    localStorage.setItem('contasis_journals', JSON.stringify(nextJournals));
-    localStorage.setItem('contasis_final_inventories', JSON.stringify(nextInventories));
+    
+    // Usar la persistencia segura en lugar de localStorage
+    saveToStorage('contasis_journals', nextJournals).catch(console.error);
+    saveToStorage('contasis_final_inventories', nextInventories).catch(console.error);
 
     if (nextJournals.length > 0) {
       const nextActiveId = nextJournals[0].id;
