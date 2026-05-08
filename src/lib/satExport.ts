@@ -83,6 +83,7 @@ export const downloadTXT = (filename: string, content: string) => {
 
 const RFC_REGEX = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{2,3}$/;
 const DIOT_FIELDS_COUNT = 54;
+const DEFAULT_CREDITABLE_PROPORTION = '100.00';
 
 const formatDIOTAmount = (amount: number) => {
   const normalized = Math.round((amount + Number.EPSILON) * 100) / 100;
@@ -124,12 +125,12 @@ export const generateDIOTTxt = (
     .filter(([, amount]) => amount > 0)
     .sort(([rfcA], [rfcB]) => rfcA.localeCompare(rfcB))
     .map(([supplierRfc, amount]) => {
-      const fields = Array.from<string>({ length: DIOT_FIELDS_COUNT }).fill('');
+      const fields = Array(DIOT_FIELDS_COUNT).fill('');
       fields[0] = '04'; // Tipo de tercero: nacional
       fields[1] = '85'; // Tipo de operación: otros
       fields[2] = supplierRfc;
       fields[21] = formatDIOTAmount(amount); // IVA acreditable pagado resto del país
-      fields[22] = '100.00'; // Proporción acreditable
+      fields[22] = DEFAULT_CREDITABLE_PROPORTION; // Proporción acreditable
       fields[53] = '01'; // Efectos fiscales: sí
       return fields.join('|');
     });
