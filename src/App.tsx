@@ -2045,6 +2045,7 @@ function JournalEntryForm({
     uuid: string;
     rfc: string;
   } | null>(null);
+  const [cfdiError, setCfdiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialData) {
@@ -2063,45 +2064,39 @@ function JournalEntryForm({
   const handleCFDIUpload = async (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setCfdiError(null);
 
     try {
       const text = await file.text();
-      const parser = new DOMParser();
-      const xml = parser.parseFromString(text, 'text/xml');
-
-      const tfd = xml.getElementsByTagName('tfd:TimbreFiscalDigital')[0] || xml.getElementsByTagName('TimbreFiscalDigital')[0];
-      const uuid = tfd?.getAttribute('UUID') || '';
-
-      const emisor = xml.getElementsByTagName('cfdi:Emisor')[0] || xml.getElementsByTagName('Emisor')[0];
-      const receptor = xml.getElementsByTagName('cfdi:Receptor')[0] || xml.getElementsByTagName('Receptor')[0];
-
-      let rfc = '';
-      if (policyType === 'ingreso') {
-        rfc = receptor?.getAttribute('Rfc') || '';
-      } else {
-        rfc = emisor?.getAttribute('Rfc') || '';
-      }
-
-      const comprobante = xml.getElementsByTagName('cfdi:Comprobante')[0] || xml.getElementsByTagName('Comprobante')[0];
-      const totalStr = comprobante?.getAttribute('Total');
+      const uuid = text.match(/<(?:tfd:)?TimbreFiscalDigital\b[^>]*\bUUID="([^"]+)"/i)?.[1] || '';
+      const emisorRfc = text.match(/<(?:cfdi:)?Emisor\b[^>]*\bRfc="([^"]+)"/i)?.[1] || '';
+      const receptorRfc = text.match(/<(?:cfdi:)?Receptor\b[^>]*\bRfc="([^"]+)"/i)?.[1] || '';
+      const totalStr = text.match(/<(?:cfdi:)?Comprobante\b[^>]*\bTotal="([^"]+)"/i)?.[1];
       const xmlTotal = totalStr ? parseFloat(totalStr) : 0;
 
-      if (uuid) {
-        const currentTotal = movements[idx].amount;
+      const rfc = policyType === 'ingreso' ? receptorRfc : emisorRfc;
+      if (!uuid || !rfc || Number.isNaN(xmlTotal)) {
+        throw new Error('No se pudo extraer UUID, RFC o Total válidos del XML CFDI.');
+      }
 
-        if (currentTotal === 0) {
-          updateMovement(idx, { uuidCFDI: uuid, rfcTercero: rfc, amount: xmlTotal });
-          const newInputs = [...amountInputs];
-          newInputs[idx] = formatAmountForInput(xmlTotal);
-          setAmountInputs(newInputs);
-        } else if (currentTotal === xmlTotal || xmlTotal === 0) {
-          updateMovement(idx, { uuidCFDI: uuid, rfcTercero: rfc });
-        } else {
-          setCfdiDiscrepancy({ idx, xmlTotal, currentTotal, uuid, rfc });
-        }
+      const currentTotal = movements[idx].amount;
+      const isCurrentZero = Math.abs(currentTotal) <= 0.01;
+      const matchesXml = Math.abs(currentTotal - xmlTotal) <= 0.01;
+
+      if (isCurrentZero) {
+        updateMovement(idx, { uuidCFDI: uuid, rfcTercero: rfc, amount: xmlTotal });
+        const newInputs = [...amountInputs];
+        newInputs[idx] = formatAmountForInput(xmlTotal);
+        setAmountInputs(newInputs);
+      } else if (matchesXml) {
+        updateMovement(idx, { uuidCFDI: uuid, rfcTercero: rfc });
+      } else {
+        setCfdiDiscrepancy({ idx, xmlTotal, currentTotal, uuid, rfc });
       }
     } catch (error) {
       console.error('Error leyendo CFDI:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
+      setCfdiError(`No se pudo leer el CFDI XML: ${errorMessage}`);
     }
 
     e.target.value = '';
@@ -2194,6 +2189,19 @@ function JournalEntryForm({
       </div>
 
       <div className="space-y-4">
+        <AnimatePresence>
+          {cfdiError && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="flex items-center gap-2 text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-xs"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{cfdiError}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div className="flex items-center justify-between border-b border-white/10 pb-2">
           <h3 className="font-semibold text-sm text-indigo-300">Movimientos</h3>
           <div className="flex items-center gap-2">
