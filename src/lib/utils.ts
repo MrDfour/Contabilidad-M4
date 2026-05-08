@@ -9,7 +9,7 @@ import html2canvas from 'html2canvas-pro';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { Account } from '../types';
+import { Account, FixedAsset } from '../types';
 
 /** Returns true when running inside a native Capacitor app (iOS / Android). */
 const isNative = () => Capacitor.isNativePlatform();
@@ -684,4 +684,19 @@ export const readExcel = (file: File): Promise<any[]> => {
     reader.onerror = (err) => reject(err);
     reader.readAsArrayBuffer(file);
   });
+};
+
+export const calculateMonthlyDepreciation = (asset: FixedAsset): number => {
+  return (asset.originalAmount * asset.fiscalRate) / 12;
+};
+
+export const calculateFiscalDeduction = (
+  asset: FixedAsset,
+  inpcUltimoMesMitadPeriodo: number,
+  inpcMesAdquisicion: number
+): number => {
+  const factorActualizacion = inpcUltimoMesMitadPeriodo / inpcMesAdquisicion;
+  // Art. 31 LISR: el factor de actualización fiscal se trunca (no se redondea) a 4 decimales.
+  const factorTruncado = Math.trunc(factorActualizacion * 10000) / 10000;
+  return (asset.originalAmount * asset.fiscalRate) * factorTruncado;
 };
