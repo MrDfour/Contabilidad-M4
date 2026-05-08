@@ -65,6 +65,17 @@ const FISCAL_BALANCE_ACCOUNT_IDS = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-1
 const CURRENT_ASSET_ACCOUNT_IDS = new Set(['ac-1', 'ac-2', 'ac-3', 'ac-4', 'ac-5', 'ac-6', 'ac-7', 'ac-8', 'ac-9', 'ac-10']);
 const SAT_GROUP_PREFIX_LENGTH = 2;
 const SAT_GROUP_MINIMUM_LENGTH = 4;
+const getStoredAppMode = (): AppMode => {
+  if (typeof window === 'undefined') return 'basic';
+  const savedMode = localStorage.getItem('contasis_app_mode');
+  return savedMode === 'fiscal' ? 'fiscal' : 'basic';
+};
+const getAssetSubtype = (accountId: string) => CURRENT_ASSET_ACCOUNT_IDS.has(accountId) ? 'circulante' : 'no_circulante';
+const formatSatGroupCode = (code: string) => {
+  // Formato visual SAT tipo XX.XX para códigos de 4 o más caracteres.
+  if (code.length >= SAT_GROUP_MINIMUM_LENGTH) return `${code.slice(0, SAT_GROUP_PREFIX_LENGTH)}.${code.slice(SAT_GROUP_PREFIX_LENGTH)}`;
+  return code;
+};
 
 const normalizeAmount = (value: number) => {
   if (!Number.isFinite(value)) return 0;
@@ -111,11 +122,8 @@ const formatAmountInput = (value: string) => {
 };
 
 export default function App() {
-  const [appMode, setAppMode] = useState<AppMode>(() => {
-    if (typeof window === 'undefined') return 'basic';
-    const savedMode = localStorage.getItem('contasis_app_mode');
-    return savedMode === 'fiscal' ? 'fiscal' : 'basic';
-  });
+  const [appMode, setAppMode] = useState<AppMode>('basic');
+  const [appModeHydrated, setAppModeHydrated] = useState(false);
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
   const [accounts] = useState<Account[]>(INITIAL_ACCOUNTS);
@@ -199,8 +207,14 @@ export default function App() {
   }, [fixedAssets]);
 
   useEffect(() => {
+    setAppMode(getStoredAppMode());
+    setAppModeHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!appModeHydrated) return;
     localStorage.setItem('contasis_app_mode', appMode);
-  }, [appMode]);
+  }, [appMode, appModeHydrated]);
 
   // Sync finalInventory when active journal changes
   useEffect(() => {
@@ -2545,10 +2559,9 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
   });
 
   const assetsAccounts = visibleAccounts
-    .filter(a => a.type === 'asset')
-    .map(a => ({ ...a, subtype: CURRENT_ASSET_ACCOUNT_IDS.has(a.id) ? 'circulante' as const : 'no_circulante' as const }));
-  const assetsCirculanteAccounts = assetsAccounts.filter(a => a.subtype === 'circulante');
-  const assetsNoCirculanteAccounts = assetsAccounts.filter(a => a.subtype === 'no_circulante');
+    .filter(a => a.type === 'asset');
+  const assetsCirculanteAccounts = assetsAccounts.filter(a => getAssetSubtype(a.id) === 'circulante');
+  const assetsNoCirculanteAccounts = assetsAccounts.filter(a => getAssetSubtype(a.id) === 'no_circulante');
 
   const liabilityAccounts = visibleAccounts.filter(a => a.type === 'liability');
   const equityAccounts = visibleAccounts.filter(a => a.type === 'equity');
@@ -2561,12 +2574,6 @@ function BalanceSheetView({ accountBalances, accounts, journalName, finalInvento
   const totalAssets = assetsAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + finalInventory;
   const totalLiabilities = liabilityAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0);
   const totalEquity = equityAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0) + netIncome;
-
-  const formatSatGroupCode = (code: string) => {
-    // Formato visual SAT tipo XX.XX para códigos de 4 o más caracteres.
-    if (code.length >= SAT_GROUP_MINIMUM_LENGTH) return `${code.slice(0, SAT_GROUP_PREFIX_LENGTH)}.${code.slice(SAT_GROUP_PREFIX_LENGTH)}`;
-    return code;
-  };
 
   const handleExportPDF = async () => {
     await exportToPDF('balance-sheet-canvas', `Balance_General_${journalName}`, 'Balance General', journalName);
