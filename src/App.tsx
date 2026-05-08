@@ -2652,8 +2652,9 @@ function ContabilidadElectronicaView({
   accounts: Account[];
   tAccountsData: Record<string, { debits: { amount: number; ref: number }[]; credits: { amount: number; ref: number }[] }>;
 }) {
-  const currentYear = new Date().getFullYear().toString();
-  const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  const now = React.useMemo(() => new Date(), []);
+  const currentYear = now.getFullYear().toString();
+  const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
 
   const [rfc, setRfc] = React.useState('');
   const [anio, setAnio] = React.useState(currentYear);
@@ -2674,7 +2675,10 @@ function ContabilidadElectronicaView({
     { value: '12', label: '12 - Diciembre' },
   ];
 
-  const isValid = rfc.trim().length >= 12 && /^\d{4}$/.test(anio);
+  // Validates RFC format: 3-4 uppercase letters/& followed by 6 digits and 2-3 alphanumeric characters
+  const rfcRegex = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{2,3}$/;
+  const isRfcValid = rfcRegex.test(rfc.trim());
+  const isValid = isRfcValid && /^\d{4}$/.test(anio);
 
   const handleCatalogo = () => {
     if (!isValid) return;
@@ -2709,8 +2713,8 @@ function ContabilidadElectronicaView({
             maxLength={13}
             className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 font-mono tracking-wider"
           />
-          {rfc.length > 0 && rfc.trim().length < 12 && (
-            <p className="text-rose-400 text-xs">El RFC debe tener al menos 12 caracteres.</p>
+          {rfc.length > 0 && !isRfcValid && (
+            <p className="text-rose-400 text-xs">Formato de RFC inválido (Ej. XAXX010101000 o AAA010101AA1).</p>
           )}
         </div>
 

@@ -13,14 +13,23 @@ export const downloadXML = (filename: string, content: string) => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
 };
+
+const escapeXML = (str: string) =>
+  str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 
 export const generateCatalogoXML = (rfc: string, anio: string, mes: string, accounts: Account[]) => {
   const cuentasXML = accounts
     .filter(a => a.satGroupCode)
     .map(c => {
       const natur = (c.type === 'asset' || c.type === 'expense') ? 'D' : 'A';
-      return `  <catalogocuentas:Ctas CodAgrup="${c.satGroupCode}" NumCta="${c.code}" Desc="${c.name.replace(/&/g, '&amp;').replace(/</g, '&lt;')}" SubCta="" Nivel="1" Natur="${natur}"/>`;
+      return `  <catalogocuentas:Ctas CodAgrup="${c.satGroupCode}" NumCta="${c.code}" Desc="${escapeXML(c.name)}" SubCta="" Nivel="1" Natur="${natur}"/>`;
     }).join('\n');
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
