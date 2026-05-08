@@ -68,6 +68,10 @@ type AppMode = 'basic' | 'fiscal';
 type AppTab = 'journal' | 't-accounts' | 'balance' | 'profit-loss' | 'assets' | 'electronic';
 type FiscalAccount = Account & { satGroupCode?: string };
 const FISCAL_BALANCE_ACCOUNT_IDS = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-16', 'anc-17', 're-12', 're-13']);
+const FISCAL_NAV_TABS = [
+  { id: 'assets' as const, label: 'Activos Fijos', shortLabel: 'Activos', icon: Monitor },
+  { id: 'electronic' as const, label: 'Cont. Electrónica', shortLabel: 'SAT XML', icon: FileCode }
+];
 const getStoredAppMode = (): AppMode => {
   if (typeof window === 'undefined') return 'basic';
   const savedMode = localStorage.getItem('contasis_app_mode');
@@ -213,7 +217,7 @@ export default function App() {
 
   // Redireccionar al Diario si se cambia a modo básico estando en una pestaña fiscal
   useEffect(() => {
-    if (appMode === 'basic' && (activeTab === 'assets' || activeTab === 'electronic')) {
+    if (appMode === 'basic' && FISCAL_NAV_TABS.some(tab => tab.id === activeTab)) {
       setActiveTab('journal');
     }
   }, [appMode, activeTab]);
@@ -394,10 +398,7 @@ export default function App() {
     { id: 't-accounts', label: 'Cuentas T', shortLabel: 'Cuentas T', icon: TableIcon },
     { id: 'balance', label: 'Balance General', shortLabel: 'Balance', icon: Briefcase },
     { id: 'profit-loss', label: 'Estado de Resultados', shortLabel: 'Resultados', icon: TrendingUp },
-    ...(appMode === 'fiscal' ? [
-      { id: 'assets', label: 'Activos Fijos', shortLabel: 'Activos', icon: Monitor },
-      { id: 'electronic', label: 'Cont. Electrónica', shortLabel: 'SAT XML', icon: FileCode }
-    ] as const : [])
+    ...(appMode === 'fiscal' ? FISCAL_NAV_TABS : [])
   ];
   const activeMobileTabLabel = navigationTabs.find(tab => tab.id === activeTab)?.shortLabel ?? 'Diario';
 
