@@ -23,6 +23,7 @@ import {
   Upload,
   FileUp,
   Search,
+  FileScan,
   FileCode,
   ChevronDown,
   ChevronUp,
@@ -2037,6 +2038,14 @@ function JournalEntryForm({
     { accountId: accounts[1].id, type: 'credit', amount: 0 }
   ]);
   const [amountInputs, setAmountInputs] = useState<string[]>(['', '']);
+  const [cfdiDiscrepancy, setCfdiDiscrepancy] = useState<{
+    idx: number;
+    xmlTotal: number;
+    currentTotal: number;
+    uuid: string;
+    rfc: string;
+  } | null>(null);
+  const [cfdiError, setCfdiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialData) {
@@ -2051,6 +2060,62 @@ function JournalEntryForm({
   const totalDebit = normalizeAmount(movements.filter(m => m.type === 'debit').reduce((sum, m) => sum + m.amount, 0));
   const totalCredit = normalizeAmount(movements.filter(m => m.type === 'credit').reduce((sum, m) => sum + m.amount, 0));
   const isOutOfBalance = Math.abs(totalDebit - totalCredit) > 0.01 || (totalDebit === 0 && totalCredit === 0);
+
+  const handleCFDIUpload = async (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCfdiError(null);
+
+    try {
+      const text = await file.text();
+      const uuid = text.match(/<(?:tfd:)?TimbreFiscalDigital\b[^>]*\bUUID="([^"]+)"/i)?.[1] || '';
+      const emisorRfc = text.match(/<(?:cfdi:)?Emisor\b[^>]*\bRfc="([^"]+)"/i)?.[1] || '';
+      const receptorRfc = text.match(/<(?:cfdi:)?Receptor\b[^>]*\bRfc="([^"]+)"/i)?.[1] || '';
+      const totalStr = text.match(/<(?:cfdi:)?Comprobante\b[^>]*\bTotal="([^"]+)"/i)?.[1];
+      const xmlTotal = totalStr ? parseFloat(totalStr) : 0;
+
+      const rfc = policyType === 'ingreso' ? receptorRfc : emisorRfc;
+      if (!uuid || !rfc || Number.isNaN(xmlTotal)) {
+        throw new Error('No se pudo extraer UUID, RFC o Total válidos del XML CFDI.');
+      }
+
+      const currentTotal = movements[idx].amount;
+      const isCurrentZero = Math.abs(currentTotal) <= 0.01;
+      const matchesXml = Math.abs(currentTotal - xmlTotal) <= 0.01;
+
+      if (isCurrentZero) {
+        updateMovement(idx, { uuidCFDI: uuid, rfcTercero: rfc, amount: xmlTotal });
+        const newInputs = [...amountInputs];
+        newInputs[idx] = formatAmountForInput(xmlTotal);
+        setAmountInputs(newInputs);
+      } else if (matchesXml) {
+        updateMovement(idx, { uuidCFDI: uuid, rfcTercero: rfc });
+      } else {
+        setCfdiDiscrepancy({ idx, xmlTotal, currentTotal, uuid, rfc });
+      }
+    } catch (error) {
+      console.error('Error leyendo CFDI:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido.';
+      setCfdiError(`No se pudo leer el CFDI XML: ${errorMessage}`);
+    }
+
+    e.target.value = '';
+  };
+
+  const resolveDiscrepancy = (useXmlAmount: boolean) => {
+    if (!cfdiDiscrepancy) return;
+    const { idx, xmlTotal, uuid, rfc } = cfdiDiscrepancy;
+
+    if (useXmlAmount) {
+      updateMovement(idx, { uuidCFDI: uuid, rfcTercero: rfc, amount: xmlTotal });
+      const newInputs = [...amountInputs];
+      newInputs[idx] = formatAmountForInput(xmlTotal);
+      setAmountInputs(newInputs);
+    } else {
+      updateMovement(idx, { uuidCFDI: uuid, rfcTercero: rfc });
+    }
+    setCfdiDiscrepancy(null);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2124,6 +2189,19 @@ function JournalEntryForm({
       </div>
 
       <div className="space-y-4">
+        <AnimatePresence>
+          {cfdiError && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="flex items-center gap-2 text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-xs"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{cfdiError}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div className="flex items-center justify-between border-b border-white/10 pb-2">
           <h3 className="font-semibold text-sm text-indigo-300">Movimientos</h3>
           <div className="flex items-center gap-2">
@@ -2210,7 +2288,19 @@ function JournalEntryForm({
             {appMode === 'fiscal' && (
               <>
                 <div className="col-span-12 md:col-span-6 space-y-1">
-                  <label className="text-[9px] uppercase font-bold text-slate-500">UUID CFDI</label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[9px] uppercase font-bold text-slate-500">UUID CFDI</label>
+                    <label className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:bg-indigo-500/20 cursor-pointer transition-colors text-[10px] font-semibold uppercase tracking-wide">
+                      <FileScan className="w-3.5 h-3.5" />
+                      Leer XML
+                      <input
+                        type="file"
+                        accept=".xml,text/xml,application/xml"
+                        onChange={(e) => handleCFDIUpload(idx, e)}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                   <input
                     type="text"
                     maxLength={36}
@@ -2281,6 +2371,47 @@ function JournalEntryForm({
           </button>
         </div>
       </div>
+      <AnimatePresence>
+        {cfdiDiscrepancy && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-slate-900 border border-amber-500/30 p-6 rounded-2xl shadow-2xl max-w-sm w-full"
+            >
+              <div className="flex items-center gap-3 text-amber-400 mb-4">
+                <AlertCircle className="w-6 h-6" />
+                <h3 className="text-lg font-semibold">Discrepancia detectada</h3>
+              </div>
+              <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+                El XML tiene un total de{' '}
+                <span className="font-mono text-emerald-400 font-bold">{formatCurrency(cfdiDiscrepancy.xmlTotal)}</span>, pero la partida tiene{' '}
+                <span className="font-mono text-rose-400 font-bold">{formatCurrency(cfdiDiscrepancy.currentTotal)}</span>.
+                <br />
+                <br />
+                ¿Qué monto deseas conservar?
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => resolveDiscrepancy(true)}
+                  className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors text-sm shadow-lg shadow-emerald-500/20"
+                >
+                  Usar monto del XML
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resolveDiscrepancy(false)}
+                  className="w-full py-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 font-medium transition-colors text-sm"
+                >
+                  Conservar actual
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </form>
   );
 }
