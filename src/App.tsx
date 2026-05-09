@@ -69,6 +69,7 @@ type AppMode = 'basic' | 'fiscal';
 type AppTab = 'journal' | 't-accounts' | 'balance' | 'profit-loss' | 'assets' | 'electronic';
 type FiscalAccount = Account & { satGroupCode?: string };
 const FISCAL_BALANCE_ACCOUNT_IDS = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-16', 'anc-17', 're-12', 're-13']);
+const ACCOUNTS_SAVE_DEBOUNCE_MS = 300;
 const FISCAL_NAV_TABS = [
   { id: 'assets' as const, label: 'Activos Fijos', shortLabel: 'Activos', icon: Monitor },
   { id: 'electronic' as const, label: 'Cont. Electrónica', shortLabel: 'SAT XML', icon: FileCode }
@@ -203,6 +204,7 @@ export default function App() {
         } else {
           setAccounts(INITIAL_ACCOUNTS);
         }
+        setHasLoadedAccounts(true);
       } catch (error) {
         console.error("Error crítico al cargar datos desde el almacenamiento:", error);
         // Fallback seguro
@@ -210,7 +212,6 @@ export default function App() {
         setJournals([initialJournal]);
         setActiveJournalId(initialJournal.id);
         setAccounts(INITIAL_ACCOUNTS);
-      } finally {
         setHasLoadedAccounts(true);
       }
     };
@@ -239,7 +240,7 @@ export default function App() {
           message: 'No se pudo guardar el catálogo de cuentas. Verifica tu conexión o intenta nuevamente.'
         });
       });
-    }, 300);
+    }, ACCOUNTS_SAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
   }, [accounts, hasLoadedAccounts]);
