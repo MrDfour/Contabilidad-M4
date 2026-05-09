@@ -133,7 +133,7 @@ export default function App() {
   const [appMode, setAppMode] = useState<AppMode>(getStoredAppMode);
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
-  const [accounts] = useState<Account[]>(INITIAL_ACCOUNTS);
+  const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
   const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
   const [activeTab, setActiveTab] = useState<AppTab>('journal');
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'entry' | 'journal', id: string, title: string, message: string } | null>(null);
@@ -142,6 +142,7 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(false);
   const [finalInventory, setFinalInventory] = useState<number>(0);
   const [finalInventories, setFinalInventories] = useState<Record<string, number>>({});
+  const [hasLoadedAccounts, setHasLoadedAccounts] = useState(false);
   const { isUpdateAvailable, latestVersion, downloadUrl } = useCheckForUpdates();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -190,12 +191,22 @@ export default function App() {
           const parsed = typeof savedFixedAssets === 'string' ? JSON.parse(savedFixedAssets) : savedFixedAssets;
           setFixedAssets(parsed);
         }
+
+        const savedAccounts = await loadFromStorage('contasis_accounts');
+        if (savedAccounts) {
+          const parsed = typeof savedAccounts === 'string' ? JSON.parse(savedAccounts) : savedAccounts;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAccounts(parsed);
+          }
+        }
       } catch (error) {
         console.error("Error crítico al cargar datos desde el almacenamiento:", error);
         // Fallback seguro
         const initialJournal: Journal = { id: crypto.randomUUID(), name: 'Diario Inicial', entries: [] };
         setJournals([initialJournal]);
         setActiveJournalId(initialJournal.id);
+      } finally {
+        setHasLoadedAccounts(true);
       }
     };
 
@@ -211,6 +222,11 @@ export default function App() {
   useEffect(() => {
     saveToStorage('contasis_fixed_assets', fixedAssets).catch(console.error);
   }, [fixedAssets]);
+
+  useEffect(() => {
+    if (!hasLoadedAccounts) return;
+    saveToStorage('contasis_accounts', accounts).catch(console.error);
+  }, [accounts, hasLoadedAccounts]);
 
   useEffect(() => {
     localStorage.setItem('contasis_app_mode', appMode);

@@ -12,6 +12,8 @@ export interface Account {
   type: AccountType;
   subtype?: 'circulante' | 'no_circulante';
   satGroupCode?: string;
+  parentId?: string;
+  isReadOnly?: boolean;
 }
 
 export interface Movement {
