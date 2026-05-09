@@ -697,6 +697,9 @@ export default function App() {
                       journalName={activeJournal?.name || ''}
                       finalInventory={finalInventory}
                       setFinalInventory={handleSetFinalInventory}
+                      activeJournalId={activeJournalId}
+                      onAdd={addEntry}
+                      onSetModal={setModalInfo}
                     />
                   </motion.div>
                 )}
@@ -2548,7 +2551,7 @@ function TAccountsView({ tAccountsData, accounts, journalName }: {
 }
 
 // 3. Profit & Loss View
-function ProfitLossView({ accountBalances, accounts, journalName, finalInventory, setFinalInventory }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number, setFinalInventory: (v: number) => void }) {
+function ProfitLossView({ accountBalances, accounts, journalName, finalInventory, setFinalInventory, activeJournalId, onAdd, onSetModal }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number, setFinalInventory: (v: number) => void, activeJournalId: string | null, onAdd: (e: Omit<JournalEntry, 'id'>) => void, onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void }) {
 
   // Helper to get balance by code or name using absolute value
   const getBal = (name: string) => {
@@ -2587,6 +2590,8 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
   const totalOpExpenses = normalizeAmount(opExpenseAccounts.reduce((sum, a) => sum + Math.abs(accountBalances[a.id] || 0), 0));
   const netIncome = normalizeAmount(utilidadBruta - totalOpExpenses);
 
+  const [cierreDate, setCierreDate] = useState(new Date().toISOString().split('T')[0]);
+
   const handleExportPDF = async () => {
     await exportToPDF('profit-loss-canvas', `Estado_de_Resultados_${journalName}`, 'Estado de Resultados', journalName);
   };
@@ -2618,6 +2623,99 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
     ];
     await exportToExcel(data, `Estado_Resultados_${journalName}`, 'P&L');
   };
+
+  const handleCierreEjercicio = () => {
+    if (!activeJournalId) {
+      onSetModal({
+        type: 'error',
+        title: 'Sin diario activo',
+        message: 'Selecciona un libro diario antes de ejecutar el cierre de ejercicio.'
+      });
+      return;
+    }
+
+    // Collect all revenue accounts with a non-zero balance
+    const revenueAccounts = accounts.filter(a => a.type === 'revenue' && (accountBalances[a.id] || 0) !== 0);
+    // Collect all expense accounts with a non-zero balance
+    const expenseAccounts = accounts.filter(a => a.type === 'expense' && (accountBalances[a.id] || 0) !== 0);
+
+    if (revenueAccounts.length === 0 && expenseAccounts.length === 0) {
+      onSetModal({
+        type: 'error',
+        title: 'Sin movimientos',
+        message: 'No hay cuentas de resultados con saldo para cerrar.'
+      });
+      return;
+    }
+
+    // Sum of revenue balances (credit-normal, positive = credit)
+    const totalRevenue = normalizeAmount(revenueAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0));
+    // Sum of expense balances (debit-normal, positive = debit)
+    const totalExpenses = normalizeAmount(expenseAccounts.reduce((sum, a) => sum + (accountBalances[a.id] || 0), 0));
+    const net = normalizeAmount(totalRevenue - totalExpenses);
+
+    const movements: Movement[] = [];
+
+    // Debit each revenue account to zero it out
+    for (const acc of revenueAccounts) {
+      const bal = accountBalances[acc.id] || 0;
+      if (bal > 0) {
+        movements.push({ accountId: acc.id, type: 'debit', amount: normalizeAmount(bal) });
+      } else if (bal < 0) {
+        movements.push({ accountId: acc.id, type: 'credit', amount: normalizeAmount(Math.abs(bal)) });
+      }
+    }
+
+    // Credit each expense account to zero it out
+    for (const acc of expenseAccounts) {
+      const bal = accountBalances[acc.id] || 0;
+      if (bal > 0) {
+        movements.push({ accountId: acc.id, type: 'credit', amount: normalizeAmount(bal) });
+      } else if (bal < 0) {
+        movements.push({ accountId: acc.id, type: 'debit', amount: normalizeAmount(Math.abs(bal)) });
+      }
+    }
+
+    // Post net to Utilidad del Ejercicio (cc-3) or Pérdida del Ejercicio (cc-4)
+    if (net > 0) {
+      const utilidadAcc = accounts.find(a => a.id === 'cc-3') || accounts.find(a => a.name === 'Utilidad del Ejercicio');
+      if (!utilidadAcc) {
+        onSetModal({
+          type: 'error',
+          title: 'Cuenta no encontrada',
+          message: 'No se encontró la cuenta "Utilidad del Ejercicio". Verifica el catálogo de cuentas.'
+        });
+        return;
+      }
+      movements.push({ accountId: utilidadAcc.id, type: 'credit', amount: net });
+    } else if (net < 0) {
+      const perdidaAcc = accounts.find(a => a.id === 'cc-4') || accounts.find(a => a.name === 'Pérdida del Ejercicio');
+      if (!perdidaAcc) {
+        onSetModal({
+          type: 'error',
+          title: 'Cuenta no encontrada',
+          message: 'No se encontró la cuenta "Pérdida del Ejercicio". Verifica el catálogo de cuentas.'
+        });
+        return;
+      }
+      movements.push({ accountId: perdidaAcc.id, type: 'debit', amount: normalizeAmount(Math.abs(net)) });
+    }
+
+    onAdd({
+      date: cierreDate,
+      description: `Cierre de Ejercicio — ${journalName}`,
+      movements,
+      policyType: 'diario'
+    });
+
+    const resultLabel = net > 0 ? 'Utilidad del Ejercicio' : net < 0 ? 'Pérdida del Ejercicio' : 'resultado nulo';
+    onSetModal({
+      type: 'success',
+      title: 'Cierre de Ejercicio registrado',
+      message: `Se generó el asiento de cierre con ${movements.length} movimientos. ${net !== 0 ? `${resultLabel}: ${formatCurrency(Math.abs(net))}` : 'Las cuentas quedan en cero.'}`
+    });
+  };
+
 
   return (
     <div className="space-y-6">
@@ -2655,6 +2753,25 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 text-sm font-medium"
             >
               <FileText className="w-4 h-4" /> PDF
+            </button>
+          </div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+            <div className="flex flex-col">
+              <label className="text-[10px] uppercase font-bold text-slate-500 mb-1 ml-1">Fecha de Cierre</label>
+              <input
+                type="date"
+                aria-label="Fecha de cierre de ejercicio"
+                value={cierreDate}
+                onChange={(e) => setCierreDate(e.target.value)}
+                className="bg-white/5 border border-amber-500/30 rounded-lg px-3 py-2 text-sm text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 font-mono"
+              />
+            </div>
+            <button
+              onClick={handleCierreEjercicio}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-600/80 text-white rounded-lg hover:bg-amber-500 transition-all shadow-lg shadow-amber-500/20 text-sm font-medium border border-amber-500/30"
+              title="Saldar todas las cuentas de resultados y registrar el asiento de cierre en el Libro Diario"
+            >
+              <RefreshCw className="w-4 h-4" /> Cierre de Ejercicio
             </button>
           </div>
         </div>
