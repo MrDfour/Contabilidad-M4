@@ -230,14 +230,18 @@ export default function App() {
 
   useEffect(() => {
     if (!hasLoadedAccounts || accounts.length === 0) return;
-    saveToStorage('contasis_accounts', accounts).catch((error) => {
-      console.error(error);
-      setModalInfo({
-        type: 'error',
-        title: 'Error al guardar',
-        message: 'No se pudo guardar el catálogo de cuentas.'
+    const timeoutId = window.setTimeout(() => {
+      saveToStorage('contasis_accounts', accounts).catch((error) => {
+        console.error(error);
+        setModalInfo({
+          type: 'error',
+          title: 'Error al guardar',
+          message: 'No se pudo guardar el catálogo de cuentas. Verifica tu conexión o intenta nuevamente.'
+        });
       });
-    });
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
   }, [accounts, hasLoadedAccounts]);
 
   useEffect(() => {
