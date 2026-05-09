@@ -133,7 +133,7 @@ export default function App() {
   const [appMode, setAppMode] = useState<AppMode>(getStoredAppMode);
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
   const [activeTab, setActiveTab] = useState<AppTab>('journal');
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'entry' | 'journal', id: string, title: string, message: string } | null>(null);
@@ -197,7 +197,11 @@ export default function App() {
           const parsed = typeof savedAccounts === 'string' ? JSON.parse(savedAccounts) : savedAccounts;
           if (Array.isArray(parsed) && parsed.length > 0) {
             setAccounts(parsed);
+          } else {
+            setAccounts(INITIAL_ACCOUNTS);
           }
+        } else {
+          setAccounts(INITIAL_ACCOUNTS);
         }
       } catch (error) {
         console.error("Error crítico al cargar datos desde el almacenamiento:", error);
@@ -205,6 +209,7 @@ export default function App() {
         const initialJournal: Journal = { id: crypto.randomUUID(), name: 'Diario Inicial', entries: [] };
         setJournals([initialJournal]);
         setActiveJournalId(initialJournal.id);
+        setAccounts(INITIAL_ACCOUNTS);
       } finally {
         setHasLoadedAccounts(true);
       }
@@ -224,8 +229,15 @@ export default function App() {
   }, [fixedAssets]);
 
   useEffect(() => {
-    if (!hasLoadedAccounts) return;
-    saveToStorage('contasis_accounts', accounts).catch(console.error);
+    if (!hasLoadedAccounts || accounts.length === 0) return;
+    saveToStorage('contasis_accounts', accounts).catch((error) => {
+      console.error(error);
+      setModalInfo({
+        type: 'error',
+        title: 'Error al guardar',
+        message: 'No se pudo guardar el catálogo de cuentas.'
+      });
+    });
   }, [accounts, hasLoadedAccounts]);
 
   useEffect(() => {
