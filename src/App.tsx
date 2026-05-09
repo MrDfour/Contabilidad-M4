@@ -230,7 +230,7 @@ export default function App() {
   }, [fixedAssets]);
 
   useEffect(() => {
-    if (!hasLoadedAccounts || accounts.length === 0) return;
+    if (!hasLoadedAccounts) return;
     const timeoutId = window.setTimeout(() => {
       saveToStorage('contasis_accounts', accounts).catch((error) => {
         console.error(error);
