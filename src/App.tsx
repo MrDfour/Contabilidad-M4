@@ -2590,6 +2590,8 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
   const totalOpExpenses = normalizeAmount(opExpenseAccounts.reduce((sum, a) => sum + Math.abs(accountBalances[a.id] || 0), 0));
   const netIncome = normalizeAmount(utilidadBruta - totalOpExpenses);
 
+  const [cierreDate, setCierreDate] = useState(new Date().toISOString().split('T')[0]);
+
   const handleExportPDF = async () => {
     await exportToPDF('profit-loss-canvas', `Estado_de_Resultados_${journalName}`, 'Estado de Resultados', journalName);
   };
@@ -2677,19 +2679,30 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
     // Post net to Utilidad del Ejercicio (cc-3) or Pérdida del Ejercicio (cc-4)
     if (net > 0) {
       const utilidadAcc = accounts.find(a => a.id === 'cc-3') || accounts.find(a => a.name === 'Utilidad del Ejercicio');
-      if (utilidadAcc) {
-        movements.push({ accountId: utilidadAcc.id, type: 'credit', amount: net });
+      if (!utilidadAcc) {
+        onSetModal({
+          type: 'error',
+          title: 'Cuenta no encontrada',
+          message: 'No se encontró la cuenta "Utilidad del Ejercicio". Verifica el catálogo de cuentas.'
+        });
+        return;
       }
+      movements.push({ accountId: utilidadAcc.id, type: 'credit', amount: net });
     } else if (net < 0) {
       const perdidaAcc = accounts.find(a => a.id === 'cc-4') || accounts.find(a => a.name === 'Pérdida del Ejercicio');
-      if (perdidaAcc) {
-        movements.push({ accountId: perdidaAcc.id, type: 'debit', amount: normalizeAmount(Math.abs(net)) });
+      if (!perdidaAcc) {
+        onSetModal({
+          type: 'error',
+          title: 'Cuenta no encontrada',
+          message: 'No se encontró la cuenta "Pérdida del Ejercicio". Verifica el catálogo de cuentas.'
+        });
+        return;
       }
+      movements.push({ accountId: perdidaAcc.id, type: 'debit', amount: normalizeAmount(Math.abs(net)) });
     }
 
-    const today = new Date().toISOString().split('T')[0];
     onAdd({
-      date: today,
+      date: cierreDate,
       description: `Cierre de Ejercicio — ${journalName}`,
       movements,
       policyType: 'diario'
@@ -2741,9 +2754,21 @@ function ProfitLossView({ accountBalances, accounts, journalName, finalInventory
             >
               <FileText className="w-4 h-4" /> PDF
             </button>
+          </div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+            <div className="flex flex-col">
+              <label className="text-[10px] uppercase font-bold text-slate-500 mb-1 ml-1">Fecha de Cierre</label>
+              <input
+                type="date"
+                aria-label="Fecha de cierre de ejercicio"
+                value={cierreDate}
+                onChange={(e) => setCierreDate(e.target.value)}
+                className="bg-white/5 border border-amber-500/30 rounded-lg px-3 py-2 text-sm text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 font-mono"
+              />
+            </div>
             <button
               onClick={handleCierreEjercicio}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-amber-600/80 text-white rounded-lg hover:bg-amber-500 transition-all shadow-lg shadow-amber-500/20 text-sm font-medium border border-amber-500/30"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-600/80 text-white rounded-lg hover:bg-amber-500 transition-all shadow-lg shadow-amber-500/20 text-sm font-medium border border-amber-500/30"
               title="Saldar todas las cuentas de resultados y registrar el asiento de cierre en el Libro Diario"
             >
               <RefreshCw className="w-4 h-4" /> Cierre de Ejercicio
