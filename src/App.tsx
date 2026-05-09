@@ -69,6 +69,7 @@ type AppMode = 'basic' | 'fiscal';
 type AppTab = 'journal' | 't-accounts' | 'balance' | 'profit-loss' | 'assets' | 'electronic';
 type FiscalAccount = Account & { satGroupCode?: string };
 const FISCAL_BALANCE_ACCOUNT_IDS = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-16', 'anc-17', 're-12', 're-13']);
+const ACCOUNTS_SAVE_DEBOUNCE_MS = 300;
 const FISCAL_NAV_TABS = [
   { id: 'assets' as const, label: 'Activos Fijos', shortLabel: 'Activos', icon: Monitor },
   { id: 'electronic' as const, label: 'Cont. Electrónica', shortLabel: 'SAT XML', icon: FileCode }
@@ -133,7 +134,7 @@ export default function App() {
   const [appMode, setAppMode] = useState<AppMode>(getStoredAppMode);
   const [journals, setJournals] = useState<Journal[]>([]);
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
-  const [accounts] = useState<Account[]>(INITIAL_ACCOUNTS);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
   const [activeTab, setActiveTab] = useState<AppTab>('journal');
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'entry' | 'journal', id: string, title: string, message: string } | null>(null);
@@ -142,6 +143,7 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(false);
   const [finalInventory, setFinalInventory] = useState<number>(0);
   const [finalInventories, setFinalInventories] = useState<Record<string, number>>({});
+  const [hasLoadedAccounts, setHasLoadedAccounts] = useState(false);
   const { isUpdateAvailable, latestVersion, downloadUrl } = useCheckForUpdates();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -190,12 +192,27 @@ export default function App() {
           const parsed = typeof savedFixedAssets === 'string' ? JSON.parse(savedFixedAssets) : savedFixedAssets;
           setFixedAssets(parsed);
         }
+
+        const savedAccounts = await loadFromStorage('contasis_accounts');
+        if (savedAccounts) {
+          const parsed = typeof savedAccounts === 'string' ? JSON.parse(savedAccounts) : savedAccounts;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAccounts(parsed);
+          } else {
+            setAccounts(INITIAL_ACCOUNTS);
+          }
+        } else {
+          setAccounts(INITIAL_ACCOUNTS);
+        }
+        setHasLoadedAccounts(true);
       } catch (error) {
         console.error("Error crítico al cargar datos desde el almacenamiento:", error);
         // Fallback seguro
         const initialJournal: Journal = { id: crypto.randomUUID(), name: 'Diario Inicial', entries: [] };
         setJournals([initialJournal]);
         setActiveJournalId(initialJournal.id);
+        setAccounts(INITIAL_ACCOUNTS);
+        setHasLoadedAccounts(true);
       }
     };
 
@@ -211,6 +228,22 @@ export default function App() {
   useEffect(() => {
     saveToStorage('contasis_fixed_assets', fixedAssets).catch(console.error);
   }, [fixedAssets]);
+
+  useEffect(() => {
+    if (!hasLoadedAccounts) return;
+    const timeoutId = window.setTimeout(() => {
+      saveToStorage('contasis_accounts', accounts).catch((error) => {
+        console.error('Failed to save accounts:', error);
+        setModalInfo({
+          type: 'error',
+          title: 'Error al guardar',
+          message: 'No se pudo guardar el catálogo de cuentas. Intenta nuevamente o contacta soporte si el problema persiste.'
+        });
+      });
+    }, ACCOUNTS_SAVE_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [accounts, hasLoadedAccounts, setModalInfo]);
 
   useEffect(() => {
     localStorage.setItem('contasis_app_mode', appMode);
