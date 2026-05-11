@@ -1,11 +1,43 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { Check, Edit2, Trash2, X } from 'lucide-react';
 import type { Account } from '../types';
 import { formatSatGroupCode } from '../lib/utils';
+import { saveToStorage } from '../services/storageService';
 
 type AppMode = 'basic' | 'fiscal';
 type FiscalAccount = Account & { satGroupCode?: string };
+type ModalInfo = { type: 'success' | 'error'; title: string; message: string } | null;
+type CatalogViewProps = {
+  accounts: FiscalAccount[];
+  appMode: AppMode;
+  onSetModal?: (modal: NonNullable<ModalInfo>) => void;
+};
 
-export function CatalogView({ accounts, appMode }: { accounts: FiscalAccount[]; appMode: AppMode }) {
+export function CatalogView({ accounts, appMode, onSetModal }: CatalogViewProps) {
+  const [localAccounts, setLocalAccounts] = useState<FiscalAccount[]>(accounts);
+  const [hasLocalChanges, setHasLocalChanges] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editCode, setEditCode] = useState('');
+  const [modalInfo, setModalInfo] = useState<ModalInfo>(null);
+
+  useEffect(() => {
+    if (hasLocalChanges) return;
+    setLocalAccounts(accounts);
+  }, [accounts, hasLocalChanges]);
+
+  useEffect(() => {
+    if (!hasLocalChanges) return;
+    saveToStorage('contasis_accounts', localAccounts).catch(console.error);
+  }, [localAccounts, hasLocalChanges]);
+
+  useEffect(() => {
+    if (!modalInfo) return;
+    const timeoutId = window.setTimeout(() => setModalInfo(null), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [modalInfo]);
+
   const typeLabels: Record<Account['type'], string> = {
     asset: 'Activo',
     liability: 'Pasivo',
@@ -14,12 +46,83 @@ export function CatalogView({ accounts, appMode }: { accounts: FiscalAccount[]; 
     expense: 'Gasto'
   };
 
+  const handleSaveEdit = (id: string) => {
+    const normalizedEditCode = editCode.trim().toLowerCase();
+
+    if (!editName.trim() || !editCode.trim()) {
+      const errorModal = { type: 'error', title: 'Campos vacíos', message: 'El nombre y el código no pueden estar vacíos.' } as const;
+      setModalInfo(errorModal);
+      onSetModal?.(errorModal);
+      return;
+    }
+
+    if (localAccounts.some(a => a.code.trim().toLowerCase() === normalizedEditCode && a.id !== id)) {
+      const errorModal = { type: 'error', title: 'Código duplicado', message: 'Ese código ya está asignado a otra cuenta.' } as const;
+      setModalInfo(errorModal);
+      onSetModal?.(errorModal);
+      return;
+    }
+
+    const updatedAccounts = localAccounts.map(a => a.id === id ? { ...a, name: editName.trim(), code: editCode.trim() } : a);
+    setLocalAccounts(updatedAccounts);
+    setHasLocalChanges(true);
+    setEditingId(null);
+    const successModal = { type: 'success', title: 'Cuenta Actualizada', message: 'Los cambios se han guardado correctamente.' } as const;
+    setModalInfo(successModal);
+    onSetModal?.(successModal);
+  };
+
+  const handleStartEdit = (account: FiscalAccount) => {
+    setEditingId(account.id);
+    setPendingDeleteId(null);
+    setEditName(account.name);
+    setEditCode(account.code);
+    setModalInfo(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setPendingDeleteId(null);
+    setEditName('');
+    setEditCode('');
+    setModalInfo(null);
+  };
+
+  const handleRequestDelete = (id: string) => {
+    setPendingDeleteId(id);
+    setModalInfo({
+      type: 'error',
+      title: 'Confirmar eliminación',
+      message: 'Confirma la eliminación para continuar.'
+    });
+  };
+
+  const handleDeleteAccount = (id: string) => {
+    const updatedAccounts = localAccounts.filter(account => account.id !== id);
+    setLocalAccounts(updatedAccounts);
+    setHasLocalChanges(true);
+    setPendingDeleteId(null);
+    if (editingId === id) handleCancelEdit();
+    const successModal = { type: 'success', title: 'Cuenta eliminada', message: 'La cuenta se eliminó correctamente.' } as const;
+    setModalInfo(successModal);
+    onSetModal?.(successModal);
+  };
+
   return (
     <section className="space-y-4">
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
         <h2 className="text-2xl font-bold text-white">Catálogo de Cuentas</h2>
         <p className="text-slate-400 text-sm mt-1">Consulta de cuentas disponibles en el sistema.</p>
       </div>
+      {modalInfo && (
+        <div
+          role={modalInfo.type === 'error' ? 'alert' : 'status'}
+          className={`rounded-xl border px-4 py-3 text-sm ${modalInfo.type === 'error' ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}
+        >
+          <p className="font-semibold">{modalInfo.title}</p>
+          <p>{modalInfo.message}</p>
+        </div>
+      )}
       <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -32,13 +135,36 @@ export function CatalogView({ accounts, appMode }: { accounts: FiscalAccount[]; 
                   <th className="px-4 py-3 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px]">SAT</th>
                 )}
                 <th className="px-4 py-3 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px]">Estado</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px]">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {accounts.map(account => (
+              {localAccounts.map(account => (
                 <tr key={account.id} className="hover:bg-white/5">
-                  <td className="px-4 py-3 font-mono text-indigo-300">{account.code}</td>
-                  <td className="px-4 py-3 text-slate-200">{account.name}</td>
+                  <td className="px-4 py-3 font-mono text-indigo-300">
+                    {editingId === account.id ? (
+                      <input
+                        value={editCode}
+                        onChange={e => setEditCode(e.target.value)}
+                        aria-label="Editar código de cuenta"
+                        className="w-full rounded-md border border-white/15 bg-slate-900/50 px-2 py-1 text-indigo-200 outline-none focus:border-indigo-400"
+                      />
+                    ) : (
+                      account.code
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-slate-200">
+                    {editingId === account.id ? (
+                      <input
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        aria-label="Editar nombre de cuenta"
+                        className="w-full rounded-md border border-white/15 bg-slate-900/50 px-2 py-1 text-slate-100 outline-none focus:border-indigo-400"
+                      />
+                    ) : (
+                      account.name
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-400">{typeLabels[account.type]}</td>
                   {appMode === 'fiscal' && (
                     <td className="px-4 py-3 text-slate-500">{account.satGroupCode ? formatSatGroupCode(account.satGroupCode) : '—'}</td>
@@ -52,6 +178,70 @@ export function CatalogView({ accounts, appMode }: { accounts: FiscalAccount[]; 
                       <span className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                         Editable
                       </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {account.isReadOnly ? (
+                      <span className="text-slate-500">—</span>
+                    ) : editingId === account.id ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleSaveEdit(account.id)}
+                          aria-label="Guardar cambios"
+                          className="inline-flex items-center justify-center rounded-md border border-emerald-400/40 bg-emerald-500/10 p-1.5 text-emerald-300 transition hover:bg-emerald-500/20"
+                          title="Guardar"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={handleCancelEdit}
+                          aria-label="Cancelar edición"
+                          className="inline-flex items-center justify-center rounded-md border border-rose-400/40 bg-rose-500/10 p-1.5 text-rose-300 transition hover:bg-rose-500/20"
+                          title="Cancelar"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleStartEdit(account)}
+                          aria-label="Editar cuenta"
+                          className="inline-flex items-center justify-center rounded-md border border-indigo-400/40 bg-indigo-500/10 p-1.5 text-indigo-300 transition hover:bg-indigo-500/20"
+                          title="Editar"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        {pendingDeleteId === account.id ? (
+                          <>
+                            <button
+                              onClick={() => handleDeleteAccount(account.id)}
+                              aria-label="Confirmar eliminación de cuenta"
+                              className="inline-flex items-center justify-center rounded-md border border-rose-400/40 bg-rose-500/10 p-1.5 text-rose-300 transition hover:bg-rose-500/20"
+                              title="Confirmar"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setPendingDeleteId(null)}
+                              aria-label="Cancelar eliminación"
+                              className="inline-flex items-center justify-center rounded-md border border-slate-400/40 bg-slate-500/10 p-1.5 text-slate-300 transition hover:bg-slate-500/20"
+                              title="Cancelar"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => handleRequestDelete(account.id)}
+                            aria-label="Eliminar cuenta"
+                            className="inline-flex items-center justify-center rounded-md border border-rose-400/40 bg-rose-500/10 p-1.5 text-rose-300 transition hover:bg-rose-500/20"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>
