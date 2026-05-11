@@ -432,7 +432,7 @@ export default function App() {
       const parsed = JSON.parse(text);
       const backup = parsed.data || parsed; // Soporte para formato nuevo o legacy
       
-      if (backup.journals && backup.accounts) {
+      if (Array.isArray(backup.journals) && Array.isArray(backup.accounts)) {
         setJournals(backup.journals);
         setAccounts(backup.accounts);
         if (backup.fixedAssets) setFixedAssets(backup.fixedAssets);
