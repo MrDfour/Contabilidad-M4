@@ -1,27 +1,23 @@
 import { useState, useEffect } from 'react';
 
-const GITHUB_RELEASES_API =
-  'https://api.github.com/repos/mrdfour/contabilidad-m4/releases/latest';
+const GITHUB_RELEASES_API = 'https://api.github.com/repos/mrdfour/contabilidad-m4/releases/latest';
+
+// 12 horas en milisegundos para el chequeo silencioso
+const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 interface UpdateInfo {
   isUpdateAvailable: boolean;
   latestVersion: string;
   downloadUrl: string;
+  isBackgroundUpdate: boolean; // Indica si se encontró silenciosamente durante el uso
 }
 
-/**
- * Parses a version string into a numeric tuple [major, minor, patch],
- * ignoring any trailing non-numeric suffixes (e.g. "0.0.5c" → [0, 0, 5]).
- */
 function parseVersion(version: string): [number, number, number] {
   const cleaned = version.replace(/^v/, '');
   const parts = cleaned.split('.').map(p => parseInt(p, 10) || 0);
   return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0];
 }
 
-/**
- * Returns true if `remote` is strictly newer than `local`.
- */
 function isNewer(local: string, remote: string): boolean {
   const [lMaj, lMin, lPat] = parseVersion(local);
   const [rMaj, rMin, rPat] = parseVersion(remote);
@@ -30,23 +26,20 @@ function isNewer(local: string, remote: string): boolean {
   return rPat > lPat;
 }
 
-// On Electron/desktop, the native electron-updater handles updates. Skip the
-// in-app hook entirely so the modal never duplicates the native dialog and the
-// desktop build never tries to download an Android APK.
-const isElectron = typeof navigator !== 'undefined' &&
-  navigator.userAgent.toLowerCase().includes('electron');
+const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
 
 export function useCheckForUpdates(): UpdateInfo {
   const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
   const [latestVersion, setLatestVersion] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
+  const [isBackgroundUpdate, setIsBackgroundUpdate] = useState(false);
 
   useEffect(() => {
     if (isElectron) return;
 
     let cancelled = false;
 
-    async function checkForUpdates() {
+    async function checkForUpdates(isBackground: boolean) {
       try {
         const response = await fetch(GITHUB_RELEASES_API, {
           headers: { Accept: 'application/vnd.github+json' },
@@ -58,18 +51,12 @@ export function useCheckForUpdates(): UpdateInfo {
         if (cancelled) return;
 
         const tagName: string = data.tag_name ?? '';
-        const assets: { name: string; browser_download_url: string }[] =
-          data.assets ?? [];
-
-        const apkAsset = assets.find(a =>
-          a.name.toLowerCase().endsWith('.apk')
-        );
+        const assets: { name: string; browser_download_url: string }[] = data.assets ?? [];
+        const apkAsset = assets.find(a => a.name.toLowerCase().endsWith('.apk'));
 
         if (!tagName) return;
 
-        const currentVersion = typeof __APP_VERSION__ !== 'undefined'
-          ? __APP_VERSION__
-          : null;
+        const currentVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : null;
 
         if (!currentVersion) return;
 
@@ -77,15 +64,35 @@ export function useCheckForUpdates(): UpdateInfo {
           setLatestVersion(tagName.replace(/^v/, ''));
           setDownloadUrl(apkAsset.browser_download_url);
           setIsUpdateAvailable(true);
+          setIsBackgroundUpdate(isBackground); // Marcamos si fue un chequeo silencioso
         }
       } catch {
-        // Silently ignore network / parse errors so the app never crashes
+        // Ignorar silenciosamente errores de red
       }
     }
 
-    checkForUpdates();
-    return () => { cancelled = true; };
+    // 1. Chequeo inicial inmediato (al abrir la app)
+    checkForUpdates(false);
+
+    // 2. Calcular Jitter (Ruido aleatorio de 0 a 60 minutos)
+    const jitterMs = Math.floor(Math.random() * 60 * 60 * 1000);
+
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+
+    // 3. Programar el primer chequeo en segundo plano
+    const timeoutId = setTimeout(() => {
+      checkForUpdates(true);
+      // Establecer el ciclo recurrente
+      intervalId = setInterval(() => checkForUpdates(true), CHECK_INTERVAL_MS);
+    }, CHECK_INTERVAL_MS + jitterMs);
+
+    // 4. PREVENCIÓN DE MEMORY LEAKS
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+    };
   }, []);
 
-  return { isUpdateAvailable, latestVersion, downloadUrl };
+  return { isUpdateAvailable, latestVersion, downloadUrl, isBackgroundUpdate };
 }
