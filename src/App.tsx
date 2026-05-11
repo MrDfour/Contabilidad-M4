@@ -109,6 +109,28 @@ export default function App() {
   }, []);
   
   const activeJournal = journals.find(j => j.id === activeJournalId) || null;
+  // --- INICIO CATÁLOGO HÍBRIDO ---
+  const combinedAccounts = useMemo(() => {
+    const globals = accounts.filter(a => a.isReadOnly);
+    const locals = activeJournal?.subAccounts || [];
+    return [...globals, ...locals];
+  }, [accounts, activeJournal]);
+
+  const handleCombinedAccountsUpdate = (action: React.SetStateAction<Account[]>) => {
+    if (!activeJournalId) return;
+
+    const nextCombinedAccounts = typeof action === 'function' ? action(combinedAccounts) : action;
+    const nextLocalAccounts = nextCombinedAccounts.filter(a => !a.isReadOnly);
+
+    setJournals(prev =>
+      prev.map(j =>
+        j.id === activeJournalId
+          ? { ...j, subAccounts: nextLocalAccounts }
+          : j
+      )
+    );
+  };
+  // --- FIN CATÁLOGO HÍBRIDO ---
   const hasActiveJournal = Boolean(activeJournal);
   const entries = activeJournal?.entries || [];
 
@@ -251,7 +273,7 @@ export default function App() {
       const typedData = data as { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] };
       const totalDebit = normalizeAmount(typedData.debits.reduce((sum, d) => sum + d.amount, 0));
       const totalCredit = normalizeAmount(typedData.credits.reduce((sum, c) => sum + c.amount, 0));
-      const account = accounts.find(a => a.id === accountId);
+      const account = combinedAccounts.find(a => a.id === accountId);
       
       // Standard balance side
       if (account?.type === 'asset' || account?.type === 'expense') {
@@ -261,7 +283,7 @@ export default function App() {
       }
     });
     return balances;
-  }, [tAccountsData, accounts]);
+  }, [tAccountsData, combinedAccounts]);
 
   const addEntry = (newEntry: Omit<JournalEntry, 'id'>) => {
     if (!activeJournalId) return;
@@ -634,7 +656,7 @@ export default function App() {
                         });
                       }}
                       entries={entries}
-                      accounts={accounts}
+                      accounts={combinedAccounts}
                       onAdd={addEntry}
                       onUpdate={updateEntry}
                       onMove={moveEntry}
@@ -662,7 +684,7 @@ export default function App() {
                   >
                     <TAccountsView
                       tAccountsData={tAccountsData}
-                      accounts={accounts}
+                      accounts={combinedAccounts}
                       journalName={activeJournal?.name || ''}
                     />
                   </motion.div>
@@ -677,7 +699,7 @@ export default function App() {
                   >
                     <BalanceSheetView
                       accountBalances={accountBalances}
-                      accounts={accounts}
+                      accounts={combinedAccounts}
                       journalName={activeJournal?.name || ''}
                       finalInventory={finalInventory}
                       appMode={appMode}
@@ -694,7 +716,7 @@ export default function App() {
                   >
                     <ProfitLossView
                       accountBalances={accountBalances}
-                      accounts={accounts}
+                      accounts={combinedAccounts}
                       journalName={activeJournal?.name || ''}
                       finalInventory={finalInventory}
                       setFinalInventory={handleSetFinalInventory}
@@ -713,8 +735,8 @@ export default function App() {
                     exit={{ opacity: 0, y: -10 }}
                   >
                     <CatalogView
-                      accounts={accounts}
-                      setAccounts={setAccounts}
+                      accounts={combinedAccounts}
+                      setAccounts={handleCombinedAccountsUpdate}
                       entries={entries}
                       appMode={appMode}
                       onSetModal={setModalInfo}
@@ -730,7 +752,7 @@ export default function App() {
                     exit={{ opacity: 0, y: -10 }}
                   >
                     <FixedAssetsView
-                      accounts={accounts}
+                      accounts={combinedAccounts}
                       fixedAssets={fixedAssets}
                       onSetFixedAssets={setFixedAssets}
                       activeJournalId={activeJournalId}
@@ -748,7 +770,7 @@ export default function App() {
                     exit={{ opacity: 0, y: -10 }}
                   >
                     <ContabilidadElectronicaView
-                      accounts={accounts}
+                      accounts={combinedAccounts}
                       entries={entries}
                       tAccountsData={tAccountsData}
                       onSetModal={setModalInfo}

@@ -36,6 +36,7 @@ export interface Journal {
   id: string;
   name: string;
   entries: JournalEntry[];
+  subAccounts?: Account[];
 }
 
 export interface FixedAsset {
