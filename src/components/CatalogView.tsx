@@ -6,8 +6,14 @@ import { formatSatGroupCode } from '../lib/utils';
 type AppMode = 'basic' | 'fiscal';
 type FiscalAccount = Account & { satGroupCode?: string };
 type ModalInfo = { type: 'success' | 'error'; title: string; message: string } | null;
+type CatalogViewProps = {
+  accounts: FiscalAccount[];
+  appMode: AppMode;
+  setAccounts?: React.Dispatch<React.SetStateAction<FiscalAccount[]>>;
+  onSetModal?: (modal: NonNullable<ModalInfo>) => void;
+};
 
-export function CatalogView({ accounts, appMode }: { accounts: FiscalAccount[]; appMode: AppMode }) {
+export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: CatalogViewProps) {
   const [localAccounts, setLocalAccounts] = useState<FiscalAccount[]>(accounts);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -17,6 +23,12 @@ export function CatalogView({ accounts, appMode }: { accounts: FiscalAccount[]; 
   useEffect(() => {
     setLocalAccounts(accounts);
   }, [accounts]);
+
+  useEffect(() => {
+    if (!modalInfo) return;
+    const timeoutId = window.setTimeout(() => setModalInfo(null), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [modalInfo]);
 
   const typeLabels: Record<Account['type'], string> = {
     asset: 'Activo',
@@ -28,36 +40,51 @@ export function CatalogView({ accounts, appMode }: { accounts: FiscalAccount[]; 
 
   const handleSaveEdit = (id: string) => {
     if (!editName.trim() || !editCode.trim()) {
-      setModalInfo({ type: 'error', title: 'Campos vacíos', message: 'El nombre y el código no pueden estar vacíos.' });
+      const errorModal = { type: 'error', title: 'Campos vacíos', message: 'El nombre y el código no pueden estar vacíos.' } as const;
+      setModalInfo(errorModal);
+      onSetModal?.(errorModal);
       return;
     }
 
     if (localAccounts.some(a => a.code === editCode.trim() && a.id !== id)) {
-      setModalInfo({ type: 'error', title: 'Código duplicado', message: 'Ese código ya está asignado a otra cuenta.' });
+      const errorModal = { type: 'error', title: 'Código duplicado', message: 'Ese código ya está asignado a otra cuenta.' } as const;
+      setModalInfo(errorModal);
+      onSetModal?.(errorModal);
       return;
     }
 
-    setLocalAccounts(prev => prev.map(a => a.id === id ? { ...a, name: editName.trim(), code: editCode.trim() } : a));
+    const updatedAccounts = localAccounts.map(a => a.id === id ? { ...a, name: editName.trim(), code: editCode.trim() } : a);
+    setLocalAccounts(updatedAccounts);
+    setAccounts?.(updatedAccounts);
     setEditingId(null);
-    setModalInfo({ type: 'success', title: 'Cuenta Actualizada', message: 'Los cambios se han guardado correctamente.' });
+    const successModal = { type: 'success', title: 'Cuenta Actualizada', message: 'Los cambios se han guardado correctamente.' } as const;
+    setModalInfo(successModal);
+    onSetModal?.(successModal);
   };
 
   const handleStartEdit = (account: FiscalAccount) => {
     setEditingId(account.id);
     setEditName(account.name);
     setEditCode(account.code);
+    setModalInfo(null);
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
     setEditName('');
     setEditCode('');
+    setModalInfo(null);
   };
 
   const handleDeleteAccount = (id: string) => {
-    setLocalAccounts(prev => prev.filter(account => account.id !== id));
+    if (!window.confirm('¿Seguro que deseas eliminar esta subcuenta?')) return;
+    const updatedAccounts = localAccounts.filter(account => account.id !== id);
+    setLocalAccounts(updatedAccounts);
+    setAccounts?.(updatedAccounts);
     if (editingId === id) handleCancelEdit();
-    setModalInfo({ type: 'success', title: 'Cuenta eliminada', message: 'La subcuenta se eliminó correctamente.' });
+    const successModal = { type: 'success', title: 'Cuenta eliminada', message: 'La subcuenta se eliminó correctamente.' } as const;
+    setModalInfo(successModal);
+    onSetModal?.(successModal);
   };
 
   return (
@@ -67,7 +94,10 @@ export function CatalogView({ accounts, appMode }: { accounts: FiscalAccount[]; 
         <p className="text-slate-400 text-sm mt-1">Consulta de cuentas disponibles en el sistema.</p>
       </div>
       {modalInfo && (
-        <div className={`rounded-xl border px-4 py-3 text-sm ${modalInfo.type === 'error' ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}>
+        <div
+          role={modalInfo.type === 'error' ? 'alert' : 'status'}
+          className={`rounded-xl border px-4 py-3 text-sm ${modalInfo.type === 'error' ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}
+        >
           <p className="font-semibold">{modalInfo.title}</p>
           <p>{modalInfo.message}</p>
         </div>
@@ -95,6 +125,7 @@ export function CatalogView({ accounts, appMode }: { accounts: FiscalAccount[]; 
                       <input
                         value={editCode}
                         onChange={e => setEditCode(e.target.value)}
+                        aria-label="Editar código de cuenta"
                         className="w-full rounded-md border border-white/15 bg-slate-900/50 px-2 py-1 text-indigo-200 outline-none focus:border-indigo-400"
                       />
                     ) : (
@@ -106,6 +137,7 @@ export function CatalogView({ accounts, appMode }: { accounts: FiscalAccount[]; 
                       <input
                         value={editName}
                         onChange={e => setEditName(e.target.value)}
+                        aria-label="Editar nombre de cuenta"
                         className="w-full rounded-md border border-white/15 bg-slate-900/50 px-2 py-1 text-slate-100 outline-none focus:border-indigo-400"
                       />
                     ) : (
