@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Plus, 
   FileText, 
@@ -64,6 +64,8 @@ const APP_VERSION = `v${__APP_VERSION__}`;
 type AppMode = 'basic' | 'fiscal';
 type AppTab = 'journal' | 't-accounts' | 'balance' | 'profit-loss' | 'assets' | 'electronic' | 'catalog';
 const ACCOUNTS_SAVE_DEBOUNCE_MS = 300;
+const LAST_BACKUP_STORAGE_KEY = 'contasis_last_backup';
+const BACKUP_SUGGESTION_TITLE = 'Sugerencia de Respaldo';
 const FISCAL_NAV_TABS = [
   { id: 'assets' as const, label: 'Activos Fijos', shortLabel: 'Activos', icon: Monitor },
   { id: 'electronic' as const, label: 'Cont. Electrónica', shortLabel: 'SAT XML', icon: FileCode }
@@ -100,12 +102,52 @@ export default function App() {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const downloadPercent = useUpdateProgress();
   const isDesktopRuntime = typeof window !== 'undefined' && ('electronAPI' in window || navigator.userAgent.toLowerCase().includes('electron'));
+  const modalInfoRef = useRef<{ type: 'success' | 'error', title: string, message: string } | null>(null);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
+    modalInfoRef.current = modalInfo;
+  }, [modalInfo]);
+
+  // Vigilante de Respaldo Semanal (Rutina Continua)
+  useEffect(() => {
+    const checkBackupStatus = () => {
+      // Ignorar chequeo si ya hay un modal abierto para no interrumpir
+      if (modalInfoRef.current) return;
+
+      const lastBackup = localStorage.getItem(LAST_BACKUP_STORAGE_KEY);
+      if (!lastBackup) {
+        localStorage.setItem(LAST_BACKUP_STORAGE_KEY, new Date().toISOString());
+        return;
+      }
+
+      const lastDate = new Date(lastBackup).getTime();
+      const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+
+      if (now - lastDate > sevenDaysInMs) {
+        setModalInfo({
+          type: 'success',
+          title: BACKUP_SUGGESTION_TITLE,
+          message: 'Ha pasado más de una semana desde tu último respaldo de seguridad. ¿Deseas descargar una copia de tu base de datos ahora?',
+        });
+      }
+    };
+
+    // 1. Chequeo inicial al cargar la app
+    checkBackupStatus();
+
+    // 2. Chequeo continuo cada 12 horas (Por si nunca cierran la app)
+    const intervalId = setInterval(checkBackupStatus, 12 * 60 * 60 * 1000);
+
+    // 3. Limpieza para evitar memory leaks
+    return () => clearInterval(intervalId);
   }, []);
   
   const activeJournal = journals.find(j => j.id === activeJournalId) || null;
@@ -421,6 +463,7 @@ export default function App() {
     a.download = `Contabilidad_M4_Respaldo_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    localStorage.setItem(LAST_BACKUP_STORAGE_KEY, new Date().toISOString());
     setModalInfo({ type: 'success', title: 'Respaldo Exitoso', message: 'Se ha descargado el archivo JSON con toda tu base de datos.' });
   };
 
@@ -892,23 +935,47 @@ export default function App() {
                 "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6",
                 modalInfo.type === 'success' ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
               )}>
-                {modalInfo.type === 'success' ? <Check className="w-8 h-8" /> : <AlertCircle className="w-8 h-8" />}
+                {modalInfo.title === BACKUP_SUGGESTION_TITLE
+                  ? <AlertCircle className="w-8 h-8" />
+                  : modalInfo.type === 'success'
+                    ? <Check className="w-8 h-8" />
+                    : <AlertCircle className="w-8 h-8" />}
               </div>
               <h3 className="text-2xl font-bold text-white mb-2">{modalInfo.title}</h3>
               <p className="text-slate-400 mb-8 leading-relaxed">
                 {modalInfo.message}
               </p>
-              <button
-                onClick={() => setModalInfo(null)}
-                className={cn(
-                  "w-full py-3 rounded-xl font-semibold transition-all shadow-lg",
-                  modalInfo.type === 'success' 
-                    ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20" 
-                    : "bg-slate-800 hover:bg-slate-700 text-slate-200"
-                )}
-              >
-                Entendido
-              </button>
+              {modalInfo.title === BACKUP_SUGGESTION_TITLE ? (
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={() => {
+                      setModalInfo(null);
+                      handleExportBackup();
+                    }}
+                    className="flex-1 py-3 rounded-xl font-semibold transition-all shadow-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20"
+                  >
+                    Sí, descargar respaldo
+                  </button>
+                  <button
+                    onClick={() => setModalInfo(null)}
+                    className="flex-1 py-3 rounded-xl font-semibold transition-all shadow-lg bg-slate-800 hover:bg-slate-700 text-slate-200"
+                  >
+                    Más tarde
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setModalInfo(null)}
+                  className={cn(
+                    "w-full py-3 rounded-xl font-semibold transition-all shadow-lg",
+                    modalInfo.type === 'success'
+                      ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20"
+                      : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                  )}
+                >
+                  Entendido
+                </button>
+              )}
             </motion.div>
           </div>
         )}
