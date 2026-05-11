@@ -2,7 +2,7 @@
 
 Contabilidad M4 Pro es una app de gestión contable para escritorio y móvil. Te permite llevar el **Libro Diario**, generar **Cuentas T**, preparar **Balance General** y **Estado de Resultados**, además de activar herramientas del **modo fiscal** como activos fijos, lectura de CFDI XML y generación de archivos SAT.
 
-> Versión actual: **v0.5.0** · Autor: Fernando Martinez · Licencia: Apache-2.0
+> Versión actual: **v0.6.7** · Autor: Fernando Martinez · Licencia: Apache-2.0
 
 ---
 
