@@ -64,6 +64,8 @@ const APP_VERSION = `v${__APP_VERSION__}`;
 type AppMode = 'basic' | 'fiscal';
 type AppTab = 'journal' | 't-accounts' | 'balance' | 'profit-loss' | 'assets' | 'electronic' | 'catalog';
 const ACCOUNTS_SAVE_DEBOUNCE_MS = 300;
+const LAST_BACKUP_STORAGE_KEY = 'contasis_last_backup';
+const BACKUP_SUGGESTION_TITLE = 'Sugerencia de Respaldo';
 const FISCAL_NAV_TABS = [
   { id: 'assets' as const, label: 'Activos Fijos', shortLabel: 'Activos', icon: Monitor },
   { id: 'electronic' as const, label: 'Cont. Electrónica', shortLabel: 'SAT XML', icon: FileCode }
@@ -114,9 +116,9 @@ export default function App() {
       // Ignorar chequeo si ya hay un modal abierto para no interrumpir
       if (modalInfo) return;
 
-      const lastBackup = localStorage.getItem('contasis_last_backup');
+      const lastBackup = localStorage.getItem(LAST_BACKUP_STORAGE_KEY);
       if (!lastBackup) {
-        localStorage.setItem('contasis_last_backup', new Date().toISOString());
+        localStorage.setItem(LAST_BACKUP_STORAGE_KEY, new Date().toISOString());
         return;
       }
 
@@ -127,7 +129,7 @@ export default function App() {
       if (now - lastDate > sevenDaysInMs) {
         setModalInfo({
           type: 'success',
-          title: 'Sugerencia de Respaldo',
+          title: BACKUP_SUGGESTION_TITLE,
           message: 'Ha pasado más de una semana desde tu último respaldo de seguridad. ¿Deseas descargar una copia de tu base de datos ahora?',
         });
       }
@@ -456,7 +458,7 @@ export default function App() {
     a.download = `Contabilidad_M4_Respaldo_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    localStorage.setItem('contasis_last_backup', new Date().toISOString());
+    localStorage.setItem(LAST_BACKUP_STORAGE_KEY, new Date().toISOString());
     setModalInfo({ type: 'success', title: 'Respaldo Exitoso', message: 'Se ha descargado el archivo JSON con toda tu base de datos.' });
   };
 
@@ -928,7 +930,7 @@ export default function App() {
                 "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6",
                 modalInfo.type === 'success' ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
               )}>
-                {modalInfo.title === 'Sugerencia de Respaldo'
+                {modalInfo.title === BACKUP_SUGGESTION_TITLE
                   ? <AlertCircle className="w-8 h-8" />
                   : modalInfo.type === 'success'
                     ? <Check className="w-8 h-8" />
@@ -938,7 +940,7 @@ export default function App() {
               <p className="text-slate-400 mb-8 leading-relaxed">
                 {modalInfo.message}
               </p>
-              {modalInfo.title === 'Sugerencia de Respaldo' ? (
+              {modalInfo.title === BACKUP_SUGGESTION_TITLE ? (
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
                     onClick={handleExportBackup}
