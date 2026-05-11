@@ -137,20 +137,20 @@ export function JournalView({
 
     const grouped = new Map<
       string,
-      { periodKey: string; periodLabel: string; items: Array<{ entry: JournalEntry; index: number }> }
+      { periodKey: string; periodLabel: string; items: Array<{ entry: JournalEntry; globalIndex: number }> }
     >();
 
-    entries.forEach((entry, index) => {
+    entries.forEach((entry, globalIndex) => {
       const { key, label } = getPeriod(entry.date);
       const current = grouped.get(key);
       if (current) {
-        current.items.push({ entry, index });
+        current.items.push({ entry, globalIndex });
         return;
       }
       grouped.set(key, {
         periodKey: key,
         periodLabel: label,
-        items: [{ entry, index }]
+        items: [{ entry, globalIndex }]
       });
     });
 
@@ -556,7 +556,7 @@ export function JournalView({
                         </td>
                       </tr>
 
-                      {!isPeriodCollapsed && periodGroup.items.map(({ entry, index }) => {
+                      {!isPeriodCollapsed && periodGroup.items.map(({ entry, globalIndex }) => {
                         const isExpanded = expandedEntries[entry.id];
                         const isCollapsed = !isExpanded;
                         return (
@@ -573,7 +573,7 @@ export function JournalView({
                                   {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                 </button>
                               </td>
-                              <td className="px-2 md:px-6 py-4 font-mono text-[10px] md:text-xs text-indigo-400/70">{index + 1}</td>
+                              <td className="px-2 md:px-6 py-4 font-mono text-[10px] md:text-xs text-indigo-400/70">{globalIndex + 1}</td>
                               <td className="px-2 md:px-6 py-4 text-xs text-slate-300 whitespace-normal min-w-[70px]">{entry.date}</td>
                               <td className="px-3 md:px-6 py-4" colSpan={isCollapsed ? 3 : 1}>
                                 <div className={cn("text-xs md:text-sm font-medium text-slate-200 leading-relaxed whitespace-normal break-words", isCollapsed ? "line-clamp-1" : "")} title={entry.description}>
@@ -599,14 +599,14 @@ export function JournalView({
                                   <div className="flex flex-col gap-0.5 mr-1 hidden md:flex">
                                     <button
                                       onClick={(e) => { e.stopPropagation(); onMove(entry.id, 'up'); }}
-                                      disabled={index === 0}
+                                      disabled={globalIndex === 0}
                                       className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
                                     >
                                       <ChevronUp className="w-3.5 h-3.5" />
                                     </button>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); onMove(entry.id, 'down'); }}
-                                      disabled={index === entries.length - 1}
+                                      disabled={globalIndex === entries.length - 1}
                                       className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
                                     >
                                       <ChevronDown className="w-3.5 h-3.5" />
