@@ -114,10 +114,13 @@ export default function App() {
     const globals = accounts.filter(a => a.isReadOnly);
     const locals = activeJournal?.subAccounts || [];
     return [...globals, ...locals];
-  }, [accounts, activeJournal]);
+  }, [accounts, activeJournal?.subAccounts]);
 
   const handleCombinedAccountsUpdate = (action: React.SetStateAction<Account[]>) => {
-    if (!activeJournalId) return;
+    if (!activeJournalId) {
+      console.warn('Se intentó actualizar subcuentas sin un Libro Diario activo.');
+      return;
+    }
 
     const nextCombinedAccounts = typeof action === 'function' ? action(combinedAccounts) : action;
     const nextLocalAccounts = nextCombinedAccounts.filter(a => !a.isReadOnly);
