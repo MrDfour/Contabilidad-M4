@@ -523,7 +523,7 @@ export default function App() {
             <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
               <div className="inline-flex items-center gap-2 max-w-[min(90vw,30rem)] px-4 py-1.5 rounded-full border border-indigo-500/35 bg-[#111827]/90 text-indigo-100 shadow-lg shadow-indigo-500/20 backdrop-blur-md">
                 <FileText className="w-4 h-4 text-indigo-300 shrink-0" />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-indigo-300/90">
+                <span className="text-xs font-semibold uppercase tracking-wider text-indigo-300/90">
                   Libro Diario:
                 </span>
                 <span className="text-xs font-medium text-slate-100 truncate">
