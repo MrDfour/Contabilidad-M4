@@ -113,6 +113,8 @@ export function JournalView({
 
   const groupedEntriesByPeriod = useMemo(() => {
     const formatter = new Intl.DateTimeFormat('es-ES', { month: 'long' });
+    const UNKNOWN_PERIOD_KEY = '9999-99';
+    const UNKNOWN_PERIOD_LABEL = 'Periodo desconocido';
 
     const getPeriod = (date: string) => {
       const normalizedDate = date.length >= 10 ? date.slice(0, 10) : date;
@@ -128,10 +130,17 @@ export function JournalView({
         };
       }
 
-      const [year = 'Sin', month = 'Periodo'] = normalizedDate.split('-');
+      const [year, month] = normalizedDate.split('-');
+      if (year && month) {
+        return {
+          key: `${year}-${month}`,
+          label: `${year}-${month}`
+        };
+      }
+
       return {
-        key: `${year}-${month}`,
-        label: `${year}-${month}`
+        key: UNKNOWN_PERIOD_KEY,
+        label: UNKNOWN_PERIOD_LABEL
       };
     };
 
