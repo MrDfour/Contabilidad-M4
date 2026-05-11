@@ -30,6 +30,30 @@ export function CatalogView({
 
   const parentAccounts = accounts.filter(a => !a.parentId);
 
+  // Auto-generar código secuencial cuando se selecciona un padre
+  React.useEffect(() => {
+    if (parentId) {
+      const parent = accounts.find(a => a.id === parentId);
+      if (parent) {
+        const children = accounts.filter(a => a.parentId === parentId);
+        let maxSuffix = 0;
+        children.forEach(c => {
+          const parts = c.code.split('.');
+          if (parts.length > 1) {
+            const suffix = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(suffix) && suffix > maxSuffix) {
+              maxSuffix = suffix;
+            }
+          }
+        });
+        const nextSuffix = (maxSuffix + 1).toString().padStart(2, '0');
+        setCode(`${parent.code}.${nextSuffix}`);
+      }
+    } else {
+      setCode('');
+    }
+  }, [parentId, accounts]);
+
   // --- LÓGICA DE CREACIÓN ---
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,7 +153,7 @@ export function CatalogView({
           </div>
           <div className="space-y-1">
             <label className="text-[10px] uppercase font-bold text-slate-500">Código Interno</label>
-            <input required type="text" value={code} onChange={e => setCode(e.target.value)} placeholder="Ej: 1102.01" className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 font-mono" />
+            <input readOnly required type="text" value={code} onChange={e => setCode(e.target.value)} placeholder="Ej: 1102.01" className="w-full bg-slate-900/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-400 placeholder-slate-600 focus:outline-none focus:ring-0 font-mono cursor-not-allowed" />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] uppercase font-bold text-slate-500">Nombre de Subcuenta</label>
