@@ -109,9 +109,77 @@ export function JournalView({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [expandedEntries, setExpandedEntries] = useState<Record<string, boolean>>({});
+  const [collapsedPeriods, setCollapsedPeriods] = useState<Record<string, boolean>>({});
+
+  const groupedEntriesByPeriod = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat('es-ES', { month: 'long' });
+    const UNKNOWN_PERIOD_KEY = '9999-99';
+    const UNKNOWN_PERIOD_LABEL = 'Período desconocido';
+
+    const getPeriod = (date: string) => {
+      const trimmedDate = String(date).trim();
+      const isoMatch = trimmedDate.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/);
+
+      if (isoMatch) {
+        const year = Number(isoMatch[1]);
+        const month = Number(isoMatch[2]);
+        if (month >= 1 && month <= 12) {
+          const periodDate = new Date(year, month - 1, 1);
+          const rawMonthLabel = formatter.format(periodDate);
+          const monthLabel = rawMonthLabel.charAt(0).toUpperCase() + rawMonthLabel.slice(1);
+          return {
+            key: `${year}-${String(month).padStart(2, '0')}`,
+            label: `${monthLabel} ${year}`
+          };
+        }
+      }
+
+      const parsed = new Date(trimmedDate);
+      if (!isNaN(parsed.getTime())) {
+        const year = parsed.getFullYear();
+        const month = parsed.getMonth() + 1;
+        const rawMonthLabel = formatter.format(parsed);
+        const monthLabel = rawMonthLabel.charAt(0).toUpperCase() + rawMonthLabel.slice(1);
+        return {
+          key: `${year}-${String(month).padStart(2, '0')}`,
+          label: `${monthLabel} ${year}`
+        };
+      }
+
+      return {
+        key: UNKNOWN_PERIOD_KEY,
+        label: UNKNOWN_PERIOD_LABEL
+      };
+    };
+
+    const grouped = new Map<
+      string,
+      { periodKey: string; periodLabel: string; items: Array<{ entry: JournalEntry; globalIndex: number }> }
+    >();
+
+    entries.forEach((entry, globalIndex) => {
+      const { key, label } = getPeriod(entry.date);
+      const current = grouped.get(key);
+      if (current) {
+        current.items.push({ entry, globalIndex });
+        return;
+      }
+      grouped.set(key, {
+        periodKey: key,
+        periodLabel: label,
+        items: [{ entry, globalIndex }]
+      });
+    });
+
+    return Array.from(grouped.values());
+  }, [entries]);
 
   const toggleCollapse = (id: string) => {
     setExpandedEntries(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const togglePeriodCollapse = (periodKey: string) => {
+    setCollapsedPeriods(prev => ({ ...prev, [periodKey]: !prev[periodKey] }));
   };
 
   const activeJournal = journals.find(j => j.id === activeJournalId);
@@ -478,107 +546,137 @@ export function JournalView({
                   </td>
                 </tr>
               ) : (
-                entries.map((entry, idx) => {
-                  const isExpanded = expandedEntries[entry.id];
-                  const isCollapsed = !isExpanded;
+                groupedEntriesByPeriod.map((periodGroup) => {
+                  const isPeriodCollapsed = !!collapsedPeriods[periodGroup.periodKey];
                   return (
-                    <React.Fragment key={entry.id}>
-                      <tr 
-                        className={cn(
-                          "group hover:bg-white/5 transition-colors cursor-pointer border-b border-white/5",
-                          isCollapsed && "bg-indigo-500/5 hover:bg-indigo-500/10"
-                        )}
-                        onClick={() => toggleCollapse(entry.id)}
+                    <React.Fragment key={periodGroup.periodKey}>
+                      <tr
+                        className="bg-indigo-500/10 border-y border-indigo-500/20 cursor-pointer hover:bg-indigo-500/15 transition-colors"
+                        onClick={() => togglePeriodCollapse(periodGroup.periodKey)}
                       >
-                        <td className="px-3 md:px-6 py-4 text-center">
-                          <button className="text-slate-500 hover:text-white transition-colors">
-                            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </button>
-                        </td>
-                        <td className="px-2 md:px-6 py-4 font-mono text-[10px] md:text-xs text-indigo-400/70">{idx + 1}</td>
-                        <td className="px-2 md:px-6 py-4 text-xs text-slate-300 whitespace-normal min-w-[70px]">{entry.date}</td>
-                        <td className="px-3 md:px-6 py-4" colSpan={isCollapsed ? 3 : 1}>
-                          <div className={cn("text-xs md:text-sm font-medium text-slate-200 leading-relaxed whitespace-normal break-words", isCollapsed ? "line-clamp-1" : "")} title={entry.description}>
-                            {entry.description}
-                          </div>
-                        </td>
-                        {!isCollapsed && (
-                          <>
-                            <td className="px-3 md:px-6 py-4"></td>
-                            <td className="px-3 md:px-6 py-4 text-right"></td>
-                            <td className="px-3 md:px-6 py-4 text-right"></td>
-                          </>
-                        )}
-                        {isCollapsed && (
-                          <td className="px-3 md:px-6 py-4 text-right">
-                             <span className="text-[9px] md:text-[10px] text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded uppercase font-bold whitespace-nowrap">
-                               {entry.movements.length} Mov.
-                             </span>
-                          </td>
-                        )}
-                        <td className="px-2 md:px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-0.5 md:gap-1">
-                            <div className="flex flex-col gap-0.5 mr-1 hidden md:flex">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); onMove(entry.id, 'up'); }}
-                                disabled={idx === 0}
-                                className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
-                              >
-                                <ChevronUp className="w-3.5 h-3.5" />
-                              </button>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); onMove(entry.id, 'down'); }}
-                                disabled={idx === entries.length - 1}
-                                className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
-                              >
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              </button>
+                        <td colSpan={8} className="px-4 md:px-6 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 md:gap-3">
+                              {isPeriodCollapsed ? (
+                                <ChevronRight className="w-4 h-4 text-indigo-300" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4 text-indigo-300" />
+                              )}
+                              <span className="text-[11px] md:text-xs font-semibold uppercase tracking-wider text-indigo-200">
+                                Período {periodGroup.periodLabel}
+                              </span>
                             </div>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingEntry(entry);
-                                setIsFormOpen(false);
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                              }}
-                              className="p-1 md:p-1.5 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all"
-                            >
-                              <Edit2 className="w-3.5 h-3.5 md:w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
-                              className="p-1 md:p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 md:w-4 h-4" />
-                            </button>
+                            <span className="text-[10px] md:text-[11px] text-indigo-300/90 bg-indigo-500/20 px-2 py-0.5 rounded-full border border-indigo-500/20">
+                              {periodGroup.items.length} Asientos
+                            </span>
                           </div>
                         </td>
                       </tr>
-                      {!isCollapsed && entry.movements.map((mov, mIdx) => (
-                        <tr key={`${entry.id}-${mIdx}`} className="bg-white/[0.02] hover:bg-white/5 transition-colors border-l-2 border-indigo-500/20">
-                          <td className="px-3 md:px-6 py-3"></td>
-                          <td className="px-3 md:px-6 py-3"></td>
-                          <td className="px-3 md:px-6 py-3"></td>
-                          <td className="px-3 md:px-6 py-3"></td>
-                          <td className="px-3 md:px-6 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-[9px] md:text-[10px] bg-indigo-500/10 text-indigo-300 px-1 py-0.5 rounded border border-indigo-500/20">
-                                {accounts.find(a => a.id === mov.accountId)?.code}
-                              </span>
-                              <span className={cn("text-slate-300 text-[11px] md:text-xs whitespace-normal break-words", mov.type === 'credit' && "ml-3 md:ml-4 italic text-slate-400")}>
-                                {accounts.find(a => a.id === mov.accountId)?.name}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-3 md:px-6 py-3 text-right font-mono tabular-nums text-emerald-400 text-[11px] md:text-xs">
-                            {mov.type === 'debit' ? formatCurrency(mov.amount) : ""}
-                          </td>
-                          <td className="px-3 md:px-6 py-3 text-right font-mono tabular-nums text-rose-400 text-[11px] md:text-xs">
-                            {mov.type === 'credit' ? formatCurrency(mov.amount) : ""}
-                          </td>
-                          <td className="px-3 md:px-6 py-3"></td>
-                        </tr>
-                      ))}
+
+                      {!isPeriodCollapsed && periodGroup.items.map(({ entry, globalIndex }) => {
+                        const isExpanded = expandedEntries[entry.id];
+                        const isCollapsed = !isExpanded;
+                        return (
+                          <React.Fragment key={entry.id}>
+                            <tr
+                              className={cn(
+                                "group hover:bg-white/5 transition-colors cursor-pointer border-b border-white/5",
+                                isCollapsed && "bg-indigo-500/5 hover:bg-indigo-500/10"
+                              )}
+                              onClick={() => toggleCollapse(entry.id)}
+                            >
+                              <td className="px-3 md:px-6 py-4 text-center">
+                                <button className="text-slate-500 hover:text-white transition-colors">
+                                  {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                </button>
+                              </td>
+                              <td className="px-2 md:px-6 py-4 font-mono text-[10px] md:text-xs text-indigo-400/70">{globalIndex + 1}</td>
+                              <td className="px-2 md:px-6 py-4 text-xs text-slate-300 whitespace-normal min-w-[70px]">{entry.date}</td>
+                              <td className="px-3 md:px-6 py-4" colSpan={isCollapsed ? 3 : 1}>
+                                <div className={cn("text-xs md:text-sm font-medium text-slate-200 leading-relaxed whitespace-normal break-words", isCollapsed ? "line-clamp-1" : "")} title={entry.description}>
+                                  {entry.description}
+                                </div>
+                              </td>
+                              {!isCollapsed && (
+                                <>
+                                  <td className="px-3 md:px-6 py-4"></td>
+                                  <td className="px-3 md:px-6 py-4 text-right"></td>
+                                  <td className="px-3 md:px-6 py-4 text-right"></td>
+                                </>
+                              )}
+                              {isCollapsed && (
+                                <td className="px-3 md:px-6 py-4 text-right">
+                                   <span className="text-[9px] md:text-[10px] text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded uppercase font-bold whitespace-nowrap">
+                                     {entry.movements.length} Mov.
+                                   </span>
+                                </td>
+                              )}
+                              <td className="px-2 md:px-6 py-4 text-center">
+                                <div className="flex items-center justify-center gap-0.5 md:gap-1">
+                                  <div className="flex flex-col gap-0.5 mr-1 hidden md:flex">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); onMove(entry.id, 'up'); }}
+                                      disabled={globalIndex === 0}
+                                      className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
+                                    >
+                                      <ChevronUp className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); onMove(entry.id, 'down'); }}
+                                      disabled={globalIndex === entries.length - 1}
+                                      className="p-0.5 text-slate-500 hover:text-indigo-400 disabled:opacity-20"
+                                    >
+                                      <ChevronDown className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingEntry(entry);
+                                      setIsFormOpen(false);
+                                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className="p-1 md:p-1.5 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5 md:w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
+                                    className="p-1 md:p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 md:w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            {!isCollapsed && entry.movements.map((mov, mIdx) => (
+                              <tr key={`${entry.id}-${mIdx}`} className="bg-white/[0.02] hover:bg-white/5 transition-colors border-l-2 border-indigo-500/20">
+                                <td className="px-3 md:px-6 py-3"></td>
+                                <td className="px-3 md:px-6 py-3"></td>
+                                <td className="px-3 md:px-6 py-3"></td>
+                                <td className="px-3 md:px-6 py-3"></td>
+                                <td className="px-3 md:px-6 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-[9px] md:text-[10px] bg-indigo-500/10 text-indigo-300 px-1 py-0.5 rounded border border-indigo-500/20">
+                                      {accounts.find(a => a.id === mov.accountId)?.code}
+                                    </span>
+                                    <span className={cn("text-slate-300 text-[11px] md:text-xs whitespace-normal break-words", mov.type === 'credit' && "ml-3 md:ml-4 italic text-slate-400")}>
+                                      {accounts.find(a => a.id === mov.accountId)?.name}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-3 md:px-6 py-3 text-right font-mono tabular-nums text-emerald-400 text-[11px] md:text-xs">
+                                  {mov.type === 'debit' ? formatCurrency(mov.amount) : ""}
+                                </td>
+                                <td className="px-3 md:px-6 py-3 text-right font-mono tabular-nums text-rose-400 text-[11px] md:text-xs">
+                                  {mov.type === 'credit' ? formatCurrency(mov.amount) : ""}
+                                </td>
+                                <td className="px-3 md:px-6 py-3"></td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
                     </React.Fragment>
                   );
                 })
