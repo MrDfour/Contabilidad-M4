@@ -30,9 +30,10 @@ export function CatalogView({
 
   const parentAccounts = accounts.filter(a => !a.parentId);
 
-  // Auto-generar código secuencial cuando se selecciona un padre
+  // Auto-generate sequential code when a parent is selected
   React.useEffect(() => {
     if (parentId) {
+      const suffixPadding = 2;
       const parent = accounts.find(a => a.id === parentId);
       if (parent) {
         const children = accounts.filter(a => a.parentId === parentId);
@@ -43,13 +44,14 @@ export function CatalogView({
           }
           const parts = c.code.split('.');
           if (parts.length > 1) {
-            const suffix = parseInt(parts[parts.length - 1], 10);
+            const lastPart = parts[parts.length - 1];
+            const suffix = parseInt(lastPart, 10);
             if (!isNaN(suffix) && suffix > maxSuffix) {
               maxSuffix = suffix;
             }
           }
         });
-        const nextSuffix = (maxSuffix + 1).toString().padStart(2, '0');
+        const nextSuffix = (maxSuffix + 1).toString().padStart(suffixPadding, '0');
         setCode(`${parent.code}.${nextSuffix}`);
       }
     } else {
