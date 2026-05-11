@@ -29,7 +29,7 @@ export function TAccountsView({ tAccountsData, accounts, journalName }: {
             <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white">Cuentas T</h2>
             <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-xs font-mono rounded border border-indigo-500/30 mt-1">{journalName}</span>
           </div>
-          <p className="text-slate-400 text-xs md:text-sm mt-1">Representiva visual del flujo de cada cuenta referenciada al diario.</p>
+          <p className="text-slate-400 text-xs md:text-sm mt-1">Representación visual del flujo de cada cuenta referenciada al diario.</p>
         </div>
         <div className="flex gap-2 md:gap-3">
           <button 
