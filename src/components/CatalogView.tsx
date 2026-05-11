@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, Edit2, Trash2, X } from 'lucide-react';
 import type { Account } from '../types';
 import { formatSatGroupCode } from '../lib/utils';
+import { saveToStorage } from '../services/storageService';
 
 type AppMode = 'basic' | 'fiscal';
 type FiscalAccount = Account & { satGroupCode?: string };
@@ -14,6 +15,7 @@ type CatalogViewProps = {
 
 export function CatalogView({ accounts, appMode, onSetModal }: CatalogViewProps) {
   const [localAccounts, setLocalAccounts] = useState<FiscalAccount[]>(accounts);
+  const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -21,8 +23,14 @@ export function CatalogView({ accounts, appMode, onSetModal }: CatalogViewProps)
   const [modalInfo, setModalInfo] = useState<ModalInfo>(null);
 
   useEffect(() => {
+    if (hasLocalChanges) return;
     setLocalAccounts(accounts);
-  }, [accounts]);
+  }, [accounts, hasLocalChanges]);
+
+  useEffect(() => {
+    if (!hasLocalChanges) return;
+    saveToStorage('contasis_accounts', localAccounts).catch(console.error);
+  }, [localAccounts, hasLocalChanges]);
 
   useEffect(() => {
     if (!modalInfo) return;
@@ -57,6 +65,7 @@ export function CatalogView({ accounts, appMode, onSetModal }: CatalogViewProps)
 
     const updatedAccounts = localAccounts.map(a => a.id === id ? { ...a, name: editName.trim(), code: editCode.trim() } : a);
     setLocalAccounts(updatedAccounts);
+    setHasLocalChanges(true);
     setEditingId(null);
     const successModal = { type: 'success', title: 'Cuenta Actualizada', message: 'Los cambios se han guardado correctamente.' } as const;
     setModalInfo(successModal);
@@ -91,6 +100,7 @@ export function CatalogView({ accounts, appMode, onSetModal }: CatalogViewProps)
   const handleDeleteAccount = (id: string) => {
     const updatedAccounts = localAccounts.filter(account => account.id !== id);
     setLocalAccounts(updatedAccounts);
+    setHasLocalChanges(true);
     setPendingDeleteId(null);
     if (editingId === id) handleCancelEdit();
     const successModal = { type: 'success', title: 'Cuenta eliminada', message: 'La cuenta se eliminó correctamente.' } as const;
