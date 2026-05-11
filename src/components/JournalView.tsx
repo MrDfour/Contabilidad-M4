@@ -117,24 +117,32 @@ export function JournalView({
     const UNKNOWN_PERIOD_LABEL = 'Periodo desconocido';
 
     const getPeriod = (date: string) => {
-      const normalizedDate = date.length >= 10 ? date.slice(0, 10) : date;
-      const parsed = new Date(`${normalizedDate}T00:00:00`);
+      const trimmedDate = String(date).trim();
+      const isoMatch = trimmedDate.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/);
 
+      if (isoMatch) {
+        const year = Number(isoMatch[1]);
+        const month = Number(isoMatch[2]);
+        if (month >= 1 && month <= 12) {
+          const periodDate = new Date(year, month - 1, 1);
+          const rawMonthLabel = formatter.format(periodDate);
+          const monthLabel = rawMonthLabel.charAt(0).toUpperCase() + rawMonthLabel.slice(1);
+          return {
+            key: `${year}-${String(month).padStart(2, '0')}`,
+            label: `${monthLabel} ${year}`
+          };
+        }
+      }
+
+      const parsed = new Date(trimmedDate);
       if (!Number.isNaN(parsed.getTime())) {
         const year = parsed.getFullYear();
         const month = parsed.getMonth() + 1;
-        const monthLabel = formatter.format(parsed).replace(/^\w/, (char) => char.toUpperCase());
+        const rawMonthLabel = formatter.format(parsed);
+        const monthLabel = rawMonthLabel.charAt(0).toUpperCase() + rawMonthLabel.slice(1);
         return {
           key: `${year}-${String(month).padStart(2, '0')}`,
           label: `${monthLabel} ${year}`
-        };
-      }
-
-      const [year, month] = normalizedDate.split('-');
-      if (year && month) {
-        return {
-          key: `${year}-${month}`,
-          label: `${year}-${month}`
         };
       }
 
