@@ -1,8 +1,8 @@
 # Contabilidad M4 Pro
 
-Sistema de gestión contable profesional para empresas y estudiantes de contabilidad. Permite registrar asientos en el **Libro Diario**, generar **Cuentas T** automáticamente, obtener el **Balance General** y el **Estado de Resultados** (método analítico), todo con exportación a Excel y PDF.
+Contabilidad M4 Pro es una app de gestión contable para escritorio y móvil. Te permite llevar el **Libro Diario**, generar **Cuentas T**, preparar **Balance General** y **Estado de Resultados**, además de activar herramientas del **modo fiscal** como activos fijos, lectura de CFDI XML y generación de archivos SAT.
 
-> Versión actual: **v0.3.2** · Autor: Fernando Martinez · Licencia: Apache-2.0
+> Versión actual: **v0.5.0** · Autor: Fernando Martinez · Licencia: Apache-2.0
 
 ---
 
@@ -16,6 +16,10 @@ Sistema de gestión contable profesional para empresas y estudiantes de contabil
    - [Balance General](#3-balance-general)
    - [Estado de Resultados](#4-estado-de-resultados)
    - [Catálogo de Cuentas](#5-catálogo-de-cuentas)
+   - [Activos Fijos (Modo Fiscal)](#6-activos-fijos-modo-fiscal)
+   - [Contabilidad Electrónica SAT (Modo Fiscal)](#7-contabilidad-electrónica-sat-modo-fiscal)
+   - [Sincronización Escritorio ↔ Móvil](#8-sincronización-escritorio--móvil)
+   - [Mejoras de productividad](#9-mejoras-de-productividad)
 4. [Configuración del entorno local (desde cero)](#configuración-del-entorno-local-desde-cero)
 5. [Scripts disponibles](#scripts-disponibles)
 6. [Tecnologías utilizadas](#tecnologías-utilizadas)
@@ -177,7 +181,7 @@ Exportación:
 
 ### 5. Catálogo de Cuentas
 
-La aplicación incluye un catálogo preconfigurado de cuentas contables en español, organizado por tipo:
+La aplicación incluye un catálogo preconfigurado de cuentas contables en español, organizado por tipo y con códigos contables listos para trabajar:
 
 | Código  | Cuenta                              | Tipo      |
 |---------|-------------------------------------|-----------|
@@ -245,7 +249,52 @@ La aplicación incluye un catálogo preconfigurado de cuentas contables en espa�
 | 5110    | Gastos Financieros                  | Gasto     |
 | 5111    | Otros Gastos                        | Gasto     |
 
-> Al importar asientos desde Excel, los nombres de cuenta deben coincidir exactamente con los de esta tabla (mayúsculas/minúsculas se ignoran, pero los tildes sí importan).
+> Al importar asientos desde Excel, los nombres de cuenta deben coincidir con los del catálogo (mayúsculas/minúsculas se ignoran, pero conviene mantener tildes y nombres tal como aparecen para evitar rechazos).
+
+---
+
+### 6. Activos Fijos (Modo Fiscal)
+
+Cuando activas el **Modo Fiscal**, aparece el módulo de Activos Fijos para llevar mejor el control de inversiones:
+
+- Registro de activos con **nombre, fecha de adquisición, MOI y tasa fiscal anual**.
+- Marcado de activos **en operación** o **dados de baja**.
+- Ejecución de **depreciación mensual** con generación automática de asiento (cargo a gasto y abono a depreciación acumulada).
+- Cálculo fiscal de **deducción de inversiones actualizada por INPC** para apoyo en análisis fiscal.
+
+---
+
+### 7. Contabilidad Electrónica SAT (Modo Fiscal)
+
+El módulo de **Contabilidad Electrónica** facilita entregables fiscales del Anexo 24:
+
+- Generación de **Catálogo SAT (CT.xml)** y **Balanza (BN.xml)**.
+- Generación de **DIOT (.txt)** con base en movimientos de IVA acreditable por RFC.
+- Validación básica de formato de RFC y nomenclatura de archivos para descarga.
+- En captura de pólizas puedes elegir tipo (**diario / ingreso / egreso**) y cargar CFDI XML para autollenar UUID, RFC y total.
+
+---
+
+### 8. Sincronización Escritorio ↔ Móvil
+
+La app incluye sincronización de datos entre dispositivos para continuar el trabajo sin duplicar captura:
+
+- Conexión principal por **WebRTC (PeerJS)**.
+- Respaldo automático por **Redis** cuando WebRTC no está disponible.
+- Emparejamiento con **QR** o **PIN de 6 dígitos**.
+- Manejo de conflictos para decidir si conservar datos locales o sobrescribir con datos remotos.
+- Controles de seguridad ante intentos inválidos de PIN.
+
+---
+
+### 9. Mejoras de productividad
+
+- **Verificador de actualizaciones** para avisar cuando hay una versión más reciente.
+- **Feedback integrado** desde la app para reportar sugerencias o errores.
+- Persistencia adaptada por plataforma:
+  - Escritorio (Electron) mediante almacenamiento local del sistema.
+  - Android (Capacitor) mediante filesystem interno.
+  - Navegador/Web mediante localStorage.
 
 ---
 
@@ -377,6 +426,9 @@ Para limpiar todos los datos, abre las herramientas de desarrollo (F12) → Appl
 | Tailwind CSS v4          | Estilos utilitarios                              |
 | Electron                 | Aplicación de escritorio multiplataforma         |
 | Capacitor                | Empaquetado para Android                         |
+| PeerJS + QRCode.react    | Sincronización y emparejamiento por QR           |
+| Upstash Redis REST       | Respaldo de sincronización                       |
+| Capacitor MLKit Barcode  | Escaneo de QR en móvil                           |
 | ExcelJS                  | Generación de archivos Excel con estilos         |
 | jsPDF + jspdf-autotable  | Generación de documentos PDF                     |
 | html2canvas-pro          | Captura de elementos HTML para PDF               |
