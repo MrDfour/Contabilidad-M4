@@ -114,7 +114,7 @@ export function JournalView({
   const groupedEntriesByPeriod = useMemo(() => {
     const formatter = new Intl.DateTimeFormat('es-ES', { month: 'long' });
     const UNKNOWN_PERIOD_KEY = '9999-99';
-    const UNKNOWN_PERIOD_LABEL = 'Periodo desconocido';
+    const UNKNOWN_PERIOD_LABEL = 'Período desconocido';
 
     const getPeriod = (date: string) => {
       const trimmedDate = String(date).trim();
@@ -135,7 +135,7 @@ export function JournalView({
       }
 
       const parsed = new Date(trimmedDate);
-      if (!Number.isNaN(parsed.getTime())) {
+      if (!isNaN(parsed.getTime())) {
         const year = parsed.getFullYear();
         const month = parsed.getMonth() + 1;
         const rawMonthLabel = formatter.format(parsed);
@@ -563,7 +563,7 @@ export function JournalView({
                                 <ChevronDown className="w-4 h-4 text-indigo-300" />
                               )}
                               <span className="text-[11px] md:text-xs font-semibold uppercase tracking-wider text-indigo-200">
-                                Periodo {periodGroup.periodLabel}
+                                Período {periodGroup.periodLabel}
                               </span>
                             </div>
                             <span className="text-[10px] md:text-[11px] text-indigo-300/90 bg-indigo-500/20 px-2 py-0.5 rounded-full border border-indigo-500/20">
