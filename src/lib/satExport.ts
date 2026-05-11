@@ -163,7 +163,7 @@ export const generatePolizasXML = (rfc: string, anio: string, mes: string, entri
         compNalStr = `\n        <PLZ:CompNal UUID_CFDI="${mov.uuidCFDI}" RFC="${mov.rfcTercero}" MontoTotal="${mov.amount.toFixed(2)}" Moneda="MXN"/>`;
       }
 
-      return `      <PLZ:Transaccion NumCta="${acc?.code || ''}" DesCta="${escapeXML(acc?.name || '')}" Concepto="${escapeXML(entry.description)}" TipoCambio="1" Monto="${mov.amount.toFixed(2)}" TipoMovito="${tipoMov}">${compNalStr}
+      return `      <PLZ:Transaccion NumCta="${acc?.code || ''}" DesCta="${escapeXML(acc?.name || '')}" Concepto="${escapeXML(entry.description)}" TipoCambio="1" Monto="${mov.amount.toFixed(2)}" TipoMov="${tipoMov}">${compNalStr}
       </PLZ:Transaccion>`;
     }).join('\n');
 
@@ -175,8 +175,11 @@ ${transacciones}
   </PLZ:Poliza>`;
   }).join('\n');
 
+  // Valor de referencia para entrega estándar AF (Acto de Fiscalización).
+  const numOrden = 'AFO1234567/26';
+
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<PLZ:Polizas xmlns:PLZ="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo/PolizasPeriodo_1_3.xsd" Version="1.3" RFC="${rfc.toUpperCase()}" Mes="${mes}" Anio="${anio}" TipoSolicitud="AF" NumOrden="AFO1234567/26">
+<PLZ:Polizas xmlns:PLZ="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo/PolizasPeriodo_1_3.xsd" Version="1.3" RFC="${rfc.toUpperCase()}" Mes="${mes}" Anio="${anio}" TipoSolicitud="AF" NumOrden="${numOrden}">
 ${polizasXML}
 </PLZ:Polizas>`;
 
