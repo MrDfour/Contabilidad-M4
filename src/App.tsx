@@ -66,7 +66,7 @@ import { saveToStorage, loadFromStorage, migrateFromLocalStorage } from './servi
 
 const APP_VERSION = `v${__APP_VERSION__}`;
 type AppMode = 'basic' | 'fiscal';
-type AppTab = 'journal' | 't-accounts' | 'balance' | 'profit-loss' | 'assets' | 'electronic';
+type AppTab = 'journal' | 't-accounts' | 'balance' | 'profit-loss' | 'assets' | 'electronic' | 'catalog';
 type FiscalAccount = Account & { satGroupCode?: string };
 const FISCAL_BALANCE_ACCOUNT_IDS = new Set(['anc-13', 'anc-14', 'anc-15', 'anc-16', 'anc-17', 're-12', 're-13']);
 const ACCOUNTS_SAVE_DEBOUNCE_MS = 300;
@@ -199,10 +199,10 @@ export default function App() {
           if (Array.isArray(parsed) && parsed.length > 0) {
             setAccounts(parsed);
           } else {
-            setAccounts(INITIAL_ACCOUNTS);
+            setAccounts(INITIAL_ACCOUNTS.map(a => ({ ...a, isReadOnly: true })));
           }
         } else {
-          setAccounts(INITIAL_ACCOUNTS);
+          setAccounts(INITIAL_ACCOUNTS.map(a => ({ ...a, isReadOnly: true })));
         }
         setHasLoadedAccounts(true);
       } catch (error) {
@@ -432,6 +432,7 @@ export default function App() {
     { id: 't-accounts', label: 'Cuentas T', shortLabel: 'Cuentas T', icon: TableIcon },
     { id: 'balance', label: 'Balance General', shortLabel: 'Balance', icon: Briefcase },
     { id: 'profit-loss', label: 'Estado de Resultados', shortLabel: 'Resultados', icon: TrendingUp },
+    { id: 'catalog', label: 'Catálogo de Cuentas', shortLabel: 'Catálogo', icon: Settings },
     ...(appMode === 'fiscal' ? FISCAL_NAV_TABS : [])
   ];
   const activeMobileTabLabel = navigationTabs.find(tab => tab.id === activeTab)?.shortLabel ?? 'Diario';
@@ -493,6 +494,12 @@ export default function App() {
                   onClick={() => { setActiveTab('profit-loss'); setIsMobileMenuOpen(false); }}
                   icon={<TrendingUp className="w-5 h-5" />}
                   label="Estado de Resultados"
+                />
+                <MobileNavItem
+                  active={activeTab === 'catalog'}
+                  onClick={() => { setActiveTab('catalog'); setIsMobileMenuOpen(false); }}
+                  icon={<Settings className="w-5 h-5" />}
+                  label="Catálogo de Cuentas"
                 />
                 {appMode === 'fiscal' && (
                   <>
@@ -733,6 +740,20 @@ export default function App() {
                       activeJournalId={activeJournalId}
                       onAdd={addEntry}
                       onSetModal={setModalInfo}
+                    />
+                  </motion.div>
+                )}
+
+                {activeTab === 'catalog' && (
+                  <motion.div
+                    key="catalog"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                  >
+                    <CatalogView
+                      accounts={accounts}
+                      appMode={appMode}
                     />
                   </motion.div>
                 )}
@@ -992,6 +1013,65 @@ export default function App() {
         onNotify={(type, title, message) => setModalInfo({ type, title, message })}
       />
     </div>
+  );
+}
+
+function CatalogView({ accounts, appMode }: { accounts: FiscalAccount[]; appMode: AppMode }) {
+  const typeLabels: Record<Account['type'], string> = {
+    asset: 'Activo',
+    liability: 'Pasivo',
+    equity: 'Capital',
+    revenue: 'Ingreso',
+    expense: 'Gasto'
+  };
+
+  return (
+    <section className="space-y-4">
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
+        <h2 className="text-2xl font-bold text-white">Catálogo de Cuentas</h2>
+        <p className="text-slate-400 text-sm mt-1">Consulta de cuentas disponibles en el sistema.</p>
+      </div>
+      <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-white/5 border-b border-white/10">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px]">Código</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px]">Cuenta</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px]">Tipo</th>
+                {appMode === 'fiscal' && (
+                  <th className="px-4 py-3 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px]">SAT</th>
+                )}
+                <th className="px-4 py-3 text-left font-semibold text-slate-400 uppercase tracking-wider text-[10px]">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {accounts.map(account => (
+                <tr key={account.id} className="hover:bg-white/5">
+                  <td className="px-4 py-3 font-mono text-indigo-300">{account.code}</td>
+                  <td className="px-4 py-3 text-slate-200">{account.name}</td>
+                  <td className="px-4 py-3 text-slate-400">{typeLabels[account.type]}</td>
+                  {appMode === 'fiscal' && (
+                    <td className="px-4 py-3 text-slate-500">{account.satGroupCode ? formatSatGroupCode(account.satGroupCode) : '—'}</td>
+                  )}
+                  <td className="px-4 py-3">
+                    {account.isReadOnly ? (
+                      <span className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider bg-slate-700/60 text-slate-200 border border-slate-500/40">
+                        Protegida
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                        Editable
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   );
 }
 
