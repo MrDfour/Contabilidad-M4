@@ -39,6 +39,8 @@ export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: Cata
   };
 
   const handleSaveEdit = (id: string) => {
+    const normalizedEditCode = editCode.trim().toLowerCase();
+
     if (!editName.trim() || !editCode.trim()) {
       const errorModal = { type: 'error', title: 'Campos vacíos', message: 'El nombre y el código no pueden estar vacíos.' } as const;
       setModalInfo(errorModal);
@@ -46,7 +48,7 @@ export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: Cata
       return;
     }
 
-    if (localAccounts.some(a => a.code === editCode.trim() && a.id !== id)) {
+    if (localAccounts.some(a => a.code.trim().toLowerCase() === normalizedEditCode && a.id !== id)) {
       const errorModal = { type: 'error', title: 'Código duplicado', message: 'Ese código ya está asignado a otra cuenta.' } as const;
       setModalInfo(errorModal);
       onSetModal?.(errorModal);
@@ -77,7 +79,6 @@ export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: Cata
   };
 
   const handleDeleteAccount = (id: string) => {
-    if (!window.confirm('¿Seguro que deseas eliminar esta subcuenta?')) return;
     const updatedAccounts = localAccounts.filter(account => account.id !== id);
     setLocalAccounts(updatedAccounts);
     setAccounts?.(updatedAccounts);
