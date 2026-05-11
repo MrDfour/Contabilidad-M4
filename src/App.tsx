@@ -693,7 +693,7 @@ export default function App() {
                   </motion.div>
                 )}
 
-                {activeTab === 'catalog' && (
+               {activeTab === 'catalog' && (
                   <motion.div
                     key="catalog"
                     initial={{ opacity: 0, y: 10 }}
@@ -702,7 +702,10 @@ export default function App() {
                   >
                     <CatalogView
                       accounts={accounts}
+                      setAccounts={setAccounts}
+                      entries={entries}
                       appMode={appMode}
+                      onSetModal={setModalInfo}
                     />
                   </motion.div>
                 )}
