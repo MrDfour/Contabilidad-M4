@@ -41,22 +41,12 @@ import { useUpdateProgress } from './hooks/useUpdateProgress';
 import { 
   INITIAL_ACCOUNTS, 
   JournalEntry, 
-  Movement, 
   Account,
   Journal,
   FixedAsset
 } from './types';
 import { 
-  cn, 
-  formatCurrency, 
-  exportToExcel, 
-  exportTAccountsStyleToExcel,
-  exportTableToPDF,
-  exportToPDF,
-  readExcel,
-  normalizeString,
-  calculateMonthlyDepreciation,
-  calculateFiscalDeduction
+  cn
 } from './lib/utils';
 import FeedbackModal from './components/FeedbackModal';
 import SyncModal from './components/SyncModal';
@@ -87,45 +77,6 @@ const getStoredAppMode = (): AppMode => {
 const normalizeAmount = (value: number) => {
   if (!Number.isFinite(value)) return 0;
   return Math.round((value + Number.EPSILON) * 100) / 100;
-};
-
-const parseFormattedAmount = (value: string) => {
-  const parsed = Number(value.replace(/,/g, ''));
-  return normalizeAmount(parsed);
-};
-
-const parseImportedAmount = (value: unknown) => {
-  const raw = String(value ?? '0').replace(/,/g, '');
-  const isNegative = raw.includes('-');
-  const numericOnly = raw.replace(/[^0-9.]/g, '');
-  const [integerPartRaw, ...decimalParts] = numericOnly.split('.');
-  const integerPart = integerPartRaw || '0';
-  const decimalPart = decimalParts.join('');
-  const normalized = `${isNegative ? '-' : ''}${integerPart}${decimalPart ? `.${decimalPart}` : ''}`;
-  return normalizeAmount(parseFloat(normalized) || 0);
-};
-
-const formatAmountForInput = (amount: number) => {
-  const normalized = normalizeAmount(amount);
-  if (normalized === 0) return '';
-  return new Intl.NumberFormat('en-US', {
-    useGrouping: true,
-    maximumFractionDigits: 2
-  }).format(normalized);
-};
-
-const formatAmountInput = (value: string) => {
-  const sanitized = value.replace(/[^0-9.]/g, '');
-  if (!sanitized) return '';
-
-  const [integerPartRaw, ...decimalParts] = sanitized.split('.');
-  const hasDecimalPoint = sanitized.includes('.');
-  const normalizedInteger = (integerPartRaw || '0').replace(/^0+(?=\d)/, '') || '0';
-  const formattedInteger = normalizedInteger.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  const decimalPart = decimalParts.join('').slice(0, 2);
-
-  if (!hasDecimalPoint) return formattedInteger;
-  return `${formattedInteger}.${decimalPart}`;
 };
 
 export default function App() {
@@ -1055,5 +1006,3 @@ function SidebarTabButton({ active, onClick, icon, label }: { active: boolean, o
     </button>
   );
 }
-
-// 1. Journal View
