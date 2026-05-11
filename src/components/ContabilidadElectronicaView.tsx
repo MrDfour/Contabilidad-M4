@@ -2,7 +2,7 @@ import React from 'react';
 import { Download, FileText, FileCode } from 'lucide-react';
 import type { Account, JournalEntry } from '../types';
 import { cn } from '../lib/utils';
-import { generateCatalogoXML, generateBalanzaXML, generateDIOTTxt } from '../lib/satExport';
+import { generateCatalogoXML, generateBalanzaXML, generateDIOTTxt, generatePolizasXML } from '../lib/satExport';
 
 export function ContabilidadElectronicaView({
   accounts,
@@ -66,6 +66,16 @@ export function ContabilidadElectronicaView({
         title: 'No se pudo generar la DIOT',
         message,
       });
+    }
+  };
+
+  const handlePolizas = () => {
+    if (!isValid) return;
+    try {
+      generatePolizasXML(rfc.trim(), anio, mes, entries, accounts);
+      onSetModal({ type: 'success', title: 'Pólizas Generadas', message: 'El archivo XML de Pólizas del Periodo se ha descargado correctamente.' });
+    } catch (error: any) {
+      onSetModal({ type: 'error', title: 'Error', message: error.message });
     }
   };
 
@@ -152,6 +162,19 @@ export function ContabilidadElectronicaView({
             Balanza de Comprobación (BN)
           </button>
           <button
+            onClick={handlePolizas}
+            disabled={!isValid}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all",
+              isValid
+                ? "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/20"
+                : "bg-white/5 border border-white/10 text-slate-500 cursor-not-allowed"
+            )}
+          >
+            <FileCode className="w-4 h-4" />
+            Pólizas del Periodo (PL)
+          </button>
+          <button
             onClick={handleDIOT}
             disabled={!isValid}
             className={cn(
@@ -167,7 +190,7 @@ export function ContabilidadElectronicaView({
         </div>
 
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-300 leading-relaxed">
-          <strong>Nota:</strong> El archivo CT contiene el catálogo de cuentas, BN la balanza del período y DIOT el TXT de carga batch para proveedores con IVA acreditable registrado. Los archivos se nombran como <span className="font-mono">[RFC][AÑO][MES]CT.xml</span>, <span className="font-mono">[RFC][AÑO][MES]BN.xml</span> y <span className="font-mono">[RFC][AÑO][MES]DIOT.txt</span>.
+          <strong>Nota:</strong> El archivo CT contiene el catálogo de cuentas, BN la balanza del período, PL las pólizas detalladas del periodo y DIOT el TXT de carga batch para proveedores con IVA acreditable registrado. Los archivos se nombran como <span className="font-mono">[RFC][AÑO][MES]CT.xml</span>, <span className="font-mono">[RFC][AÑO][MES]BN.xml</span>, <span className="font-mono">[RFC][AÑO][MES]PL.xml</span> y <span className="font-mono">[RFC][AÑO][MES]DIOT.txt</span>.
         </div>
       </div>
     </div>
