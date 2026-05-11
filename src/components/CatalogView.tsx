@@ -166,6 +166,7 @@ export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: Cata
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleSaveEdit(account.id)}
+                          aria-label="Guardar cambios"
                           className="inline-flex items-center justify-center rounded-md border border-emerald-400/40 bg-emerald-500/10 p-1.5 text-emerald-300 transition hover:bg-emerald-500/20"
                           title="Guardar"
                         >
@@ -173,6 +174,7 @@ export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: Cata
                         </button>
                         <button
                           onClick={handleCancelEdit}
+                          aria-label="Cancelar edición"
                           className="inline-flex items-center justify-center rounded-md border border-rose-400/40 bg-rose-500/10 p-1.5 text-rose-300 transition hover:bg-rose-500/20"
                           title="Cancelar"
                         >
@@ -183,6 +185,7 @@ export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: Cata
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleStartEdit(account)}
+                          aria-label="Editar cuenta"
                           className="inline-flex items-center justify-center rounded-md border border-indigo-400/40 bg-indigo-500/10 p-1.5 text-indigo-300 transition hover:bg-indigo-500/20"
                           title="Editar"
                         >
@@ -190,6 +193,7 @@ export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: Cata
                         </button>
                         <button
                           onClick={() => handleDeleteAccount(account.id)}
+                          aria-label="Eliminar cuenta"
                           className="inline-flex items-center justify-center rounded-md border border-rose-400/40 bg-rose-500/10 p-1.5 text-rose-300 transition hover:bg-rose-500/20"
                           title="Eliminar"
                         >
