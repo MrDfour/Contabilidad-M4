@@ -62,7 +62,9 @@ export function CatalogView({
     setName('');
     setCode('');
     setParentId('');
-    onSetModal({ type: 'success', title: 'Subcuenta Creada', message: `La cuenta "${newAccount.name}" ha heredado las propiedades de "${parent.name}".` });
+    onSetModal({ type: 'success', 
+    title: 'Subcuenta Creada', 
+    message: `La cuenta "${newAccount.name}" ha heredado las propiedades de "${parent.name}".` });
   };
 
   // --- LÓGICA DE EDICIÓN ---
