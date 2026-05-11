@@ -9,13 +9,13 @@ type ModalInfo = { type: 'success' | 'error'; title: string; message: string } |
 type CatalogViewProps = {
   accounts: FiscalAccount[];
   appMode: AppMode;
-  setAccounts?: React.Dispatch<React.SetStateAction<FiscalAccount[]>>;
   onSetModal?: (modal: NonNullable<ModalInfo>) => void;
 };
 
-export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: CatalogViewProps) {
+export function CatalogView({ accounts, appMode, onSetModal }: CatalogViewProps) {
   const [localAccounts, setLocalAccounts] = useState<FiscalAccount[]>(accounts);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editCode, setEditCode] = useState('');
   const [modalInfo, setModalInfo] = useState<ModalInfo>(null);
@@ -57,7 +57,6 @@ export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: Cata
 
     const updatedAccounts = localAccounts.map(a => a.id === id ? { ...a, name: editName.trim(), code: editCode.trim() } : a);
     setLocalAccounts(updatedAccounts);
-    setAccounts?.(updatedAccounts);
     setEditingId(null);
     const successModal = { type: 'success', title: 'Cuenta Actualizada', message: 'Los cambios se han guardado correctamente.' } as const;
     setModalInfo(successModal);
@@ -66,6 +65,7 @@ export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: Cata
 
   const handleStartEdit = (account: FiscalAccount) => {
     setEditingId(account.id);
+    setPendingDeleteId(null);
     setEditName(account.name);
     setEditCode(account.code);
     setModalInfo(null);
@@ -73,17 +73,27 @@ export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: Cata
 
   const handleCancelEdit = () => {
     setEditingId(null);
+    setPendingDeleteId(null);
     setEditName('');
     setEditCode('');
     setModalInfo(null);
   };
 
+  const handleRequestDelete = (id: string) => {
+    setPendingDeleteId(id);
+    setModalInfo({
+      type: 'error',
+      title: 'Confirmar eliminación',
+      message: 'Confirma la eliminación para continuar.'
+    });
+  };
+
   const handleDeleteAccount = (id: string) => {
     const updatedAccounts = localAccounts.filter(account => account.id !== id);
     setLocalAccounts(updatedAccounts);
-    setAccounts?.(updatedAccounts);
+    setPendingDeleteId(null);
     if (editingId === id) handleCancelEdit();
-    const successModal = { type: 'success', title: 'Cuenta eliminada', message: 'La subcuenta se eliminó correctamente.' } as const;
+    const successModal = { type: 'success', title: 'Cuenta eliminada', message: 'La cuenta se eliminó correctamente.' } as const;
     setModalInfo(successModal);
     onSetModal?.(successModal);
   };
@@ -192,14 +202,35 @@ export function CatalogView({ accounts, appMode, setAccounts, onSetModal }: Cata
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => handleDeleteAccount(account.id)}
-                          aria-label="Eliminar cuenta"
-                          className="inline-flex items-center justify-center rounded-md border border-rose-400/40 bg-rose-500/10 p-1.5 text-rose-300 transition hover:bg-rose-500/20"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {pendingDeleteId === account.id ? (
+                          <>
+                            <button
+                              onClick={() => handleDeleteAccount(account.id)}
+                              aria-label="Confirmar eliminación de cuenta"
+                              className="inline-flex items-center justify-center rounded-md border border-rose-400/40 bg-rose-500/10 p-1.5 text-rose-300 transition hover:bg-rose-500/20"
+                              title="Confirmar"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setPendingDeleteId(null)}
+                              aria-label="Cancelar eliminación"
+                              className="inline-flex items-center justify-center rounded-md border border-slate-400/40 bg-slate-500/10 p-1.5 text-slate-300 transition hover:bg-slate-500/20"
+                              title="Cancelar"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => handleRequestDelete(account.id)}
+                            aria-label="Eliminar cuenta"
+                            className="inline-flex items-center justify-center rounded-md border border-rose-400/40 bg-rose-500/10 p-1.5 text-rose-300 transition hover:bg-rose-500/20"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </td>
