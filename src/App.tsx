@@ -118,7 +118,7 @@ export default function App() {
 
   const handleCombinedAccountsUpdate = (action: React.SetStateAction<Account[]>) => {
     if (!activeJournalId) {
-      console.warn('Se intentó actualizar subcuentas sin un Libro Diario activo.');
+      console.warn('Cannot update subaccounts: No active journal selected. Please select a journal first.');
       return;
     }
 
