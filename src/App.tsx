@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, 
   FileText, 
@@ -102,8 +102,6 @@ export default function App() {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const downloadPercent = useUpdateProgress();
   const isDesktopRuntime = typeof window !== 'undefined' && ('electronAPI' in window || navigator.userAgent.toLowerCase().includes('electron'));
-  const modalInfoRef = useRef<{ type: 'success' | 'error', title: string, message: string } | null>(null);
-
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
@@ -111,15 +109,11 @@ export default function App() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  useEffect(() => {
-    modalInfoRef.current = modalInfo;
-  }, [modalInfo]);
-
   // Vigilante de Respaldo Semanal (Rutina Continua)
   useEffect(() => {
     const checkBackupStatus = () => {
       // Ignorar chequeo si ya hay un modal abierto para no interrumpir
-      if (modalInfoRef.current) return;
+      if (modalInfo) return;
 
       const lastBackup = localStorage.getItem(LAST_BACKUP_STORAGE_KEY);
       if (!lastBackup) {
@@ -148,7 +142,7 @@ export default function App() {
 
     // 3. Limpieza para evitar memory leaks
     return () => clearInterval(intervalId);
-  }, []);
+  }, [modalInfo]);
   
   const activeJournal = journals.find(j => j.id === activeJournalId) || null;
   // --- INICIO CATÁLOGO HÍBRIDO ---
