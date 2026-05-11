@@ -402,6 +402,55 @@ export default function App() {
     }
   };
 
+  // --- LÓGICA DE RESPALDO LOCAL ---
+  const handleExportBackup = () => {
+    const backupData = {
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+      data: {
+        journals,
+        accounts,
+        fixedAssets,
+        finalInventories
+      }
+    };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Contabilidad_M4_Respaldo_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setModalInfo({ type: 'success', title: 'Respaldo Exitoso', message: 'Se ha descargado el archivo JSON con toda tu base de datos.' });
+  };
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const backup = parsed.data || parsed; // Soporte para formato nuevo o legacy
+      
+      if (backup.journals && backup.accounts) {
+        setJournals(backup.journals);
+        setAccounts(backup.accounts);
+        if (backup.fixedAssets) setFixedAssets(backup.fixedAssets);
+        if (backup.finalInventories) setFinalInventories(backup.finalInventories);
+        
+        if (backup.journals.length > 0) setActiveJournalId(backup.journals[0].id);
+        
+        setModalInfo({ type: 'success', title: 'Restauración Exitosa', message: 'Toda la información ha sido restaurada correctamente.' });
+      } else {
+        throw new Error('Formato inválido');
+      }
+    } catch (err) {
+      setModalInfo({ type: 'error', title: 'Error de Restauración', message: 'El archivo JSON está corrupto o no tiene el formato correcto de Contabilidad M4.' });
+    }
+    e.target.value = ''; // Resetear input
+  };
+  // --- FIN LÓGICA DE RESPALDO ---
+
   const navigationTabs: { id: AppTab; label: string; shortLabel: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'journal', label: 'Libro Diario', shortLabel: 'Diario', icon: FileText },
     { id: 't-accounts', label: 'Cuentas T', shortLabel: 'Cuentas T', icon: TableIcon },
@@ -787,6 +836,23 @@ export default function App() {
               <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-400">
                 <p>© 2026 Contabilidad M4. Sistema de Gestión Contable.</p>
                 <div className="flex gap-6 items-center">
+                  <button
+                    onClick={handleExportBackup}
+                    className="inline-flex items-center gap-1.5 text-slate-400 hover:text-indigo-300 transition-colors text-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Respaldo
+                  </button>
+                  <label className="inline-flex items-center gap-1.5 text-slate-400 hover:text-indigo-300 transition-colors text-xs cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" />
+                    Restaurar
+                    <input
+                      type="file"
+                      accept=".json,application/json"
+                      onChange={handleImportBackup}
+                      className="hidden"
+                    />
+                  </label>
                   <span className="flex items-center gap-2 italic">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
                     Precisión • Integridad • Transparencia
