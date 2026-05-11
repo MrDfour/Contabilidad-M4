@@ -38,6 +38,9 @@ export function CatalogView({
         const children = accounts.filter(a => a.parentId === parentId);
         let maxSuffix = 0;
         children.forEach(c => {
+          if (!c.code.startsWith(`${parent.code}.`)) {
+            return;
+          }
           const parts = c.code.split('.');
           if (parts.length > 1) {
             const suffix = parseInt(parts[parts.length - 1], 10);
@@ -153,7 +156,7 @@ export function CatalogView({
           </div>
           <div className="space-y-1">
             <label className="text-[10px] uppercase font-bold text-slate-500">Código Interno</label>
-            <input readOnly required type="text" value={code} placeholder="Ej: 1102.01" className="w-full bg-slate-900/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-400 placeholder-slate-600 focus:outline-none focus:ring-0 font-mono cursor-not-allowed" />
+            <input readOnly type="text" value={code} placeholder="Ej: 1102.01" className="w-full bg-slate-900/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-400 placeholder-slate-600 focus:outline-none focus:ring-0 font-mono cursor-not-allowed" />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] uppercase font-bold text-slate-500">Nombre de Subcuenta</label>
