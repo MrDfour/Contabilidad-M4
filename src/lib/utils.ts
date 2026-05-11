@@ -67,6 +67,12 @@ export function formatCurrency(amount: number) {
   }).format(amount);
 }
 
+export const formatSatGroupCode = (code: string) => {
+  // Regla SAT: códigos de 4+ dígitos se muestran como XX.XX.
+  if (code.length >= 4) return `${code.slice(0, 2)}.${code.slice(2)}`;
+  return code;
+};
+
 export const exportToExcel = async (data: any[], fileName: string, sheetName: string) => {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName);
