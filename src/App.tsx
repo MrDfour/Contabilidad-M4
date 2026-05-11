@@ -521,13 +521,13 @@ export default function App() {
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* Header */}
           <header className="relative overflow-visible border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top))' }}>
-            <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-1/2 z-20">
+            <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-1/2 z-20" role="status" aria-live="polite">
               <div className="inline-flex items-center gap-2 max-w-[min(90vw,30rem)] px-4 py-1.5 rounded-full border border-indigo-500/35 bg-[#111827]/90 text-indigo-100 shadow-lg shadow-indigo-500/20 backdrop-blur-md">
                 <FileText className="w-4 h-4 text-indigo-300 shrink-0" />
                 <span className="text-xs font-semibold uppercase tracking-wider text-indigo-300/90">
                   Libro Diario:
                 </span>
-                <span className={cn("text-xs font-medium truncate", hasActiveJournal ? "text-slate-100" : "text-slate-400 italic")}>
+                <span className={cn("text-xs font-medium truncate", hasActiveJournal ? "text-slate-100" : "text-slate-300 italic")}>
                   {activeJournal?.name || 'Sin diario activo'}
                 </span>
               </div>
