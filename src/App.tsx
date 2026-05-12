@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Plus, 
   FileText, 
@@ -151,20 +151,25 @@ export default function App() {
   }, []);
   
   const activeJournal = journals.find(j => j.id === activeJournalId) || null;
-  const recoveredGlobalAccounts = useMemo(
-    () => INITIAL_ACCOUNTS.map(a => ({ ...a, isReadOnly: true })),
-    []
-  );
-  const getEffectiveGlobalAccounts = useCallback(() => {
-    const globalsFromState = accounts.filter(a => a.isReadOnly);
-    return globalsFromState.length > 0 ? globalsFromState : recoveredGlobalAccounts;
-  }, [accounts, recoveredGlobalAccounts]);
-  // --- CATÁLOGO HÍBRIDO CON AUTO-RECUPERACIÓN ---
+  // --- CATÁLOGO HÍBRIDO CON AUTO-RECUPERACIÓN QUIRÚRGICA ---
   const combinedAccounts = useMemo(() => {
-    const globals = getEffectiveGlobalAccounts();
+    const currentGlobals = accounts.filter(a => a.isReadOnly);
+    
+    // Verificamos completitud: Buscamos si falta alguna cuenta base del SAT
+    const missingGlobals = INITIAL_ACCOUNTS.filter(
+      initial => !currentGlobals.some(current => current.code === initial.code)
+    );
+
+    let finalGlobals = currentGlobals;
+    if (missingGlobals.length > 0) {
+      // Si faltan cuentas, las inyectamos marcándolas como de solo lectura
+      const recovered = missingGlobals.map(a => ({ ...a, isReadOnly: true }));
+      finalGlobals = [...currentGlobals, ...recovered];
+    }
+
     const locals = activeJournal?.subAccounts || [];
-    return [...globals, ...locals];
-  }, [activeJournal?.subAccounts, getEffectiveGlobalAccounts]);
+    return [...finalGlobals, ...locals];
+  }, [accounts, activeJournal]); // INITIAL_ACCOUNTS es estático, se omite de forma segura.
 
   const handleCombinedAccountsUpdate = (action: React.SetStateAction<Account[]>) => {
     if (!activeJournalId) {
@@ -172,11 +177,19 @@ export default function App() {
       return;
     }
 
-    const effectiveGlobals = getEffectiveGlobalAccounts();
-    const globalIds = new Set(effectiveGlobals.map(a => a.id));
+    const currentGlobals = accounts.filter(a => a.isReadOnly);
+    const missingGlobals = INITIAL_ACCOUNTS.filter(
+      initial => !currentGlobals.some(current => current.code === initial.code)
+    );
+    const finalGlobals = missingGlobals.length > 0
+      ? [...currentGlobals, ...missingGlobals.map(a => ({ ...a, isReadOnly: true }))]
+      : currentGlobals;
+    const globalCodes = new Set(finalGlobals.map(a => a.code));
 
     const nextCombinedAccounts = typeof action === 'function' ? action(combinedAccounts) : action;
-    const nextLocalAccounts = nextCombinedAccounts.filter(a => !globalIds.has(a.id) && !a.isReadOnly);
+    const nextLocalAccounts = nextCombinedAccounts.filter(
+      a => !a.isReadOnly && !globalCodes.has(a.code)
+    );
 
     setJournals(prev =>
       prev.map(j =>
