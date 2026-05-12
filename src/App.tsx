@@ -166,10 +166,9 @@ export default function App() {
   }, [accounts]);
   // --- CATÁLOGO HÍBRIDO CON AUTO-RECUPERACIÓN QUIRÚRGICA ---
   const combinedAccounts = useMemo(() => {
-    // Verificamos completitud: Buscamos si falta alguna cuenta base del SAT
     const locals = activeJournal?.subAccounts || [];
     return [...finalGlobals, ...locals];
-  }, [finalGlobals, activeJournal?.subAccounts]); // INITIAL_ACCOUNTS es estático, se omite de forma segura.
+  }, [finalGlobals, activeJournal?.subAccounts]); // INITIAL_ACCOUNTS se considera de forma transitiva mediante finalGlobals.
 
   const handleCombinedAccountsUpdate = (action: React.SetStateAction<Account[]>) => {
     if (!activeJournalId) {
