@@ -176,7 +176,7 @@ export default function App() {
     const globalIds = new Set(effectiveGlobals.map(a => a.id));
 
     const nextCombinedAccounts = typeof action === 'function' ? action(combinedAccounts) : action;
-    const nextLocalAccounts = nextCombinedAccounts.filter(a => !globalIds.has(a.id));
+    const nextLocalAccounts = nextCombinedAccounts.filter(a => !globalIds.has(a.id) && !a.isReadOnly);
 
     setJournals(prev =>
       prev.map(j =>
