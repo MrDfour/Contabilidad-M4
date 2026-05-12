@@ -169,7 +169,7 @@ export default function App() {
 
     const locals = activeJournal?.subAccounts || [];
     return [...finalGlobals, ...locals];
-  }, [accounts, activeJournal]); // INITIAL_ACCOUNTS es estático, se omite de forma segura.
+  }, [accounts, activeJournal?.subAccounts]); // INITIAL_ACCOUNTS es estático, se omite de forma segura.
 
   const handleCombinedAccountsUpdate = (action: React.SetStateAction<Account[]>) => {
     if (!activeJournalId) {
@@ -185,8 +185,9 @@ export default function App() {
       ? [...currentGlobals, ...missingGlobals.map(a => ({ ...a, isReadOnly: true }))]
       : currentGlobals;
     const globalCodes = new Set(finalGlobals.map(a => a.code));
+    const effectiveCombinedAccounts = [...finalGlobals, ...(activeJournal?.subAccounts || [])];
 
-    const nextCombinedAccounts = typeof action === 'function' ? action(combinedAccounts) : action;
+    const nextCombinedAccounts = typeof action === 'function' ? action(effectiveCombinedAccounts) : action;
     const nextLocalAccounts = nextCombinedAccounts.filter(
       a => !a.isReadOnly && !globalCodes.has(a.code)
     );
