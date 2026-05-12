@@ -151,12 +151,24 @@ export default function App() {
   }, []);
   
   const activeJournal = journals.find(j => j.id === activeJournalId) || null;
-  // --- INICIO CATÁLOGO HÍBRIDO ---
+  const finalGlobals = useMemo(() => {
+    const currentGlobals = accounts.filter(a => a.isReadOnly);
+    const missingGlobals = INITIAL_ACCOUNTS.filter(
+      initial => !currentGlobals.some(current => current.code === initial.code)
+    );
+
+    if (missingGlobals.length > 0) {
+      const recovered = missingGlobals.map(a => ({ ...a, isReadOnly: true }));
+      return [...currentGlobals, ...recovered];
+    }
+
+    return currentGlobals;
+  }, [accounts]);
+  // --- CATÁLOGO HÍBRIDO CON AUTO-RECUPERACIÓN QUIRÚRGICA ---
   const combinedAccounts = useMemo(() => {
-    const globals = accounts.filter(a => a.isReadOnly);
     const locals = activeJournal?.subAccounts || [];
-    return [...globals, ...locals];
-  }, [accounts, activeJournal?.subAccounts]);
+    return [...finalGlobals, ...locals];
+  }, [finalGlobals, activeJournal?.subAccounts]); // INITIAL_ACCOUNTS se considera de forma transitiva mediante finalGlobals.
 
   const handleCombinedAccountsUpdate = (action: React.SetStateAction<Account[]>) => {
     if (!activeJournalId) {
@@ -164,8 +176,13 @@ export default function App() {
       return;
     }
 
-    const nextCombinedAccounts = typeof action === 'function' ? action(combinedAccounts) : action;
-    const nextLocalAccounts = nextCombinedAccounts.filter(a => !a.isReadOnly);
+    const globalCodes = new Set(finalGlobals.map(a => a.code));
+    const effectiveCombinedAccounts = [...finalGlobals, ...(activeJournal?.subAccounts || [])];
+
+    const nextCombinedAccounts = typeof action === 'function' ? action(effectiveCombinedAccounts) : action;
+    const nextLocalAccounts = nextCombinedAccounts.filter(
+      a => !a.isReadOnly && !globalCodes.has(a.code)
+    );
 
     setJournals(prev =>
       prev.map(j =>
