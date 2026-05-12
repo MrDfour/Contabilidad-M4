@@ -151,21 +151,23 @@ export default function App() {
   }, []);
   
   const activeJournal = journals.find(j => j.id === activeJournalId) || null;
-  // --- CATÁLOGO HÍBRIDO CON AUTO-RECUPERACIÓN QUIRÚRGICA ---
-  const combinedAccounts = useMemo(() => {
+  const getFinalGlobals = () => {
     const currentGlobals = accounts.filter(a => a.isReadOnly);
-    
-    // Verificamos completitud: Buscamos si falta alguna cuenta base del SAT
     const missingGlobals = INITIAL_ACCOUNTS.filter(
       initial => !currentGlobals.some(current => current.code === initial.code)
     );
 
-    let finalGlobals = currentGlobals;
     if (missingGlobals.length > 0) {
-      // Si faltan cuentas, las inyectamos marcándolas como de solo lectura
       const recovered = missingGlobals.map(a => ({ ...a, isReadOnly: true }));
-      finalGlobals = [...currentGlobals, ...recovered];
+      return [...currentGlobals, ...recovered];
     }
+
+    return currentGlobals;
+  };
+  // --- CATÁLOGO HÍBRIDO CON AUTO-RECUPERACIÓN QUIRÚRGICA ---
+  const combinedAccounts = useMemo(() => {
+    // Verificamos completitud: Buscamos si falta alguna cuenta base del SAT
+    const finalGlobals = getFinalGlobals();
 
     const locals = activeJournal?.subAccounts || [];
     return [...finalGlobals, ...locals];
@@ -177,13 +179,7 @@ export default function App() {
       return;
     }
 
-    const currentGlobals = accounts.filter(a => a.isReadOnly);
-    const missingGlobals = INITIAL_ACCOUNTS.filter(
-      initial => !currentGlobals.some(current => current.code === initial.code)
-    );
-    const finalGlobals = missingGlobals.length > 0
-      ? [...currentGlobals, ...missingGlobals.map(a => ({ ...a, isReadOnly: true }))]
-      : currentGlobals;
+    const finalGlobals = getFinalGlobals();
     const globalCodes = new Set(finalGlobals.map(a => a.code));
     const effectiveCombinedAccounts = [...finalGlobals, ...(activeJournal?.subAccounts || [])];
 
