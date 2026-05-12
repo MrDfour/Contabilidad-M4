@@ -151,7 +151,7 @@ export default function App() {
   }, []);
   
   const activeJournal = journals.find(j => j.id === activeJournalId) || null;
-  const getFinalGlobals = () => {
+  const finalGlobals = useMemo(() => {
     const currentGlobals = accounts.filter(a => a.isReadOnly);
     const missingGlobals = INITIAL_ACCOUNTS.filter(
       initial => !currentGlobals.some(current => current.code === initial.code)
@@ -163,15 +163,13 @@ export default function App() {
     }
 
     return currentGlobals;
-  };
+  }, [accounts]);
   // --- CATÁLOGO HÍBRIDO CON AUTO-RECUPERACIÓN QUIRÚRGICA ---
   const combinedAccounts = useMemo(() => {
     // Verificamos completitud: Buscamos si falta alguna cuenta base del SAT
-    const finalGlobals = getFinalGlobals();
-
     const locals = activeJournal?.subAccounts || [];
     return [...finalGlobals, ...locals];
-  }, [accounts, activeJournal?.subAccounts]); // INITIAL_ACCOUNTS es estático, se omite de forma segura.
+  }, [finalGlobals, activeJournal?.subAccounts]); // INITIAL_ACCOUNTS es estático, se omite de forma segura.
 
   const handleCombinedAccountsUpdate = (action: React.SetStateAction<Account[]>) => {
     if (!activeJournalId) {
@@ -179,7 +177,6 @@ export default function App() {
       return;
     }
 
-    const finalGlobals = getFinalGlobals();
     const globalCodes = new Set(finalGlobals.map(a => a.code));
     const effectiveCombinedAccounts = [...finalGlobals, ...(activeJournal?.subAccounts || [])];
 
