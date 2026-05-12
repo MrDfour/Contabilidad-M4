@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { 
   Plus, 
   FileText, 
@@ -155,16 +155,16 @@ export default function App() {
     () => INITIAL_ACCOUNTS.map(a => ({ ...a, isReadOnly: true })),
     []
   );
-  const getEffectiveGlobalAccounts = () => {
+  const getEffectiveGlobalAccounts = useCallback(() => {
     const globalsFromState = accounts.filter(a => a.isReadOnly);
     return globalsFromState.length > 0 ? globalsFromState : recoveredGlobalAccounts;
-  };
+  }, [accounts, recoveredGlobalAccounts]);
   // --- CATÁLOGO HÍBRIDO CON AUTO-RECUPERACIÓN ---
   const combinedAccounts = useMemo(() => {
     const globals = getEffectiveGlobalAccounts();
     const locals = activeJournal?.subAccounts || [];
     return [...globals, ...locals];
-  }, [accounts, activeJournal?.subAccounts, recoveredGlobalAccounts]);
+  }, [activeJournal?.subAccounts, getEffectiveGlobalAccounts]);
 
   const handleCombinedAccountsUpdate = (action: React.SetStateAction<Account[]>) => {
     if (!activeJournalId) {
