@@ -103,7 +103,6 @@ export default function App() {
   const downloadPercent = useUpdateProgress();
   const isDesktopRuntime = typeof window !== 'undefined' && ('electronAPI' in window || navigator.userAgent.toLowerCase().includes('electron'));
   const modalInfoRef = useRef<{ type: 'success' | 'error', title: string, message: string } | null>(null);
-
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
