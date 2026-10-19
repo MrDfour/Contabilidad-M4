@@ -67,12 +67,20 @@ Antes de tocar código:
 
 **Objetivo:** desmontar el "estado dios" de `App.tsx` en hooks con responsabilidad única, **sin** introducir Context ni reducers (ver R3).
 
-- [ ] `src/hooks/useAppData.ts` — carga inicial (`migrateFromLocalStorage` + las 4 claves) y exposición del flag `hasLoaded`. Debe devolver un estado "listo para guardar" para no persistir vacíos antes de cargar (protege R2).
-- [ ] `src/hooks/useJournals.ts` — `addEntry`, `updateEntry`, `moveEntry`, `deleteEntry`, `createJournal`, `renameJournal`, `importEntries`, `applyRemoteSyncState` (journals).
-- [ ] `src/hooks/useCatalog.ts` — catálogo híbrido: `finalGlobals`, `combinedAccounts`, `handleCombinedAccountsUpdate` (la lógica isReadOnly/dedup por `code` se queda junta y encapsulada; es la pieza más frágil según R2).
-- [ ] `src/hooks/useInventories.ts` — `finalInventories` + `handleSetFinalInventory`.
-- [ ] `src/hooks/useBackup.ts` — vigilante semanal + `handleExportBackup` + `handleImportBackup` (mueve la clave `contasis_last_backup` aquí).
-- [ ] **Regla anti-R1 (atomicidad):** `applyRemoteSyncState` y la restauración de respaldo deben permanecer como **una sola función que reciba un setter combinado** (o los setters de todos los hooks a la vez). Prohibido que dos hooks persistan la misma clave por caminos distintos. Documentar en JSDoc del hook cuál clave de storage es "dueño" de cada hook:
+- [x] `src/hooks/useAppData.ts` — carga inicial (`migrateFromLocalStorage` + las 4 claves) y exposición del flag "listo para guardar" (via `onLoaded(true)` → `setHasLoaded` en App; protege R2). *Nota de diseño: se llama al final de la cadena de hooks porque sus appliers vienen de los hooks creados primero; usa refs internos para ver la versión estable.*
+- [x] `src/hooks/useJournals.ts` — `addEntry`, `updateEntry`, `moveEntry`, `deleteEntry`, `createJournal`, `renameJournal`, `importEntries`, `deleteJournal` (rama journal de handleConfirmDelete), `setSubAccounts` y `hydrate`. `handleConfirmDelete` (modal) quedó en App y delega a estos métodos.
+- [x] `src/hooks/useCatalog.ts` — catálogo híbrido: `finalGlobals`, `combinedAccounts`, `handleCombinedAccountsUpdate` (firma intacta para satisfacer `React.Dispatch<React.SetStateAction<Account[]>>` de CatalogView), persistencia con debounce gated por `canSave`.
+- [x] `src/hooks/useInventories.ts` — `finalInventories` + `finalInventory` sincronizado + `handleSetFinalInventory`. **Nota fiel al original: esta clave no tiene auto-guardado** (solo guarda explícito).
+- [x] `src/hooks/useBackup.ts` — vigilante semanal + `handleExportBackup` + `handleImportBackup` (parseo/validación en el hook; los writes multi-dominio van al orquestador `restore` de App).
+- [x] **Regla anti-R1 (atomicidad):** implementada con "orquestadores en App": `applyRemoteSyncState` compone `journalsState.hydrate` + `inventoriesState.hydrateFromRemote` en UNA función; la restauración de respaldo compone hydrate + writes crudos de cada hook. Cada usuarios de clave documentado en JSDoc:
+
+  | Hook | Clave de storage de la que es dueño |
+  |---|---|
+  | `useJournals` | `contasis_journals` |
+  | `useInventories` | `contasis_final_inventories` |
+  | `useCatalog` | `contasis_accounts` |
+  | (activos fijos, aún en `App`) | `contasis_fixed_assets` |
+  | `useBackup` | `contasis_last_backup` (solo lectura/escritura simple) |
 
   | Hook | Clave de storage de la que es dueño |
   |---|---|
@@ -84,7 +92,7 @@ Antes de tocar código:
 
 **Commits:** uno por hook (`refactor: extraer useJournals de App`, etc.), más `docs: actualizar ARCHITECTURE.md fase 2`.
 
-**Criterio de salida:** smoke test completo; específicamente probar sync móvil→escritorio y restauración de respaldo (escenarios R1). `App.tsx` debe quedar < 400 líneas.
+**Criterio de salida:** smoke test completo; específicamente probar sync móvil→escritorio y restauración de respaldo (escenarios R1). `App.tsx` debe quedar < 400 líneas. *(Estado: refactor completo e implementado — `App.tsx` quedó en 738 líneas; los operadores multi-dominio siguen en App sin migrar aún el layout, por lo que el "< 400" se alcanzará en Fase 3; el resto ✓. Pendiente: smoke test del usuario + commits + push.)*
 
 ---
 

@@ -36,18 +36,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useCheckForUpdates } from './hooks/useCheckForUpdates';
 import { useUpdateProgress } from './hooks/useUpdateProgress';
 import {
-  INITIAL_ACCOUNTS,
-  JournalEntry,
-  Account,
-  Journal,
   FixedAsset
 } from './types';
 import { cn } from './lib/utils';
-import { normalizeAmount } from './lib/format';
 import { buildTAccountsData, computeAccountBalances } from './lib/accounting';
 import FeedbackModal from './components/FeedbackModal';
 import SyncModal from './components/SyncModal';
-import { GlobalInfoModal, BACKUP_SUGGESTION_TITLE, type ModalInfo } from './components/modals/GlobalInfoModal';
+import { GlobalInfoModal, type ModalInfo } from './components/modals/GlobalInfoModal';
 import { ConfirmDeleteModal, type ConfirmDeleteData } from './components/modals/ConfirmDeleteModal';
 import { UpdateAvailableModal } from './components/modals/UpdateAvailableModal';
 import { AboutModal } from './components/modals/AboutModal';
@@ -60,13 +55,16 @@ import { FixedAssetsView } from './components/FixedAssetsView';
 import { ContabilidadElectronicaView } from './components/ContabilidadElectronicaView';
 import { CatalogView } from './components/CatalogView';
 import type { SyncState } from './services/syncService';
-import { saveToStorage, loadFromStorage, migrateFromLocalStorage } from './services/storageService';
+import { saveToStorage } from './services/storageService';
+import { useAppData } from './hooks/useAppData';
+import { useJournals } from './hooks/useJournals';
+import { useCatalog } from './hooks/useCatalog';
+import { useInventories } from './hooks/useInventories';
+import { useBackup } from './hooks/useBackup';
 
 const APP_VERSION = `v${__APP_VERSION__}`;
 type AppMode = 'basic' | 'fiscal';
 type AppTab = 'journal' | 't-accounts' | 'balance' | 'profit-loss' | 'assets' | 'electronic' | 'catalog';
-const ACCOUNTS_SAVE_DEBOUNCE_MS = 300;
-const LAST_BACKUP_STORAGE_KEY = 'contasis_last_backup';
 const FISCAL_NAV_TABS = [
   { id: 'assets' as const, label: 'Activos Fijos', shortLabel: 'Activos', icon: Monitor },
   { id: 'electronic' as const, label: 'Cont. Electrónica', shortLabel: 'SAT XML', icon: FileCode }
@@ -79,18 +77,13 @@ const getStoredAppMode = (): AppMode => {
 
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>(getStoredAppMode);
-  const [journals, setJournals] = useState<Journal[]>([]);
-  const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
   const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
   const [activeTab, setActiveTab] = useState<AppTab>('journal');
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDeleteData | null>(null);
   const [modalInfo, setModalInfo] = useState<ModalInfo | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [finalInventory, setFinalInventory] = useState<number>(0);
-  const [finalInventories, setFinalInventories] = useState<Record<string, number>>({});
-  const [hasLoadedAccounts, setHasLoadedAccounts] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const { isUpdateAvailable, latestVersion, downloadUrl } = useCheckForUpdates();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -111,169 +104,57 @@ export default function App() {
     modalInfoRef.current = modalInfo;
   }, [modalInfo]);
 
-  // Vigilante de Respaldo Semanal (Rutina Continua)
-  useEffect(() => {
-    const checkBackupStatus = () => {
-      // Ignorar chequeo si ya hay un modal abierto para no interrumpir
-      if (modalInfoRef.current) return;
+  // --- Dominios como hooks (Fase 2) ---
+  const journalsState = useJournals();
+  const { journals, activeJournalId, setActiveJournalId, activeJournal } = journalsState;
 
-      const lastBackup = localStorage.getItem(LAST_BACKUP_STORAGE_KEY);
-      if (!lastBackup) {
-        localStorage.setItem(LAST_BACKUP_STORAGE_KEY, new Date().toISOString());
-        return;
-      }
+  const inventoriesState = useInventories({ activeJournalId });
+  const { finalInventories, setFinalInventories, finalInventory, handleSetFinalInventory } = inventoriesState;
 
-      const lastDate = new Date(lastBackup).getTime();
-      const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
-      const now = Date.now();
-
-      if (now - lastDate > sevenDaysInMs) {
-        setModalInfo({
-          type: 'success',
-          title: BACKUP_SUGGESTION_TITLE,
-          message: 'Ha pasado más de una semana desde tu último respaldo de seguridad. ¿Deseas descargar una copia de tu base de datos ahora?',
-        });
-      }
-    };
-
-    // 1. Chequeo inicial al cargar la app
-    checkBackupStatus();
-
-    // 2. Chequeo continuo cada 12 horas (Por si nunca cierran la app)
-    const intervalId = setInterval(checkBackupStatus, 12 * 60 * 60 * 1000);
-
-    // 3. Limpieza para evitar memory leaks
-    return () => clearInterval(intervalId);
-  }, []);
-  
-  const activeJournal = journals.find(j => j.id === activeJournalId) || null;
-  const finalGlobals = useMemo(() => {
-    const currentGlobals = accounts.filter(a => a.isReadOnly);
-    const missingGlobals = INITIAL_ACCOUNTS.filter(
-      initial => !currentGlobals.some(current => current.code === initial.code)
-    );
-
-    if (missingGlobals.length > 0) {
-      const recovered = missingGlobals.map(a => ({ ...a, isReadOnly: true }));
-      return [...currentGlobals, ...recovered];
-    }
-
-    return currentGlobals;
-  }, [accounts]);
-  // --- CATÁLOGO HÍBRIDO CON AUTO-RECUPERACIÓN QUIRÚRGICA ---
-  const combinedAccounts = useMemo(() => {
-    const locals = activeJournal?.subAccounts || [];
-    return [...finalGlobals, ...locals];
-  }, [finalGlobals, activeJournal?.subAccounts]); // INITIAL_ACCOUNTS se considera de forma transitiva mediante finalGlobals.
-
-  const handleCombinedAccountsUpdate = (action: React.SetStateAction<Account[]>) => {
-    if (!activeJournalId) {
-      console.warn('Cannot update subaccounts: No active journal selected. Please select a journal first.');
-      return;
-    }
-
-    const globalCodes = new Set(finalGlobals.map(a => a.code));
-    const effectiveCombinedAccounts = [...finalGlobals, ...(activeJournal?.subAccounts || [])];
-
-    const nextCombinedAccounts = typeof action === 'function' ? action(effectiveCombinedAccounts) : action;
-    const nextLocalAccounts = nextCombinedAccounts.filter(
-      a => !a.isReadOnly && !globalCodes.has(a.code)
-    );
-
-    setJournals(prev =>
-      prev.map(j =>
-        j.id === activeJournalId
-          ? { ...j, subAccounts: nextLocalAccounts }
-          : j
-      )
-    );
-  };
-  // --- FIN CATÁLOGO HÍBRIDO ---
-  const hasActiveJournal = Boolean(activeJournal);
-  const entries = activeJournal?.entries || [];
-
-  // Persistence
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        await migrateFromLocalStorage();
-
-        const saved = await loadFromStorage('contasis_journals');
-        if (saved) {
-          const parsed = Array.isArray(saved) ? saved : JSON.parse(saved);
-          setJournals(parsed);
-          if (parsed.length > 0) setActiveJournalId(parsed[0].id);
-        } else {
-          // Crear diario inicial si no existe nada
-          const initialJournal: Journal = { id: crypto.randomUUID(), name: 'Diario Inicial', entries: [] };
-          setJournals([initialJournal]);
-          setActiveJournalId(initialJournal.id);
-        }
-
-        const savedInventories = await loadFromStorage('contasis_final_inventories');
-        if (savedInventories) {
-          const parsed = typeof savedInventories === 'string' ? JSON.parse(savedInventories) : savedInventories;
-          setFinalInventories(parsed);
-        }
- 
-
-        const savedFixedAssets = await loadFromStorage('contasis_fixed_assets');
-        if (savedFixedAssets) {
-          const parsed = typeof savedFixedAssets === 'string' ? JSON.parse(savedFixedAssets) : savedFixedAssets;
-          setFixedAssets(parsed);
-        }
-
-        const savedAccounts = await loadFromStorage('contasis_accounts');
-        if (savedAccounts) {
-          const parsed = typeof savedAccounts === 'string' ? JSON.parse(savedAccounts) : savedAccounts;
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setAccounts(parsed);
-          } else {
-            setAccounts(INITIAL_ACCOUNTS.map(a => ({ ...a, isReadOnly: true })));
-          }
-        } else {
-          setAccounts(INITIAL_ACCOUNTS.map(a => ({ ...a, isReadOnly: true })));
-        }
-        setHasLoadedAccounts(true);
-      } catch (error) {
-        console.error("Error crítico al cargar datos desde el almacenamiento:", error);
-        // Fallback seguro
-        const initialJournal: Journal = { id: crypto.randomUUID(), name: 'Diario Inicial', entries: [] };
-        setJournals([initialJournal]);
-        setActiveJournalId(initialJournal.id);
-        setAccounts(INITIAL_ACCOUNTS);
-        setHasLoadedAccounts(true);
-      }
-    };
-
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    if (journals.length > 0) {
-      saveToStorage('contasis_journals', journals).catch(console.error);
-    }
-  }, [journals]);
-
+  // activos fijos permanecen en App (Fase 3+): persistencia propia idéntica a la original
   useEffect(() => {
     saveToStorage('contasis_fixed_assets', fixedAssets).catch(console.error);
   }, [fixedAssets]);
 
-  useEffect(() => {
-    if (!hasLoadedAccounts) return;
-    const timeoutId = window.setTimeout(() => {
-      saveToStorage('contasis_accounts', accounts).catch((error) => {
-        console.error('Failed to save accounts:', error);
-        setModalInfo({
-          type: 'error',
-          title: 'Error al guardar',
-          message: 'No se pudo guardar el catálogo de cuentas. Intenta nuevamente o contacta soporte si el problema persiste.'
-        });
-      });
-    }, ACCOUNTS_SAVE_DEBOUNCE_MS);
+  // Catálogo híbrido
+  const catalogState = useCatalog({
+    journalId: activeJournalId,
+    journalSubAccounts: activeJournal?.subAccounts,
+    canSave: hasLoaded,
+    onSaveError: setModalInfo,
+    commitSubAccounts: journalsState.setSubAccounts
+  });
+  const { accounts, combinedAccounts, handleCombinedAccountsUpdate, setAccounts } = catalogState;
 
-    return () => window.clearTimeout(timeoutId);
-  }, [accounts, hasLoadedAccounts, setModalInfo]);
+  // Carga inicial (hidratación) — al final de la cadena: ve los setters ya creados
+  useAppData({
+    setJournals: journalsState.setJournals,
+    setActiveJournalId: journalsState.setActiveJournalId,
+    setFinalInventories: setFinalInventories,
+    setFixedAssets: setFixedAssets,
+    setAccounts: setAccounts
+  }, setHasLoaded);
+
+  // Vigilante de Respaldo Semanal + lógica de respaldo (hook propio)
+  const { handleExportBackup, handleImportBackup } = useBackup({
+    getSnapshot: () => ({
+      journals,
+      accounts,
+      fixedAssets,
+      finalInventories
+    }),
+    notify: setModalInfo,
+    canSuggest: () => !modalInfoRef.current,
+    restore: (backup) => {
+      // Orquestador anti-R1: cada hook dueño recibe SU parte; nadie más
+      // escribe claves ajenas. Composición atómica en el mismo evento.
+      journalsState.hydrate(backup.journals, backup.journals.length > 0 ? backup.journals[0].id : null);
+      setAccounts(backup.accounts);
+      if (backup.fixedAssets) setFixedAssets(backup.fixedAssets);
+      if (backup.finalInventories) setFinalInventories(backup.finalInventories);
+      setModalInfo({ type: 'success', title: 'Restauración Exitosa', message: 'Toda la información ha sido restaurada correctamente.' });
+    }
+  });
 
   useEffect(() => {
     localStorage.setItem('contasis_app_mode', appMode);
@@ -286,195 +167,50 @@ export default function App() {
     }
   }, [appMode, activeTab]);
 
-  // Sync finalInventory when active journal changes
-  useEffect(() => {
-    if (activeJournalId) {
-      setFinalInventory(finalInventories[activeJournalId] ?? 0);
-    }
-  }, [activeJournalId, finalInventories]);
+  const hasActiveJournal = Boolean(activeJournal);
+  const entries = activeJournal?.entries || [];
 
-  const handleSetFinalInventory = (value: number) => {
-    const normalizedValue = normalizeAmount(value);
-    setFinalInventory(normalizedValue);
-    if (activeJournalId) {
-      const updated = { ...finalInventories, [activeJournalId]: normalizedValue };
-      setFinalInventories(updated);
-      saveToStorage('contasis_final_inventories', updated).catch(console.error);
-    }
-  };
-
-  // Derived Data: T-Accounts (funciones puras en lib/accounting.ts)
+  // Derived Data: T-Accounts + Balances (funciones puras en lib/accounting.ts)
   const tAccountsData = useMemo(() => buildTAccountsData(entries), [entries]);
-
-  // Derived Data: Balances
   const accountBalances = useMemo(
     () => computeAccountBalances(tAccountsData, combinedAccounts),
     [tAccountsData, combinedAccounts]
   );
 
-  const addEntry = (newEntry: Omit<JournalEntry, 'id'>) => {
-    if (!activeJournalId) return;
-    setJournals(prev => prev.map(j => 
-      j.id === activeJournalId 
-        ? { ...j, entries: [...j.entries, { ...newEntry, id: crypto.randomUUID() }] }
-        : j
-    ));
-  };
-
-  const updateEntry = (id: string, updatedEntry: Omit<JournalEntry, 'id'>) => {
-    if (!activeJournalId) return;
-    setJournals(prev => prev.map(j => 
-      j.id === activeJournalId 
-        ? { ...j, entries: j.entries.map(e => e.id === id ? { ...updatedEntry, id } : e) }
-        : j
-    ));
-  };
-
-  const moveEntry = (id: string, direction: 'up' | 'down') => {
-    if (!activeJournalId) return;
-    setJournals(prev => prev.map(j => {
-      if (j.id !== activeJournalId) return j;
-      const index = j.entries.findIndex(e => e.id === id);
-      if (index === -1) return j;
-      if (direction === 'up' && index === 0) return j;
-      if (direction === 'down' && index === j.entries.length - 1) return j;
-
-      const newEntries = [...j.entries];
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      [newEntries[index], newEntries[targetIndex]] = [newEntries[targetIndex], newEntries[index]];
-      return { ...j, entries: newEntries };
-    }));
-  };
-
-  const deleteEntry = (id: string) => {
-    if (!activeJournalId) return;
-    setJournals(prev => prev.map(j => 
-      j.id === activeJournalId 
-        ? { ...j, entries: j.entries.filter(e => e.id !== id) }
-        : j
-    ));
-  };
-
-  const createJournal = () => {
-    const baseName = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
-    let name = baseName;
-    let counter = 1;
-    while (journals.some(j => j.name === name)) {
-      name = `${baseName} (${counter})`;
-      counter++;
-    }
-
-    const newJournal: Journal = {
-      id: crypto.randomUUID(),
-      name,
-      entries: []
-    };
-    setJournals([...journals, newJournal]);
-    setActiveJournalId(newJournal.id);
-  };
-
-  const renameJournal = (id: string, newName: string) => {
-    setJournals(prev => prev.map(j => j.id === id ? { ...j, name: newName } : j));
-  };
+  const {
+    addEntry,
+    updateEntry,
+    moveEntry,
+    deleteEntry,
+    importEntries,
+    createJournal,
+    renameJournal,
+    deleteJournal
+  } = journalsState;
 
   const handleConfirmDelete = () => {
     if (!confirmDelete) return;
     if (confirmDelete.type === 'entry') {
       if (!activeJournalId) return;
-      setJournals(prev => prev.map(j => 
-        j.id === activeJournalId 
-          ? { ...j, entries: j.entries.filter(e => e.id !== confirmDelete.id) }
-          : j
-      ));
+      journalsState.deleteEntry(confirmDelete.id);
     } else {
-      const nextJournals = journals.filter(j => j.id !== confirmDelete.id);
-      setJournals(nextJournals);
-      if (activeJournalId === confirmDelete.id && nextJournals.length > 0) {
-        setActiveJournalId(nextJournals[0].id);
-      }
+      journalsState.deleteJournal(confirmDelete.id);
     }
     setConfirmDelete(null);
   };
 
-  const importEntries = (newEntries: JournalEntry[]) => {
-    if (!activeJournalId) return;
-    setJournals(prev => prev.map(j => 
-      j.id === activeJournalId 
-        ? { ...j, entries: [...j.entries, ...newEntries] }
-        : j
-    ));
-  };
-
+  /**
+   * Orquestador de sync remoto (anti-R1): una sola función compone ambos hooks.
+   * `hydrate` de diarios persiste explícitamente (incluso vacío, como el original);
+   * `hydrateFromRemote` persiste la clave de inventarios explícitamente.
+   */
   const applyRemoteSyncState = (state: SyncState) => {
     const nextJournals = Array.isArray(state.journals) ? state.journals : [];
     const nextInventories = state.finalInventories ?? {};
 
-    setJournals(nextJournals);
-    setFinalInventories(nextInventories);
-    
-    // Usar la persistencia segura en lugar de localStorage
-    saveToStorage('contasis_journals', nextJournals).catch(console.error);
-    saveToStorage('contasis_final_inventories', nextInventories).catch(console.error);
-
-    if (nextJournals.length > 0) {
-      const nextActiveId = nextJournals[0].id;
-      setActiveJournalId(nextActiveId);
-      setFinalInventory(nextInventories[nextActiveId] ?? 0);
-    } else {
-      setActiveJournalId(null);
-      setFinalInventory(0);
-    }
+    journalsState.hydrate(nextJournals, nextJournals.length > 0 ? nextJournals[0].id : null);
+    inventoriesState.hydrateFromRemote(nextInventories);
   };
-
-  // --- LÓGICA DE RESPALDO LOCAL ---
-  const handleExportBackup = () => {
-    const backupData = {
-      version: '1.0.0',
-      timestamp: new Date().toISOString(),
-      data: {
-        journals,
-        accounts,
-        fixedAssets,
-        finalInventories
-      }
-    };
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Contabilidad_M4_Respaldo_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    localStorage.setItem(LAST_BACKUP_STORAGE_KEY, new Date().toISOString());
-    setModalInfo({ type: 'success', title: 'Respaldo Exitoso', message: 'Se ha descargado el archivo JSON con toda tu base de datos.' });
-  };
-
-  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      const backup = parsed.data || parsed; // Soporte para formato nuevo o legacy
-      
-      if (Array.isArray(backup.journals) && Array.isArray(backup.accounts)) {
-        setJournals(backup.journals);
-        setAccounts(backup.accounts);
-        if (backup.fixedAssets) setFixedAssets(backup.fixedAssets);
-        if (backup.finalInventories) setFinalInventories(backup.finalInventories);
-        
-        if (backup.journals.length > 0) setActiveJournalId(backup.journals[0].id);
-        
-        setModalInfo({ type: 'success', title: 'Restauración Exitosa', message: 'Toda la información ha sido restaurada correctamente.' });
-      } else {
-        throw new Error('Formato inválido');
-      }
-    } catch (err) {
-      setModalInfo({ type: 'error', title: 'Error de Restauración', message: 'El archivo JSON está corrupto o no tiene el formato correcto de Contabilidad M4.' });
-    }
-    e.target.value = ''; // Resetear input
-  };
-  // --- FIN LÓGICA DE RESPALDO ---
 
   const navigationTabs: { id: AppTab; label: string; shortLabel: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'journal', label: 'Libro Diario', shortLabel: 'Diario', icon: FileText },

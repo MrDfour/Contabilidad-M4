@@ -52,8 +52,9 @@ Contabilidad-M4/
     ├── index.css               # Tailwind v4 + estilos globales + animaciones de paleta
     ├── vite-env.d.ts           # Tipos de entorno Vite
     ├── types.ts                # ⭐ TODOS los tipos de dominio + INITIAL_ACCOUNTS (catálogo base)
-    ├── App.tsx                 # ⭐ ORQUESTADOR (~1,000 líneas): estado global, carga/guardado en
-    │                           #   storage, navegación de vistas, modo fiscal, lógica de sync host
+    ├── App.tsx                 # ⭐ ORQUESTADOR (~740 líneas): composición de hooks de dominio,
+    │                           #   navegación de vistas, modales de UI, modo fiscal, activos fijos,
+    │                           #   orquestadores multi-dominio (sync remoto, restauración de respaldo)
     │
     ├── components/             # Vistas puras (reciben datos por props, no tocan storage)
     │   ├── JournalView.tsx           # Libro Diario: CRUD de asientos, partida doble en vivo,
@@ -100,10 +101,21 @@ Contabilidad-M4/
     │
     └── hooks/
         ├── useCheckForUpdates.ts    # Consulta GitHub Releases vs versión actual
-        └── useUpdateProgress.ts     # Progreso de descarga de la actualización (Electron)
+        ├── useUpdateProgress.ts     # Progreso de descarga de la actualización (Electron)
+        ├── useAppData.ts            # ⭐ HYDRATION inicial: migrate + las 4 claves; marca onLoaded
+        │                            #   (protege R2: no persistir vacíos antes de cargar)
+        ├── useJournals.ts           # ⭐ Dueño de `contasis_journals`: CRUD de asientos/diarios,
+        │                            #   setSubAccounts (canal de useCatalog), hydrate (sync/respaldo)
+        ├── useCatalog.ts            # ⭐ Dueño de `contasis_accounts`: catálogo híbrido
+        │                            #   (globals read-only + subcuentas por diario, dedup por code),
+        │                            #   guardado con debounce 300ms gated por canSave
+        ├── useInventories.ts        # ⭐ Dueño de `contasis_final_inventories`: finalInventory
+        │                            #   sincronizado al diario activo; NO autoguarda (fiel al original)
+        └── useBackup.ts             # ⭐ Dueño de `contasis_last_backup`: vigilante semanal (12h),
+                                     #   exportación JSON de snapshot, parseo+validación de restauración
 ```
 
-Regla general: **estado y persistencia viven en `App.tsx`/`services`; cálculo contable y exportación viven en `lib/`; las vistas son presentacionales** (con alguna export action propia).
+Regla general: **el estado vive en hooks de dominio (uno por clave de storage, ver JSDoc de cada hook) que `App.tsx` compondrá; el cálculo contable y la exportación viven en `lib/`; las vistas son presentacionales.** `App.tsx` es el orquestador: cualquier escritura que toque 2+ dominios (sync remoto, restauración de respaldo) pasa por UNA sola función suya (regla anti-R1) — ningún hook escribe la clave de otro.
 
 ---
 
@@ -115,8 +127,19 @@ Usuario → JournalView (asientos) → App.tsx (estado journals)
        → FixedAssetsView → genera asiento automático → journals
 ```
 
-- `App.tsx` mantiene: `journals[]`, `accounts[]`, `fixedAssets[]`, `finalInventories{journalId: monto}`, `appMode` (normal | fiscal), vista activa y journal activo.
-- Los saldos de Cuentas T, Balance y Estado de Resultados **no se almacenan**: se recalculan en cada render a partir de `journals`.
+- `App.tsx` es el orquestador: retiene navegación (`appMode`, `activeTab`), modales, activos fijos (`contasis_fixed_assets`, único dominio pendiente de migrar a hook) y compone los hooks de dominio.
+- Los saldos de Cuentas T, Balance y Estado de Resultados **no se almacenan**: se recalculan en cada render a partir de `journals` (vía `lib/accounting.ts`).
+
+### Propiedad de claves de storage (anti-R1)
+
+| Clave | Hook dueño |
+|---|---|
+| `contasis_journals` | `useJournals` (efecto auto-guarda + `hydrate` explícito) |
+| `contasis_accounts` | `useCatalog` (debounce 300 ms, gated por `hasLoaded`) |
+| `contasis_final_inventories` | `useInventories` (solo guarda explícito — sin efecto automático, fiel al original) |
+| `contasis_fixed_assets` | `App.tsx` (efecto auto-guarda, aún sin hook) |
+| `contasis_app_mode` | `App.tsx` (localStorage simple) |
+| `contasis_last_backup` | `useBackup` |
 
 ---
 
