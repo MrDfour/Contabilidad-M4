@@ -52,11 +52,19 @@ Contabilidad-M4/
     ├── index.css               # Tailwind v4 + estilos globales + animaciones de paleta
     ├── vite-env.d.ts           # Tipos de entorno Vite
     ├── types.ts                # ⭐ TODOS los tipos de dominio + INITIAL_ACCOUNTS (catálogo base)
-    ├── App.tsx                 # ⭐ ORQUESTADOR (~740 líneas): composición de hooks de dominio,
-    │                           #   navegación de vistas, modales de UI, modo fiscal, activos fijos,
-    │                           #   orquestadores multi-dominio (sync remoto, restauración de respaldo)
+    ├── App.tsx                 # ⭐ ORQUESTADOR (~410 líneas, Fase 3): composición de hooks de dominio,
+    │                           #   navegación de vistas (appMode/activeTab), modales de UI, activos fijos,
+    │                           #   orquestadores multi-dominio (sync remoto, restauración de respaldo);
+    │                           #   el shell visual vive en components/layout/
     │
     ├── components/             # Vistas puras (reciben datos por props, no tocan storage)
+    │   ├── layout/                   # Shell de layout extraído de App (Fase 3): presentacionales,
+    │   │   ├── MobileMenu.tsx          #   drawer móvil (AnimatePresence), ítems derivados de NavigationTab[]
+    │   │   ├── Sidebar.tsx             #   sidebar desktop: SIEMPRE montado (se oculta con CSS en móvil)
+    │   │   │                          #   para preservar la animación layoutId="sidebar-active-indicator"
+    │   │   ├── AppHeader.tsx           #   sticky header + toggle Básico/Fiscal (layoutId="app-mode-indicator",
+    │   │   │                          #   riesgo R4: existe en móvil y desktop; verifica en ambos)
+    │   │   └── AppFooter.tsx           #   botones de respaldo/restaurar/acerca de/feedback
     │   ├── JournalView.tsx           # Libro Diario: CRUD de asientos, partida doble en vivo,
     │   │                             #   importar/exportar Excel, pestañas de diarios múltiples
     │   ├── TAccountsView.tsx         # Cuentas T calculadas de los asientos; export PDF/Excel
@@ -87,6 +95,9 @@ Contabilidad-M4/
     │   │                        #   buildTAccountsData, computeAccountBalances (saldo por naturaleza
     │   │                        #   deudora/acreedora), calculateMonthlyDepreciation,
     │   │                        #   calculateFiscalDeduction (INPC truncado a 4 dec, Art. 31 LISR)
+    │   ├── navigation.ts        # Tipos de navegación compartidos: AppMode, AppTab, NavigationTab,
+    │   │                        #   FISCAL_NAV_TABS (pestañas del modo fiscal). Consumido por App y layout/
+    │   ├── appMeta.ts           # APP_VERSION (única fuente del número de versión mostrado en UI)
     │   ├── utils.ts             # Exportaciones y utilidades: exportToExcel, exportTAccountsStyleToExcel,
     │   │                        #   exportToPDF (captura HTML→PDF), exportTableToPDF (autotable), readExcel,
     │   │                        #   cn (clases), calculateMonthlyDepreciation,

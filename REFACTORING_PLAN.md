@@ -4,8 +4,10 @@
 > - **Fase -1** — completa. Entorno instalado, lint limpio, smoke test base validado, rama `refactor/modularizacion`.
 > - **Fase 0** — completa y validada por usuario. `lib/format.ts` + modales extraídos. `App.tsx`: 1,190 → 1,034.
 > - **Fase 1** — completa (cálculos en `lib/accounting.ts` + tipo `TAccountsData`).
-> - **Fase 2** — refactor implementado (hooks `useJournals`, `useCatalog`, `useInventories`, `useBackup`, `useAppData`; `App.tsx`: 990 → 738). Smoke test del usuario: todo correcto excepto sync, cuya falla proviene de credenciales Upstash caducadas (se inyectan por GitHub Secrets; no requiere cambio de código). **Pendiente: commits y push de Fases 1 y 2.**
-> - **Sigue Fase 3** (layout → `components/layout/`; quedan ~460 líneas de shell UI en `App.tsx`).
+> - **Fase 2** — refactor implementado (hooks `useJournals`, `useCatalog`, `useInventories`, `useBackup`, `useAppData`; `App.tsx`: 990 → 738). Smoke test del usuario: todo correcto excepto sync, cuya falla proviene de credenciales Upstash caducadas (se inyectan por GitHub Secrets; no requiere cambio de código). **✓ Commits y push realizados por el usuario.**
+> - **Fase 3** — refactor implementado (layout → `components/layout/`: MobileMenu, Sidebar, AppHeader, AppFooter; `App.tsx`: 738 → 414; navegación tipada en `lib/navigation.ts`). Sin smoke test aún.
+> - **Criterio específico de salida de Fase 3**: inspección visual de las animaciones del indicador (riesgo R4, no se detecta con tsc): sidebar desktop al cambiar de pestaña, píldora Básico/Fiscal en desktop Y en móvil (el drawer), y drawer móvil entrando/saliendo.
+> - **Sigue Fase 4** (JournalView → `components/journal/`, ~1,194 líneas a desmontar).
 > - Nota de diseño: `useAppData` no es dueño de claves; solo hidrata y notifica `onLoaded`. El estado `hasLoaded` vive en `App`.
 > - Pendientes fuera del plan: sincronización => migración futura a Cloudflare KV Workers (decisión del autor, no iniciada).
 
@@ -109,12 +111,18 @@ Antes de tocar código:
 
 **Objetivo:** que `App.tsx` quede como orquestador puro (routing de pestañas + composición).
 
-- [ ] Extraer a `src/components/layout/`:
+- [x] Extraer a `src/components/layout/`:
   - `Sidebar.tsx` (desktop) — **preservar** `layoutId="sidebar-active-indicator"` y que el componente se monte siempre (no condicional entre renders) para no romper la animación compartida.
   - `MobileMenu.tsx` + `MobileNavItem`
   - `AppHeader.tsx` — preservar `layoutId="app-mode-indicator"`.
   - `AppFooter.tsx` (botones de respaldo/restaurar/feedback).
-- [ ] Los modos `appMode`/`activeTab` siguen viniendo de `App.tsx` por props (nada de Context todavía).
+- [x] Los modos `appMode`/`activeTab` siguen viniendo de `App.tsx` por props (nada de Context todavía).
+
+**Notas de implementación (Fase 3):**
+- `App.tsx`: 738 → **414 líneas**. Los ítems de navegación se derivan de `navigationTabs: NavigationTab[]` en App y pasan por props (el menú móvil antes tenía los ítems hardcodeados — ahora renderiza el mismo array, mismos labels/orden).
+- `lib/navigation.ts` guarda `AppMode`/`AppTab`/`NavigationTab`/`FISCAL_NAV_TABS` (movidos de App); `lib/appMeta.ts` guarda `APP_VERSION`.
+- `Sidebar` se monta **siempre** y se oculta con `hidden` en móvil (antes se desmontaba con `{!isMobile && ...}`) — mismo look, menos riesgo de animación.
+- Limpieza incidental: se eliminaron de App 10 imports muertos de lucide (Plus, Trash2, ChevronRight, TrendingDown, Edit2, X, FileUp, Search, FileScan, ChevronDown/Up) que ya no tenían uso previo a la Fase 3.
 
 **Commits:** `refactor: extraer layout a components/layout`, `docs: actualizar ARCHITECTURE.md fase 3`.
 

@@ -3,34 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { 
-  Plus, 
-  FileText, 
-  Table as TableIcon, 
-  BarChart3, 
-  Download, 
-  Trash2, 
-  ChevronRight,
-  TrendingDown,
-  TrendingUp,
+import { useState, useMemo, useEffect, useRef } from 'react';
+import {
+  FileText,
+  Table as TableIcon,
   Briefcase,
-  AlertCircle,
-  Settings,
-  Edit2,
-  X,
-  Upload,
-  FileUp,
-  Search,
-  FileScan,
-  FileCode,
-  ChevronDown,
-  ChevronUp,
-  Menu,
-  MessageSquare,
-  Smartphone,
-  Monitor,
-  Shield
+  TrendingUp,
+  Settings
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCheckForUpdates } from './hooks/useCheckForUpdates';
@@ -38,7 +17,6 @@ import { useUpdateProgress } from './hooks/useUpdateProgress';
 import {
   FixedAsset
 } from './types';
-import { cn } from './lib/utils';
 import { buildTAccountsData, computeAccountBalances } from './lib/accounting';
 import FeedbackModal from './components/FeedbackModal';
 import SyncModal from './components/SyncModal';
@@ -61,14 +39,12 @@ import { useJournals } from './hooks/useJournals';
 import { useCatalog } from './hooks/useCatalog';
 import { useInventories } from './hooks/useInventories';
 import { useBackup } from './hooks/useBackup';
+import { FISCAL_NAV_TABS, type AppMode, type AppTab, type NavigationTab } from './lib/navigation';
+import { MobileMenu } from './components/layout/MobileMenu';
+import { Sidebar } from './components/layout/Sidebar';
+import { AppHeader } from './components/layout/AppHeader';
+import { AppFooter } from './components/layout/AppFooter';
 
-const APP_VERSION = `v${__APP_VERSION__}`;
-type AppMode = 'basic' | 'fiscal';
-type AppTab = 'journal' | 't-accounts' | 'balance' | 'profit-loss' | 'assets' | 'electronic' | 'catalog';
-const FISCAL_NAV_TABS = [
-  { id: 'assets' as const, label: 'Activos Fijos', shortLabel: 'Activos', icon: Monitor },
-  { id: 'electronic' as const, label: 'Cont. Electrónica', shortLabel: 'SAT XML', icon: FileCode }
-];
 const getStoredAppMode = (): AppMode => {
   if (typeof window === 'undefined') return 'basic';
   const savedMode = localStorage.getItem('contasis_app_mode');
@@ -212,7 +188,7 @@ export default function App() {
     inventoriesState.hydrateFromRemote(nextInventories);
   };
 
-  const navigationTabs: { id: AppTab; label: string; shortLabel: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  const navigationTabs: NavigationTab[] = [
     { id: 'journal', label: 'Libro Diario', shortLabel: 'Diario', icon: FileText },
     { id: 't-accounts', label: 'Cuentas T', shortLabel: 'Cuentas T', icon: TableIcon },
     { id: 'balance', label: 'Balance General', shortLabel: 'Balance', icon: Briefcase },
@@ -228,219 +204,36 @@ export default function App() {
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_20%_30%,#1e293b_0%,transparent_50%),radial-gradient(circle_at_80%_70%,#334155_0%,transparent_50%)] pointer-events-none"></div>
 
       {/* Mobile Menu Overlay */}
-      <AnimatePresence>
-        {isMobile && isMobileMenuOpen && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
-            />
-            <motion.div 
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 w-72 bg-[#0a0f1d] border-r border-white/10 z-[70] p-6 flex flex-col gap-8 shadow-2xl"
-              style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)' }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-indigo-600 flex items-center justify-center rounded-lg shadow-lg">
-                  <BarChart3 className="text-white w-5 h-5" />
-                </div>
-                <h1 className="text-xl font-semibold tracking-tight">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-                <span className="text-[10px] font-mono text-slate-500">{APP_VERSION}</span>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <p className="text-[10px] uppercase font-bold text-slate-500 mb-2 pl-1 tracking-widest">Navegación</p>
-                <MobileNavItem 
-                  active={activeTab === 'journal'} 
-                  onClick={() => { setActiveTab('journal'); setIsMobileMenuOpen(false); }}
-                  icon={<FileText className="w-5 h-5" />}
-                  label="Libro Diario"
-                />
-                <MobileNavItem 
-                  active={activeTab === 't-accounts'} 
-                  onClick={() => { setActiveTab('t-accounts'); setIsMobileMenuOpen(false); }}
-                  icon={<TableIcon className="w-5 h-5" />}
-                  label="Cuentas T"
-                />
-                <MobileNavItem 
-                  active={activeTab === 'balance'} 
-                  onClick={() => { setActiveTab('balance'); setIsMobileMenuOpen(false); }}
-                  icon={<Briefcase className="w-5 h-5" />}
-                  label="Balance General"
-                />
-                <MobileNavItem 
-                  active={activeTab === 'profit-loss'} 
-                  onClick={() => { setActiveTab('profit-loss'); setIsMobileMenuOpen(false); }}
-                  icon={<TrendingUp className="w-5 h-5" />}
-                  label="Estado de Resultados"
-                />
-                <MobileNavItem
-                  active={activeTab === 'catalog'}
-                  onClick={() => { setActiveTab('catalog'); setIsMobileMenuOpen(false); }}
-                  icon={<Settings className="w-5 h-5" />}
-                  label="Catálogo de Cuentas"
-                />
-                {appMode === 'fiscal' && (
-                  <>
-                    <MobileNavItem
-                      active={activeTab === 'assets'}
-                      onClick={() => { setActiveTab('assets'); setIsMobileMenuOpen(false); }}
-                      icon={<Monitor className="w-5 h-5" />}
-                      label="Activos Fijos"
-                    />
-                    <MobileNavItem
-                      active={activeTab === 'electronic'}
-                      onClick={() => { setActiveTab('electronic'); setIsMobileMenuOpen(false); }}
-                      icon={<FileCode className="w-5 h-5" />}
-                      label="Cont. Electrónica"
-                    />
-                  </>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <p className="text-[10px] uppercase font-bold text-slate-500 mb-2 pl-1 tracking-widest">Información</p>
-                <MobileNavItem
-                  active={false}
-                  onClick={() => { setShowAbout(true); setIsMobileMenuOpen(false); }}
-                  icon={<AlertCircle className="w-5 h-5" />}
-                  label="Acerca de"
-                />
-              </div>
-
-              <div className="mt-auto">
-                <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl">
-                  <p className="text-xs text-indigo-300 font-medium leading-relaxed">
-                    Gestiona tu contabilidad de manera profesional con herramientas avanzadas de exportación y visualización.
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <MobileMenu
+        isMobile={isMobile}
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        navigationTabs={navigationTabs}
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        onShowAbout={() => setShowAbout(true)}
+      />
 
       <div className="flex h-screen overflow-hidden relative z-10">
-        {!isMobile && (
-          <aside className="w-64 border-r border-white/10 bg-white/5 backdrop-blur-xl p-4 lg:p-5">
-            <div className="flex items-center gap-3 mb-6 px-2">
-              <div className="w-8 h-8 bg-indigo-600 flex items-center justify-center rounded-lg shadow-lg shadow-indigo-500/20">
-                <BarChart3 className="text-white w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold tracking-tight text-white">Panel</p>
-                <p className="text-[10px] uppercase tracking-widest text-slate-500">Navegación</p>
-              </div>
-            </div>
-            <nav className="flex flex-col gap-1.5">
-              {navigationTabs.map(tab => (
-                <div key={tab.id}>
-                  <SidebarTabButton
-                    active={activeTab === tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    icon={React.createElement(tab.icon, { className: 'w-4 h-4' })}
-                    label={tab.label}
-                  />
-                </div>
-              ))}
-            </nav>
-          </aside>
-        )}
+        <Sidebar
+          isMobile={isMobile}
+          navigationTabs={navigationTabs}
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+        />
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* Header */}
-          <header className="relative overflow-visible border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top))' }}>
-            <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-1/2 z-20">
-              <div className="inline-flex items-center gap-2 max-w-[min(90vw,30rem)] px-4 py-1.5 rounded-full border border-indigo-500/35 bg-[#111827]/90 text-indigo-100 shadow-lg shadow-indigo-500/20 backdrop-blur-md">
-                <FileText className="w-4 h-4 text-indigo-300 shrink-0" />
-                <span className="text-xs font-semibold uppercase tracking-wider text-indigo-300/90">
-                  Libro Diario:
-                </span>
-                <span className={cn("text-xs font-medium truncate", hasActiveJournal ? "text-slate-100" : "text-slate-300 italic")}>
-                  {activeJournal?.name || 'Sin diario activo'}
-                </span>
-              </div>
-            </div>
-            <div className="px-4 md:px-6 h-16 flex items-center justify-between">
-              <div className="flex items-center gap-3 min-w-0">
-                {isMobile && (
-                  <button
-                    onClick={() => setIsMobileMenuOpen(true)}
-                    className="p-2 -ml-2 text-slate-400 hover:text-white"
-                  >
-                    <Menu className="w-6 h-6" />
-                  </button>
-                )}
-                <div className="w-8 h-8 bg-indigo-600 hidden sm:flex items-center justify-center rounded-lg shadow-lg shadow-indigo-500/20">
-                  <BarChart3 className="text-white w-5 h-5" />
-                </div>
-                <h1 className="text-lg md:text-xl font-semibold tracking-tight truncate">Contabilidad M4<span className="text-indigo-400">Pro</span></h1>
-                <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">{APP_VERSION}</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="hidden sm:grid grid-cols-2 items-center rounded-lg border border-white/10 bg-white/5 p-1 relative">
-                  <button
-                    onClick={() => setAppMode('basic')}
-                    className={cn(
-                      "relative z-10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors",
-                      appMode === 'basic' ? "text-white" : "text-slate-300 hover:text-white"
-                    )}
-                  >
-                    {appMode === 'basic' && (
-                      <motion.span
-                        layoutId="app-mode-indicator"
-                        className="absolute inset-0 rounded-md bg-indigo-600"
-                        transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                      />
-                    )}
-                    <span className="relative z-10">Básico</span>
-                  </button>
-                  <button
-                    onClick={() => setAppMode('fiscal')}
-                    className={cn(
-                      "relative z-10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors",
-                      appMode === 'fiscal' ? "text-white" : "text-slate-300 hover:text-white"
-                    )}
-                  >
-                    {appMode === 'fiscal' && (
-                      <motion.span
-                        layoutId="app-mode-indicator"
-                        className="absolute inset-0 rounded-md bg-indigo-600"
-                        transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                      />
-                    )}
-                    <span className="relative z-10">Fiscal</span>
-                  </button>
-                </div>
-                <button
-                  onClick={() => setShowSyncModal(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 transition-colors text-xs font-semibold"
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  Sync
-                </button>
-                <button
-                  onClick={() => setAppMode(prev => (prev === 'basic' ? 'fiscal' : 'basic'))}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 transition-colors text-xs font-semibold"
-                >
-                  <Shield className="w-3.5 h-3.5" />
-                  {appMode === 'basic' ? 'Modo Fiscal' : 'Modo Básico'}
-                </button>
-                {isMobile && (
-                  <div className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-1 rounded border border-indigo-500/30 uppercase">
-                    {activeMobileTabLabel}
-                  </div>
-                )}
-              </div>
-            </div>
-          </header>
+          <AppHeader
+            appMode={appMode}
+            onSetAppMode={setAppMode}
+            onOpenSync={() => setShowSyncModal(true)}
+            onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+            isMobile={isMobile}
+            activeMobileTabLabel={activeMobileTabLabel}
+            hasActiveJournal={hasActiveJournal}
+            activeJournalName={activeJournal?.name || ''}
+          />
 
           <main className="flex-1 overflow-y-auto pt-3">
             <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
@@ -593,48 +386,12 @@ export default function App() {
               </AnimatePresence>
             </div>
 
-            <footer className="border-t border-white/10 py-8 bg-white/5 backdrop-blur-md">
-              <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-400">
-                <p>© 2026 Contabilidad M4. Sistema de Gestión Contable.</p>
-                <div className="flex gap-6 items-center">
-                  <button
-                    onClick={handleExportBackup}
-                    className="inline-flex items-center gap-1.5 text-slate-400 hover:text-indigo-300 transition-colors text-xs"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Respaldo
-                  </button>
-                  <label className="inline-flex items-center gap-1.5 text-slate-400 hover:text-indigo-300 transition-colors text-xs cursor-pointer">
-                    <Upload className="w-3.5 h-3.5" />
-                    Restaurar
-                    <input
-                      type="file"
-                      accept=".json,application/json"
-                      onChange={handleImportBackup}
-                      className="hidden"
-                    />
-                  </label>
-                  <span className="flex items-center gap-2 italic">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-                    Precisión • Integridad • Transparencia
-                  </span>
-                  <button
-                    onClick={() => setShowAbout(true)}
-                    className="hidden lg:inline-flex items-center gap-1.5 text-slate-400 hover:text-indigo-300 transition-colors text-sm"
-                  >
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    Acerca de
-                  </button>
-                  <button
-                    onClick={() => setShowFeedback(true)}
-                    className="hidden lg:inline-flex items-center gap-1.5 text-slate-500 hover:text-indigo-300 transition-colors text-xs"
-                  >
-                    <MessageSquare className="w-3 h-3" />
-                    Feedback
-                  </button>
-                </div>
-              </div>
-            </footer>
+            <AppFooter
+              onExportBackup={handleExportBackup}
+              onImportBackup={handleImportBackup}
+              onShowAbout={() => setShowAbout(true)}
+              onShowFeedback={() => setShowFeedback(true)}
+            />
           </main>
         </div>
       </div>
@@ -692,47 +449,5 @@ export default function App() {
         onNotify={(type, title, message) => setModalInfo({ type, title, message })}
       />
     </div>
-  );
-}
-
-
-function MobileNavItem({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
-  return (
-    <button 
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-4 px-4 py-3 rounded-xl transition-all w-full text-left",
-        active 
-          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 font-semibold" 
-          : "text-slate-400 hover:text-white hover:bg-white/5"
-      )}
-    >
-      <div className={cn("transition-colors", active ? "text-white" : "text-slate-500")}>
-        {icon}
-      </div>
-      <span className="text-sm tracking-tight">{label}</span>
-    </button>
-  );
-}
-
-function SidebarTabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium w-full text-left",
-        active ? "text-white" : "text-slate-400 hover:text-white hover:bg-white/5"
-      )}
-    >
-      {active && (
-        <motion.span
-          layoutId="sidebar-active-indicator"
-          className="absolute inset-0 rounded-xl bg-indigo-500/15 border border-indigo-500/30"
-          transition={{ type: 'spring', stiffness: 420, damping: 35 }}
-        />
-      )}
-      <span className={cn("relative z-10", active ? "text-indigo-300" : "text-slate-500")}>{icon}</span>
-      <span className="relative z-10">{label}</span>
-    </button>
   );
 }
