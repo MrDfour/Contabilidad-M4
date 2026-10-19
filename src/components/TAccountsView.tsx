@@ -1,12 +1,8 @@
 import React from 'react';
 import { FileText, Download, ChevronRight } from 'lucide-react';
 import type { Account } from '../types';
-import { cn, formatCurrency, exportTAccountsStyleToExcel, exportToPDF } from '../lib/utils';
-
-const normalizeAmount = (value: number) => {
-  if (!Number.isFinite(value)) return 0;
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-};
+import { cn, exportTAccountsStyleToExcel, exportToPDF } from '../lib/utils';
+import { formatCurrency, normalizeAmount } from '../lib/format';
 
 export function TAccountsView({ tAccountsData, accounts, journalName }: { 
   tAccountsData: Record<string, { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] }>, 

@@ -1,12 +1,8 @@
 import React, { useState } from 'react';
 import { FileText, Download, TrendingDown, TrendingUp, RefreshCw } from 'lucide-react';
 import type { Account, JournalEntry, Movement } from '../types';
-import { cn, formatCurrency, exportToExcel, exportToPDF } from '../lib/utils';
-
-const normalizeAmount = (value: number) => {
-  if (!Number.isFinite(value)) return 0;
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-};
+import { cn, exportToExcel, exportToPDF } from '../lib/utils';
+import { formatCurrency, normalizeAmount } from '../lib/format';
 
 export function ProfitLossView({ accountBalances, accounts, journalName, finalInventory, setFinalInventory, activeJournalId, onAdd, onSetModal }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number, setFinalInventory: (v: number) => void, activeJournalId: string | null, onAdd: (e: Omit<JournalEntry, 'id'>) => void, onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void }) {
 

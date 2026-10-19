@@ -60,19 +60,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-  }).format(amount);
-}
-
-export const formatSatGroupCode = (code: string) => {
-  // Regla SAT: códigos de 4+ dígitos se muestran como XX.XX.
-  if (code.length >= 4) return `${code.slice(0, 2)}.${code.slice(2)}`;
-  return code;
-};
-
 export const exportToExcel = async (data: any[], fileName: string, sheetName: string) => {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName);
@@ -668,9 +655,6 @@ export const exportTableToPDF = async (headers: string[][], body: (string | numb
   const pdfBlob = doc.output('blob');
   await saveFile(pdfBlob, `${fileName}.pdf`);
 };
-
-export const normalizeString = (str: string) => 
-  str.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 export const readExcel = (file: File): Promise<any[]> => {
   return new Promise((resolve, reject) => {

@@ -18,7 +18,6 @@ import {
   AlertCircle,
   Settings,
   Edit2,
-  Check,
   X,
   Upload,
   FileUp,
@@ -28,28 +27,32 @@ import {
   ChevronDown,
   ChevronUp,
   Menu,
-  RefreshCw,
   MessageSquare,
   Smartphone,
   Monitor,
   Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Browser } from '@capacitor/browser';
 import { useCheckForUpdates } from './hooks/useCheckForUpdates';
 import { useUpdateProgress } from './hooks/useUpdateProgress';
-import { 
-  INITIAL_ACCOUNTS, 
-  JournalEntry, 
+import {
+  INITIAL_ACCOUNTS,
+  JournalEntry,
   Account,
   Journal,
   FixedAsset
 } from './types';
-import { 
+import {
   cn
 } from './lib/utils';
+import { normalizeAmount } from './lib/format';
 import FeedbackModal from './components/FeedbackModal';
 import SyncModal from './components/SyncModal';
+import { GlobalInfoModal, BACKUP_SUGGESTION_TITLE, type ModalInfo } from './components/modals/GlobalInfoModal';
+import { ConfirmDeleteModal, type ConfirmDeleteData } from './components/modals/ConfirmDeleteModal';
+import { UpdateAvailableModal } from './components/modals/UpdateAvailableModal';
+import { AboutModal } from './components/modals/AboutModal';
+import { DownloadProgressBar } from './components/modals/DownloadProgressBar';
 import { JournalView } from './components/JournalView';
 import { TAccountsView } from './components/TAccountsView';
 import { ProfitLossView } from './components/ProfitLossView';
@@ -65,7 +68,6 @@ type AppMode = 'basic' | 'fiscal';
 type AppTab = 'journal' | 't-accounts' | 'balance' | 'profit-loss' | 'assets' | 'electronic' | 'catalog';
 const ACCOUNTS_SAVE_DEBOUNCE_MS = 300;
 const LAST_BACKUP_STORAGE_KEY = 'contasis_last_backup';
-const BACKUP_SUGGESTION_TITLE = 'Sugerencia de Respaldo';
 const FISCAL_NAV_TABS = [
   { id: 'assets' as const, label: 'Activos Fijos', shortLabel: 'Activos', icon: Monitor },
   { id: 'electronic' as const, label: 'Cont. Electrónica', shortLabel: 'SAT XML', icon: FileCode }
@@ -76,11 +78,6 @@ const getStoredAppMode = (): AppMode => {
   return savedMode === 'fiscal' ? 'fiscal' : 'basic';
 };
 
-const normalizeAmount = (value: number) => {
-  if (!Number.isFinite(value)) return 0;
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-};
-
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>(getStoredAppMode);
   const [journals, setJournals] = useState<Journal[]>([]);
@@ -88,8 +85,8 @@ export default function App() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
   const [activeTab, setActiveTab] = useState<AppTab>('journal');
-  const [confirmDelete, setConfirmDelete] = useState<{ type: 'entry' | 'journal', id: string, title: string, message: string } | null>(null);
-  const [modalInfo, setModalInfo] = useState<{ type: 'success' | 'error', title: string, message: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ConfirmDeleteData | null>(null);
+  const [modalInfo, setModalInfo] = useState<ModalInfo | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [finalInventory, setFinalInventory] = useState<number>(0);
@@ -102,7 +99,7 @@ export default function App() {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const downloadPercent = useUpdateProgress();
   const isDesktopRuntime = typeof window !== 'undefined' && ('electronAPI' in window || navigator.userAgent.toLowerCase().includes('electron'));
-  const modalInfoRef = useRef<{ type: 'success' | 'error', title: string, message: string } | null>(null);
+  const modalInfoRef = useRef<ModalInfo | null>(null);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
@@ -939,201 +936,40 @@ export default function App() {
       </div>
 
       {/* Global Information Modal */}
-      <AnimatePresence>
-        {modalInfo && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-slate-900 border border-white/10 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center"
-            >
-              <div className={cn(
-                "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6",
-                modalInfo.type === 'success' ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
-              )}>
-                {modalInfo.title === BACKUP_SUGGESTION_TITLE
-                  ? <AlertCircle className="w-8 h-8" />
-                  : modalInfo.type === 'success'
-                    ? <Check className="w-8 h-8" />
-                    : <AlertCircle className="w-8 h-8" />}
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-2">{modalInfo.title}</h3>
-              <p className="text-slate-400 mb-8 leading-relaxed">
-                {modalInfo.message}
-              </p>
-              {modalInfo.title === BACKUP_SUGGESTION_TITLE ? (
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    onClick={() => {
-                      setModalInfo(null);
-                      handleExportBackup();
-                    }}
-                    className="flex-1 py-3 rounded-xl font-semibold transition-all shadow-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20"
-                  >
-                    Sí, descargar respaldo
-                  </button>
-                  <button
-                    onClick={() => setModalInfo(null)}
-                    className="flex-1 py-3 rounded-xl font-semibold transition-all shadow-lg bg-slate-800 hover:bg-slate-700 text-slate-200"
-                  >
-                    Más tarde
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setModalInfo(null)}
-                  className={cn(
-                    "w-full py-3 rounded-xl font-semibold transition-all shadow-lg",
-                    modalInfo.type === 'success'
-                      ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20"
-                      : "bg-slate-800 hover:bg-slate-700 text-slate-200"
-                  )}
-                >
-                  Entendido
-                </button>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <GlobalInfoModal
+        info={modalInfo}
+        onDismiss={() => setModalInfo(null)}
+        onConfirmBackup={() => {
+          setModalInfo(null);
+          handleExportBackup();
+        }}
+      />
 
       {/* Confirmation Modal */}
-      <AnimatePresence>
-        {confirmDelete && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-slate-900 border border-white/10 p-6 rounded-2xl shadow-2xl max-w-sm w-full"
-            >
-              <div className="flex items-center gap-3 text-rose-400 mb-4">
-                <AlertCircle className="w-6 h-6" />
-                <h3 className="text-xl font-semibold">{confirmDelete.title}</h3>
-              </div>
-              <p className="text-slate-300 mb-8 leading-relaxed">
-                {confirmDelete.message}
-              </p>
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => setConfirmDelete(null)}
-                  className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 transition-colors text-sm font-medium"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleConfirmDelete}
-                  className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-lg shadow-rose-500/20 text-sm font-medium"
-                >
-                  Confirmar Eliminación
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <ConfirmDeleteModal
+        data={confirmDelete}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={handleConfirmDelete}
+      />
 
       {/* Download Progress Bar */}
-      <AnimatePresence>
-        {downloadPercent !== null && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            className="fixed top-0 left-0 right-0 z-[200] h-1 bg-slate-800"
-          >
-            <motion.div
-              className="h-full bg-indigo-500"
-              initial={{ width: '0%' }}
-              animate={{ width: `${downloadPercent}%` }}
-              transition={{ ease: 'linear', duration: 0.3 }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <DownloadProgressBar percent={downloadPercent} />
 
       {/* Update Available Modal */}
-      <AnimatePresence>
-        {isUpdateAvailable && !updateDismissed && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-slate-900 border border-indigo-500/30 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center"
-            >
-              <div className="w-16 h-16 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-6">
-                <RefreshCw className="w-8 h-8" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-2">Nueva versión disponible</h3>
-              <p className="text-slate-400 mb-8 leading-relaxed">
-                La versión <span className="text-indigo-300 font-semibold">{latestVersion}</span> está disponible.
-                Actualiza ahora para obtener las últimas mejoras y correcciones.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                {downloadUrl ? (
-                  <button
-                    onClick={async () => {
-                      try {
-                        await Browser.open({ url: downloadUrl });
-                      } catch {
-                        setModalInfo({ type: 'error', title: 'Error', message: 'No se pudo abrir el enlace de descarga. Por favor, inténtalo de nuevo.' });
-                      }
-                    }}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-lg shadow-indigo-500/20"
-                  >
-                    <RefreshCw className="w-4 h-4" /> Actualizar ahora
-                  </button>
-                ) : null}
-                <button
-                  onClick={() => setUpdateDismissed(true)}
-                  className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-medium transition-colors text-sm"
-                >
-                  Más tarde
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <UpdateAvailableModal
+        isOpen={isUpdateAvailable && !updateDismissed}
+        latestVersion={latestVersion}
+        downloadUrl={downloadUrl}
+        onDismiss={() => setUpdateDismissed(true)}
+        onNotify={(info) => setModalInfo(info)}
+      />
 
       {/* About Modal */}
-      <AnimatePresence>
-        {showAbout && (
-          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-slate-900 border border-white/10 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center"
-            >
-              <div className="w-16 h-16 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-6">
-                <BarChart3 className="w-8 h-8" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-6">Acerca de</h3>
-              <div className="text-slate-300 space-y-2 mb-6 leading-relaxed">
-                <p>Creado por Fernando Martinez</p>
-                <p>Contacto: <a href="mailto:famr87@hotmail.com" className="text-indigo-400 hover:text-indigo-300 transition-colors">famr87@hotmail.com</a></p>
-                <p className="text-slate-400 text-sm">Derechos Reservados 2026</p>
-              </div>
-              <button
-                onClick={() => { setShowAbout(false); setShowFeedback(true); }}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/30 font-semibold transition-all mb-3 text-sm"
-              >
-                <MessageSquare className="w-4 h-4" />
-                Enviar Feedback
-              </button>
-              <button
-                onClick={() => setShowAbout(false)}
-                className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-lg shadow-indigo-500/20"
-              >
-                Cerrar
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <AboutModal
+        isOpen={showAbout}
+        onClose={() => setShowAbout(false)}
+        onSendFeedback={() => setShowFeedback(true)}
+      />
 
       {/* Feedback Modal */}
       <FeedbackModal

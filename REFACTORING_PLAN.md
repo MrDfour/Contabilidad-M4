@@ -30,19 +30,19 @@ Antes de tocar código:
 
 **Objetivo:** eliminar el riesgo R6 (formateo de montos triplicado) y sacar del `App.tsx` todo lo que es UI aislada.
 
-- [ ] Crear `src/lib/format.ts` con `normalizeAmount`, `parseFormattedAmount`, `parseImportedAmount`, `formatAmountForInput`, `formatAmountInput`, `formatCurrency`, `formatSatGroupCode`, `normalizeString` (tomadas de `JournalView.tsx`, `App.tsx` y `utils.ts` — una sola implementación).
-- [ ] Actualizar los 3 archivos consumidores para importar de `lib/format.ts`. **Verificar que las 3 implementaciones previas eran idénticas antes de borrar** (si difieren en redondeo, documentar la diferencia y elegir la de `App.tsx` como canónica).
-- [ ] Extraer los 5 modales globales de `App.tsx` a `src/components/modals/`:
-  - `GlobalInfoModal.tsx` (modal de éxito/error + variante de sugerencia de respaldo)
-  - `ConfirmDeleteModal.tsx`
-  - `UpdateAvailableModal.tsx` (cuidado con R4: contiene `Browser.open` de Capacitor)
+- [x] Crear `src/lib/format.ts` con `normalizeAmount`, `parseFormattedAmount`, `parseImportedAmount`, `formatAmountForInput`, `formatAmountInput`, `formatCurrency`, `formatSatGroupCode`, `normalizeString` (tomadas de `JournalView.tsx`, `App.tsx` y `utils.ts` — una sola implementación). *(Realidad del código: había 5 copias de `normalizeAmount` — también en `FixedAssetsView`, `ProfitLossView` y `TAccountsView` — todas verificadas idénticas antes de consolidar.)*
+- [x] Actualizar los archivos consumidores para importar de `lib/format.ts` (`App.tsx`, `JournalView`, `FixedAssetsView`, `ProfitLossView`, `TAccountsView`, `BalanceSheetView`, `CatalogView`).
+- [x] Extraer los 5 modales globales de `App.tsx` a `src/components/modals/`:
+  - `GlobalInfoModal.tsx` (modal de éxito/error + variante de sugerencia de respaldo; exporta `ModalInfo` y `BACKUP_SUGGESTION_TITLE`)
+  - `ConfirmDeleteModal.tsx` (exporta `ConfirmDeleteData`)
+  - `UpdateAvailableModal.tsx` (`Browser.open` de Capacitor vive aquí; recibe `onNotify` para errores)
   - `AboutModal.tsx`
   - `DownloadProgressBar.tsx`
-- [ ] `App.tsx` debe quedar consumiéndolos solo con props. **No** mover aún la lógica que los dispara.
+- [x] `App.tsx` los consume solo con props. La lógica que los dispara sigue en `App.tsx` (vigilante semanal, delete flows, dismissal de updates).
 
 **Commits esperados:** `refactor: consolidar formateo de montos en lib/format`, `refactor: extraer modales globales a components/modals`, `docs: actualizar ARCHITECTURE.md fase 0`.
 
-**Criterio de salida:** `App.tsx` ~150 líneas menos; smoke test pasa; grep de `normalizeAmount` devuelve 1 definición.
+**Criterio de salida:** ~~`App.tsx` ~150 líneas menos~~ ✓ (1,190 → 1,034); smoke test pasa; grep de `normalizeAmount` devuelve 1 definición ✓. *(Pendiente al cierre: smoke test del usuario + commits + push.)*
 
 ---
 

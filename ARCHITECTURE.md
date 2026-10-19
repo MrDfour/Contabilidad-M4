@@ -52,7 +52,7 @@ Contabilidad-M4/
     ├── index.css               # Tailwind v4 + estilos globales + animaciones de paleta
     ├── vite-env.d.ts           # Tipos de entorno Vite
     ├── types.ts                # ⭐ TODOS los tipos de dominio + INITIAL_ACCOUNTS (catálogo base)
-    ├── App.tsx                 # ⭐ ORQUESTADOR (1,200 líneas): estado global, carga/guardado en
+    ├── App.tsx                 # ⭐ ORQUESTADOR (~1,000 líneas): estado global, carga/guardado en
     │                           #   storage, navegación de vistas, modo fiscal, lógica de sync host
     │
     ├── components/             # Vistas puras (reciben datos por props, no tocan storage)
@@ -68,13 +68,24 @@ Contabilidad-M4/
     │   │                             #   valida RFC; tipo de póliza diario/ingreso/egreso
     │   ├── SyncModal.tsx             # UI de emparejamiento Escritorio↔Móvil: QR, PIN de 6 dígitos,
     │   │                             #   resolución de conflictos (keep local / remote overwrite)
-    │   └── FeedbackModal.tsx         # Envío de feedback del usuario (issues)
+    │   ├── FeedbackModal.tsx         # Envío de feedback del usuario (issues)
+    │   └── modals/                   # Modales globales extraídos de App (Fase 0): presentacionales,
+    │       ├── GlobalInfoModal.tsx     #   éxito/error + variante de sugerencia de respaldo,
+    │       │                          #   exporta ModalInfo y BACKUP_SUGGESTION_TITLE
+    │       ├── ConfirmDeleteModal.tsx  #   confirmación de borrado (exporta ConfirmDeleteData)
+    │       ├── UpdateAvailableModal.tsx # aviso de nueva versión (Browser.open de Capacitor vive aquí)
+    │       ├── AboutModal.tsx          #   "Acerca de" + puente a Feedback
+    │       └── DownloadProgressBar.tsx #   barra de progreso de descarga (Electron updater)
     │
     ├── lib/
-    │   ├── utils.ts             # ⭐ Utilidades compartidas (700 líneas): exportToExcel, exportTAccountsStyleToExcel,
+    │   ├── format.ts            # ⭐ FUENTE ÚNICA de formateo/parseo de montos y texto:
+    │   │                        #   normalizeAmount, parseFormattedAmount, parseImportedAmount,
+    │   │                        #   formatAmountForInput/Input, formatCurrency (MXN),
+    │   │                        #   formatSatGroupCode, normalizeString. PROHIBIDO duplicar en vistas.
+    │   ├── utils.ts             # Exportaciones y utilidades: exportToExcel, exportTAccountsStyleToExcel,
     │   │                        #   exportToPDF (captura HTML→PDF), exportTableToPDF (autotable), readExcel,
-    │   │                        #   formatDate, formatCurrency, cn (clases), calculateMonthlyDepreciation,
-    │   │                        #   calculateFiscalDeduction (INPC), normalizeString
+    │   │                        #   cn (clases), calculateMonthlyDepreciation,
+    │   │                        #   calculateFiscalDeduction (INPC)
     │   └── satExport.ts         # Serializadores XML TXT del módulo SAT (CT/BN) y DIOT
     │
     ├── services/
@@ -202,6 +213,7 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 |---|---|
 | Agregar/editar tipos de datos o cuentas base | `src/types.ts` |
 | Cambiar cómo se calcula Balance / P&L / Cuentas T | `src/components/BalanceSheetView.tsx` / `ProfitLossView.tsx` / `TAccountsView.tsx` |
+| Cambiar formato de montos/moneda o formateo de inputs | `src/lib/format.ts` |
 | Cambiar formato de reportes Excel/PDF | `src/lib/utils.ts` |
 | Cambiar XML/TXT SAT o DIOT | `src/lib/satExport.ts` |
 | Cambiar reglas de persistencia | `src/services/storageService.ts` (+ IPC en `electron/main.js`) |
