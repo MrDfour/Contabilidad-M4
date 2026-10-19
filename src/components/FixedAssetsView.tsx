@@ -5,7 +5,7 @@ import type { Account, FixedAsset, JournalEntry, Movement } from '../types';
 import { cn } from '../lib/utils';
 import { calculateMonthlyDepreciation, calculateFiscalDeduction } from '../lib/accounting';
 import { formatCurrency, normalizeAmount, parseFormattedAmount, formatAmountInput } from '../lib/format';
-import { SearchableAccountSelect } from './JournalView';
+import { SearchableAccountSelect } from './journal/AccountPicker';
 
 export function FixedAssetsView({
   accounts,

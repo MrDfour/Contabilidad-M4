@@ -65,8 +65,17 @@ Contabilidad-M4/
     │   │   ├── AppHeader.tsx           #   sticky header + toggle Básico/Fiscal (layoutId="app-mode-indicator",
     │   │   │                          #   riesgo R4: existe en móvil y desktop; verifica en ambos)
     │   │   └── AppFooter.tsx           #   botones de respaldo/restaurar/acerca de/feedback
-    │   ├── JournalView.tsx           # Libro Diario: CRUD de asientos, partida doble en vivo,
-    │   │                             #   importar/exportar Excel, pestañas de diarios múltiples
+    │   ├── journal/                  # Deconstrucción de JournalView (Fase 4): JournalView queda como
+    │   │   │                         #   COMPOSITOR (~240 lín): toolbar de export/import, flujo de edición
+    │   │   │                         #   (nuevo vs editar) y wrappers de animación del formulario
+    │   │   ├── JournalTabs.tsx         #   pestañas de diarios + renombrado inline (estado local propio)
+    │   │   ├── EntryList.tsx           #   tabla del diario agrupada por período mensual (Intl es-ES);
+    │   │   │                          #   dueña del estado de asientos expandidos/períodos colapsados
+    │   │   ├── EntryCard.tsx           #   filas de UN asiento (colapsado "N Mov.") + filas de movimientos
+    │   │   ├── EntryForm.tsx           #   formulario de asiento: partida doble en vivo, partidas por lote,
+    │   │   │                          #   y lectura de CFDI XML (UUID/RFC/Total + modal de discrepancia)
+    │   │   └── AccountPicker.tsx       #   SearchableAccountSelect (búsqueda por nombre/código);
+    │   │                              #   también lo consume FixedAssetsView
     │   ├── TAccountsView.tsx         # Cuentas T calculadas de los asientos; export PDF/Excel
     │   ├── BalanceSheetView.tsx      # Balance General (Activo/Pasivo/Capital) desde saldos Cuentas T
     │   ├── ProfitLossView.tsx        # Estado de Resultados (método analítico); inventario final manual
@@ -97,6 +106,10 @@ Contabilidad-M4/
     │   │                        #   calculateFiscalDeduction (INPC truncado a 4 dec, Art. 31 LISR)
     │   ├── navigation.ts        # Tipos de navegación compartidos: AppMode, AppTab, NavigationTab,
     │   │                        #   FISCAL_NAV_TABS (pestañas del modo fiscal). Consumido por App y layout/
+    │   ├── importEntriesFromExcel.ts  # Parser PURO del libro Excel del Libro Diario (valida encabezados
+    │   │                        #   de la plantilla, carry-forward de celdas, groupKey por ASIENTO_ID,
+    │   │                        #   cuentas por nombre normalizado/código y serial de Excel para fechas);
+    │   │                        #   devuelve { entries, unmatchedAccounts } — el UI (JournalView) arma modales
     │   ├── appMeta.ts           # APP_VERSION (única fuente del número de versión mostrado en UI)
     │   ├── utils.ts             # Exportaciones y utilidades: exportToExcel, exportTAccountsStyleToExcel,
     │   │                        #   exportToPDF (captura HTML→PDF), exportTableToPDF (autotable), readExcel,
@@ -258,6 +271,7 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 | Cambiar presentación de Balance / P&L / Cuentas T | `src/components/BalanceSheetView.tsx` / `ProfitLossView.tsx` / `TAccountsView.tsx` |
 | Cambiar formato de montos/moneda o formateo de inputs | `src/lib/format.ts` |
 | Cambiar formato de reportes Excel/PDF | `src/lib/utils.ts` |
+| Cambiar parseo/formato del Excel de IMPORTACIÓN del Diario | `src/lib/importEntriesFromExcel.ts` (lógica) · `JournalView.tsx` (modales) |
 | Cambiar XML/TXT SAT o DIOT | `src/lib/satExport.ts` |
 | Cambiar reglas de persistencia | `src/services/storageService.ts` (+ IPC en `electron/main.js`) |
 | Cambiar lógica de sync | `src/services/syncService.ts` (motor) y `SyncModal.tsx` (UI) |

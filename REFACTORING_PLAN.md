@@ -5,9 +5,10 @@
 > - **Fase 0** — completa y validada por usuario. `lib/format.ts` + modales extraídos. `App.tsx`: 1,190 → 1,034.
 > - **Fase 1** — completa (cálculos en `lib/accounting.ts` + tipo `TAccountsData`).
 > - **Fase 2** — refactor implementado (hooks `useJournals`, `useCatalog`, `useInventories`, `useBackup`, `useAppData`; `App.tsx`: 990 → 738). Smoke test del usuario: todo correcto excepto sync, cuya falla proviene de credenciales Upstash caducadas (se inyectan por GitHub Secrets; no requiere cambio de código). **✓ Commits y push realizados por el usuario.**
-> - **Fase 3** — refactor implementado (layout → `components/layout/`: MobileMenu, Sidebar, AppHeader, AppFooter; `App.tsx`: 738 → 414; navegación tipada en `lib/navigation.ts`). Sin smoke test aún.
-> - **Criterio específico de salida de Fase 3**: inspección visual de las animaciones del indicador (riesgo R4, no se detecta con tsc): sidebar desktop al cambiar de pestaña, píldora Básico/Fiscal en desktop Y en móvil (el drawer), y drawer móvil entrando/saliendo.
-> - **Sigue Fase 4** (JournalView → `components/journal/`, ~1,194 líneas a desmontar).
+> - **Fase 3** — completa y validada por usuario (layout → `components/layout/`: MobileMenu, Sidebar, AppHeader, AppFooter; `App.tsx`: 738 → 414; navegación tipada en `lib/navigation.ts`).
+> - **Fase 4** — refactor implementado (JournalView 1,157 → 241; `components/journal/` con EntryForm/EntryList/EntryCard/AccountPicker/JournalTabs + `lib/importEntriesFromExcel.ts`). Sin smoke test aún.
+> - **Criterio específico de salida de Fase 4**: import Excel con cuentas válidas e inválidas (mensaje de rechazo), asiento cuadrado/descuadrado (botón deshabilitado + diferencia en rojo), edición y reordenar, pestañas de diario con renombrado inline, lectura de CFDI XML en modo fiscal.
+> - **Sigue Fase 5** (red de pruebas: unit tests de `lib/`; closing del plan y archivo del documento transitorio).
 > - Nota de diseño: `useAppData` no es dueño de claves; solo hidrata y notifica `onLoaded`. El estado `hasLoaded` vive en `App`.
 > - Pendientes fuera del plan: sincronización => migración futura a Cloudflare KV Workers (decisión del autor, no iniciada).
 
@@ -134,14 +135,22 @@ Antes de tocar código:
 
 **Objetivo:** desmontar el segundo monolito (1,194 líneas) que contiene subcomponentes completos.
 
-- [ ] Crear `src/components/journal/`:
-  - `EntryForm.tsx` (formulario de asiento con CFDI, ~línea 808 en el original)
-  - `AccountPicker.tsx` (búsqueda de cuentas, ~línea 703)
-  - `EntryList.tsx` / `EntryCard.tsx` (lista, expansión, reordenar)
+- [x] Crear `src/components/journal/`:
+  - `EntryForm.tsx` (formulario de asiento con CFDI)
+  - `AccountPicker.tsx` (búsqueda de cuentas)
+  - `EntryList.tsx` / `EntryCard.tsx` (lista con agrupación por período, expansión, reordenar)
   - `JournalTabs.tsx` (pestañas de diarios múltiples)
   - `importEntriesFromExcel.ts` en `lib/` (la lógica de import que hoy valida contra el catálogo)
-- [ ] `JournalView.tsx` queda como compositor de estos subcomponentes (< 300 líneas).
-- [ ] Verificar que el parser de Excel usa `lib/format.ts` (no duplicados residuales).
+- [x] `JournalView.tsx` queda como compositor de estos subcomponentes (< 300 líneas). → **241 líneas**.
+- [x] Verificar que el parser de Excel usa `lib/format.ts` (no duplicados residuales). → `parseJournalImport` usa `normalizeString` + `parseImportedAmount` de `lib/format.ts`.
+
+**Notas de implementación (Fase 4):**
+- `JournalView.tsx`: 1,157 → **241 líneas**. Dashboard de pieza: EntryForm 403, EntryList 165, EntryCard 140, AccountPicker 111, JournalTabs 111, parser 112.
+- Cambios de dueño de estado (equivalentes al original): `expandedEntries`/`collapsedPeriods` se movieron a `EntryList` (víve dentro de la misma vista, mismo ciclo de vida); `editingJournalId`/`editingName` a `JournalTabs`.
+- `SearchableAccountSelect` ahora vive en `journal/AccountPicker.tsx`; se actualizó el import de `FixedAssetsView`.
+- Detalle preservado fielmente (quirúrgico): el `catch` del import muestra SIEMPRE el mensaje genérico "Formato no soportado" aunque el parser lance mensajes más específicos ("archivo vacío", "formato inválido") — comportamiento idéntico al original; anotado como mejora futura (mostrar el mensaje del Error) NO aplicada en refactor.
+- Detalle preexistente preservado: el estado vacío de la tabla usa `colSpan={7}` con 8 columnas de encabezado (mismatch original).
+- React 19/tsc: los props tipados que reciben `key` (EntryCard, MobileNavItem) necesitan `key?: React.Key` declarado.
 
 **Commits:** uno por subcomponente, más `docs: actualizar ARCHITECTURE.md fase 4`.
 
