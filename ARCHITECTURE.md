@@ -4,6 +4,11 @@
 > Su objetivo es dar contexto completo a un asistente de IA (o desarrollador nuevo) en una sola lectura,
 > sin necesidad de explorar todo el repositorio.
 > **Regla de mantenimiento:** si cambias la estructura, los datos almacenados o agregas archivos, actualiza este documento en el mismo commit.
+>
+> **⚠ En transición:** existe un plan de modularización y testing en curso (`REFACTORING_PLAN.md`).
+> Durante ese proceso, la regla de mantenimiento aplica doble: cada fase del plan DEBE actualizar
+> este documento en el mismo commit que introduzca cambios de estructura. La tabla de archivos
+> y la sección 9 (convenciones) son las que envejecen más rápido.
 
 Versión del código: v0.7.1 · Licencia: Apache-2.0 · README de usuario: `README.md`
 
