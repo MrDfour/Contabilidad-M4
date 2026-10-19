@@ -36,6 +36,7 @@ Módulos funcionales: Libro Diario, Cuentas T, Balance General, Estado de Result
 Contabilidad-M4/
 ├── index.html                  # Plantilla HTML de Vite
 ├── vite.config.ts              # Config Vite + plugin React + Tailwind (puerto 3000)
+├── vitest.config.ts            # Config de la red de pruebas (espeja define/alias de Vite)
 ├── tsconfig.json               # TS strict, bundler moduleResolution
 ├── capacitor.config.ts         # Config de empaquetado Android
 ├── package.json                # Scripts + config de electron-builder (app: "main" arriba)
@@ -116,6 +117,14 @@ Contabilidad-M4/
     │   │                        #   cn (clases), calculateMonthlyDepreciation,
     │   │                        #   calculateFiscalDeduction (INPC)
     │   └── satExport.ts         # Serializadores XML TXT del módulo SAT (CT/BN) y DIOT
+    │
+    │   # ⭐ Red de pruebas (Fase 5): cada .test.ts(x) COLOCADO junto a lo que prueba,
+    │   #    descubierto por src/**/*.test.{ts,tsx} (ver sección 9, "Red de pruebas"):
+    │   ├── lib/accounting.test.ts · lib/format.test.ts · lib/export.test.ts
+    │   ├── hooks/useJournals.test.ts · useCatalog.test.ts · useAppData.test.ts
+    │   │     · useBackup.test.ts · useInventories.test.ts
+    │   ├── components/journal/EntryForm.test.tsx
+    │   └── test/setup.ts        # Setup global: limpieza entre tests + polyfills jsdom
     │
     ├── services/
     │   ├── storageService.ts    # ⭐ Abstracción de persistencia multiplataforma (ver sección 5):
@@ -244,7 +253,9 @@ VITE_UPSTASH_REDIS_REST_TOKEN=
 | `npm run dev` | Vite en `http://localhost:3000` (host 0.0.0.0) |
 | `npm run build` | Build de producción web → `dist/` |
 | `npm run preview` | Sirve el build localmente |
-| `npm run lint` | `tsc --noEmit` (chequeo de tipos; es el test de facto — no hay test runner) |
+| `npm run lint` | `tsc --noEmit` (chequeo de tipos) |
+| `npm run test` | Red de pruebas **Vitest** (una pasada; ver sección 9) |
+| `npm run test:watch` | Vitest en modo vigilante (re-ejecuta al guardar) |
 | `npm run electron:build` | `vite build` + electron-builder → instaladores en `release/` |
 
 Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), ExcelJS, **xlsx** (lectura de imports), jsPDF + jspdf-autotable, html2canvas-pro, peerjs + qrcode.react, @capacitor-mlkit/barcode-scanning, electron-updater, Motion, lucide-react, @google/genai.
@@ -259,6 +270,19 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 - Iconos: `lucide-react`. Animaciones: librería `motion` (Framer Motion v12).
 - Errores asíncronos de persistencia se loguean con `console.error` sin bloquear la UI.
 - El dominio es contabilidad mexicana: NO traducir nombres de cuenta del catálogo, ni cambiar códigos/nomenclatura SAT (Anexo 24, INPC, DIOT, CFDI).
+
+### Red de pruebas (Fase 5 — Vitest + Testing Library + jsdom)
+
+- Stack: `vitest` + `@testing-library/react` + `jest-dom`, **solo devDependencies**. Config en `vitest.config.ts` (espeja el `define __APP_VERSION__` de Vite); setup global en `src/test/setup.ts` (limpieza de DOM/storage entre tests + polyfills de jsdom: `crypto.randomUUID`, `URL.createObjectURL`).
+- **Ubicación:** cada `.test.ts(x)` vive COLOCADO junto al código que prueba (`lib/`, `hooks/`, `components/journal/`). Vitest descubre `src/**/*.test.{ts,tsx}`.
+- **Niveles cubiertos (9 archivos / 85+ tests):**
+  1. Unitarias puras: `lib/accounting.test.ts` (Cuentas T, saldos por naturaleza, depreciación, INPC truncado) y `lib/format.test.ts` (normalización, parseo de importaciones, sanitización de input y contrato de `parseJournalImport`).
+  2. Funcional: `lib/export.test.ts` — el workbook Excel se RELEE con ExcelJS (solo `file-saver` mockeado) y el PDF se valida por firma `%PDF-` real.
+  3. Hooks: `hooks/useJournals` (CRUD + extremos de `moveEntry` + `hydrate` que persiste SIEMPRE, incluso `[]`), `useCatalog` (recuperación de globales, dedup por `code`, debounce gated por `canSave`), `useAppData` (hidratación y fallback corrupto), `useBackup` (vigía 7 días, export con inspección del JSON, import corrupto NO restaura), `useInventories` (sin auto-guardado por diseño, `hydrateFromRemote` persiste).
+  4. Render: `components/journal/EntryForm.test.tsx` (partida doble en vivo: 0/0 bloqueado, diferencia visible, cuadre habilita, campos CFDI solo en fiscal, mín. 2 partidas).
+- **Regla de oro:** cualquier cambio en `lib/accounting.ts`, `lib/format.ts`, `lib/importEntriesFromExcel.ts` o los hooks de dominio DEBE dejar `npm run lint && npm run test` en verde antes de commitear; si el cambio es intencional de comportamiento, se actualiza el test en el MISMO commit.
+- *Quirk de entorno documentado:* Node 22+ trae un `localStorage` global nativo que en Windows puede instalarse sin ruta válida; `setup.ts` rebindea al de jsdom (o memoria) si hace falta. No afecta navegador/Electron.
+- Cobertura deliberadamente FUERA de alcance: render completo de `App` (requiere mock de sync/Upstash; `isDesktopRuntime` impide probar el rol escritorio en browser — mejora futura documentada en §6) y el rechazo de duplicados de `CatalogView` en render (mismo aserto ya cubierto a nivel de hook en `handleCombinedAccountsUpdate`).
 
 ---
 
@@ -277,3 +301,4 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 | Cambiar lógica de sync | `src/services/syncService.ts` (motor) y `SyncModal.tsx` (UI) |
 | Agregar una vista/nueva pantalla | Nuevo componente + switch en `App.tsx` |
 | Cambiar ventana Electron / autoupdater | `electron/main.js` |
+| Agregar/modificar lógica sujeta a pruebas | Colocar/actualizar el `.test.ts(x)` COLOCADO junto al módulo (regla y niveles en §9 "Red de pruebas"); `npm run lint && npm run test` en verde antes de commitear |

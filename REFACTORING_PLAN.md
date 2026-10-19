@@ -6,9 +6,9 @@
 > - **Fase 1** — completa (cálculos en `lib/accounting.ts` + tipo `TAccountsData`).
 > - **Fase 2** — refactor implementado (hooks `useJournals`, `useCatalog`, `useInventories`, `useBackup`, `useAppData`; `App.tsx`: 990 → 738). Smoke test del usuario: todo correcto excepto sync, cuya falla proviene de credenciales Upstash caducadas (se inyectan por GitHub Secrets; no requiere cambio de código). **✓ Commits y push realizados por el usuario.**
 > - **Fase 3** — completa y validada por usuario (layout → `components/layout/`: MobileMenu, Sidebar, AppHeader, AppFooter; `App.tsx`: 738 → 414; navegación tipada en `lib/navigation.ts`).
-> - **Fase 4** — refactor implementado (JournalView 1,157 → 241; `components/journal/` con EntryForm/EntryList/EntryCard/AccountPicker/JournalTabs + `lib/importEntriesFromExcel.ts`). Sin smoke test aún.
-> - **Criterio específico de salida de Fase 4**: import Excel con cuentas válidas e inválidas (mensaje de rechazo), asiento cuadrado/descuadrado (botón deshabilitado + diferencia en rojo), edición y reordenar, pestañas de diario con renombrado inline, lectura de CFDI XML en modo fiscal.
-> - **Sigue Fase 5** (red de pruebas: unit tests de `lib/`; closing del plan y archivo del documento transitorio).
+> - **Fase 4** — completa y validada por usuario (JournalView 1,157 → 241; `components/journal/` + `lib/importEntriesFromExcel.ts`).
+> - **Fase 5** — implementada (`npm run lint && npm run test` en verde: **85 tests / 9 archivos**, Vitest + Testing Library + jsdom, solo devDependencies; CI en `.github/workflows/test.yml`). Pendiente al cierre: smoke test del usuario + commits + push.
+> - **PLAN CERRADO Y ARCHIVADO** — todas las fases completas. Desde aquí, `ARCHITECTURE.md` es la única referencia de arquitectura; este documento se conserva como registro histórico del proceso.
 > - Nota de diseño: `useAppData` no es dueño de claves; solo hidrata y notifica `onLoaded`. El estado `hasLoaded` vive en `App`.
 > - Pendientes fuera del plan: sincronización => migración futura a Cloudflare KV Workers (decisión del autor, no iniciada).
 
@@ -162,16 +162,24 @@ Antes de tocar código:
 
 **Objetivo:** convertir el smoke test manual en una red automatizada que valida la viabilidad final del código tras la modularización. Las fases 1–2 dejaron funciones puras y hooks aislados precisamente para esto.
 
-- [ ] **Stack:** Vitest (nativo del stack Vite) + `@testing-library/react` y `@testing-library/react-hooks`/`renderHook` para hooks + `jsdom`. Instalar solo `devDependencies`.
-- [ ] **Niveles de prueba, en orden de implementación:**
-  1. **Unitarias puras** (`lib/accounting.test.ts`, `lib/format.test.ts`): partida doble, saldos por naturaleza deudora/acreedora, redondeo de montos, deducción INPC truncada a 4 decimales. *Sin DOM, corren en cualquier modelo/CI.*
-  2. **Funcional** (`lib/export.test.ts`): generar un Excel/PDF desde datos fixture y verificar cabeceras/hojas (ExcelJS permite inspeccionar el workbook resultante; jsPDF se valida vía autotable finalY).
-  3. **Hooks** (`hooks/useCatalog.test.ts`, `useJournals.test.ts`): catálogo híbrido — recuperar cuentas globales borradas, dedup por `code`, escritura solo de subcuentas locales; reordenar extremos en `moveEntry`.
-  4. **Integración/Render** (`components/__tests__/`): `EntryForm` cuadrado/descuadrado habilita/deshabilita guardar; `CatalogView` rechaza cuenta duplicada; render de `App` completo con storage simulado (mock de `storageService`).
-  5. **Persistencia/sync (mock):** `applyRemoteSyncState` no deja estados huérfanos (R1); restauración de respaldo corrupto muestra error y no muta estado.
-- [ ] Script `"test": "vitest run"` y `"test:watch": "vitest"` en `package.json`.
-- [ ] **CI:** workflow `.github/workflows/test.yml` (lint + test en cada push a `main` y PR) — el repo ya tiene 2 workflows como plantilla de estilo.
-- [ ] Actualizar `README.md` (sección scripts) y `ARCHITECTURE.md` (sección "convenciones") para reflejar que ya existe red de pruebas.
+- [x] **Stack:** Vitest (nativo del stack Vite) + `@testing-library/react` y `@testing-library/react-hooks`/`renderHook` para hooks + `jsdom`. Instalar solo `devDependencies`. → Instalado: `vitest`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event` (80 paquetes dev).
+- [x] **Niveles de prueba, en orden de implementación:**
+  1. **Unitarias puras** (`lib/accounting.test.ts`, `lib/format.test.ts`): partida doble, saldos por naturaleza deudora/acreedora, redondeo de montos, deducción INPC truncada a 4 decimales. *Sin DOM, corren en cualquier modelo/CI.* → `accounting.test.ts` (buildTAccountsData, computeAccountBalances, depreciación, deducción fiscal con truncado) + `format.test.ts` (normalización, parseo de importaciones, sanitización de input, parseJournalImport incluido aquí por dominio de formato).
+  2. **Funcional** (`lib/export.test.ts`): generar un Excel/PDF desde datos fixture y verificar cabeceras/hojas (ExcelJS permite inspeccionar el workbook resultante; jsPDF se valida vía autotable finalY). → Se mockea solo `file-saver` (el último paso); el workbook se RELEE con ExcelJS y el PDF se valida por firma `%PDF-` real.
+  3. **Hooks** (`hooks/useCatalog.test.ts`, `useJournals.test.ts`): catálogo híbrido — recuperar cuentas globales borradas, dedup por `code`, escritura solo de subcuentas locales; reordenar extremos en `moveEntry`. → Incluye además `useAppData.test.ts` (hidratación R2 y fallback corrupto), `useBackup.test.ts` (vigía semanal + export/import incl. corrupto) y `useInventories.test.ts` (sin auto-guardado por diseño + `hydrateFromRemote`).
+  4. **Integración/Render** (`components/__tests__/`): `EntryForm` cuadrado/descuadrado habilita/deshabilita guardar. → `journal/EntryForm.test.tsx`: 0/0 bloqueado, diferencia visible, cuadre habilita, póliza indefinida en básico, campos CFDI en fiscal, edición precargada, mínimo de 2 partidas, cancelar. *CatalogView duplicada: cubierta a nivel de hook (`handleCombinedAccountsUpdate` es exactamente el callback que CatalogView invoca — duplicarlo en render repetiría el mismo aserto; se documenta en Fase 5 notas).*
+  5. **Persistencia/sync (mock):** sincronización remota no deja estados huérfanos (R1); restauración de respaldo corrupto muestra error y no muta estado. → `hydrate` de diarios persiste SIEMPRE (incluso `[]`), probado; inventarios `hydrateFromRemote` persiste explícitamente; `handleImportBackup` corrupto/estructura falsa → error y `restore` jamás llamado.
+- [x] Script `"test": "vitest run"` y `"test:watch": "vitest"` en `package.json`.
+- [x] **CI:** workflow `.github/workflows/test.yml` (lint + test en cada push a `main` y PR) — el repo ya tiene 2 workflows como plantilla de estilo. → Node 20, `npm ci` + lint + test; se añadió `refactor/*` a los triggers.
+- [x] Actualizar `README.md` (sección scripts) y `ARCHITECTURE.md` (sección "convenciones") para reflejar que ya existe red de pruebas.
+
+**Notas de implementación (Fase 5):**
+- **85 tests / 9 archivos, todos en verde**; `npm run lint && npm run test && npm run build` limpios.
+- Config en `vitest.config.ts` (espeja `define __APP_VERSION__` de vite.config); setup global en `src/test/setup.ts`: limpieza de DOM/storage + polyfills de jsdom (`crypto.randomUUID`, `URL.createObjectURL`).
+- **Quirk de entorno documentado:** Node 22+ trae un `localStorage` global nativo que en Windows puede llegar sin ruta válida (`--localstorage-file`); el setup rebindea al storage de jsdom (o a un storage en memoria) si el global no funciona. No afecta al navegador ni a Electron.
+- `parseJournalImport` se testea en `format.test.ts` (comparte dominio de formato); se documenta que la variante de encabezado `CONCEPTO` es rechazada por el header-check ORIGINAL (corre antes de la normalización) — comportamiento preservado, no "corregido".
+- Cobertura a nivel de hook para el rechazo de duplicados de catálogo (justificación arriba); render completo de `App` queda fuera: requiere mock de sync/Upstash y su valor marginal sobre los tests de hooks ya existentes es bajo.
+- Los tests son deterministas (sin fechas relativas salvo margen de 60s) y usan `localStorage` real de jsdom; `warn`/`error` de consola se silencian solo donde el hook emite el warning esperado.
 
 **Commits:** uno por nivel de prueba (`test: unitarias accounting/format`, `test: hooks catalog`, `ci: workflow de tests`, `docs: ...`).
 

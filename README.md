@@ -412,6 +412,8 @@ Para limpiar todos los datos, abre las herramientas de desarrollo (F12) → Appl
 | `npm run preview`        | Previsualiza la build de producción localmente               |
 | `npm run clean`          | Elimina la carpeta `dist/`                                   |
 | `npm run lint`           | Verifica tipos TypeScript sin generar archivos               |
+| `npm run test`           | Ejecuta la red de pruebas (Vitest, una pasada)               |
+| `npm run test:watch`     | Modo vigilante de pruebas (se re-ejecutan al guardar)        |
 | `npm run electron:build` | Compila la app de escritorio Electron para distribución      |
 
 ---
