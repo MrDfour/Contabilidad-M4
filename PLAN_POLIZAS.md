@@ -296,9 +296,10 @@ export const migrateJournalsToPolizas = (
 ### 6.4 `src/hooks/usePolizas.ts` — nuevo (Fase 2)
 
 Dueño EXCLUSIVO de: `contasis_polizas` + `contasis_polizas_migrated`.
+*(Ajustado tras la ejecución de Fase 2 — ver DV-6: recibe `{ canSave }` para proteger R2 y la migración.)*
 
 ```ts
-export function usePolizas() {
+export function usePolizas({ canSave }: { canSave: boolean }) {
   const [polizas, setPolizas] = useState<Poliza[]>([]);
 
   // Persistencia: SIEMPRE persiste, incluido [] (por diseño, D-14 heredado
@@ -374,23 +375,23 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 ### Fase 2 — Hook `usePolizas` + migración automática
 
 **Artefactos:**
-- [ ] `src/lib/migrateJournalsToPolizas.ts` según §6.3 + `src/lib/migrateJournalsToPolizas.test.ts`:
+- [x] `src/lib/migrateJournalsToPolizas.ts` según §6.3 + `src/lib/migrateJournalsToPolizas.test.ts`:
   - migración determinista (mismos datos → mismas pólizas y folios si se resetea UUID — usar con `journal id` existente),
   - folios por tipo consecutivos en orden de iteración,
   - preserva `uuidCFDI`/`rfcTercero` y descripción/concepto,
   - lookup de cuenta (code/name) y fallback `''`,
   - `[]` si no hay entradas.
-- [ ] `src/hooks/usePolizas.ts` según §6.4 + `src/hooks/usePolizas.test.ts`:
+- [x] `src/hooks/usePolizas.ts` según §6.4 + `src/hooks/usePolizas.test.ts`:
   - persistencia SIEMPRE (incluido `[]`): mutate → storage se llamó; estado inicial vacío NO persiste hasta primer set,
   - `createPoliza`: rechaza `< 2` partidas y desbalance (lanza), asigna folio correcto por tipo, recalcula totales (ignora los del payload),
   - `updatePoliza`: preserva `folio` y `tipo`; recalcula totales,
   - `deletePoliza`; `importPolizas` asigna folios faltantes sin duplicar,
   - `hydrate` persiste SIEMPRE,
   - `markMigrated`/`isMigrated` idempotentes.
-- [ ] `src/hooks/useAppData.ts`: extender `AppDataAppliers` con `setPolizas`. Carga: 1) `contasis_polizas` si existe → `setPolizas`; 2) si NO existe Y no hay flag → cargar `contasis_journals` + `contasis_accounts` y migrar → `setPolizas(migradas)` + `markMigrated()`. Conservar la creación del "Diario Inicial" intacto (los Journals siguen vivos hasta Fase 5).
-- [ ] `src/App.tsx`: montar `usePolizas` y pasar `setPolizas` a `useAppData`. **AÚN sin UI nueva.**
-- [ ] `src/hooks/useAppData.test.ts`: extender — polizas cargadas desde storage; migración corriendo UNA vez (flag persiste); corrupto de journals → migración con `[]` + flag igual.
-- [ ] `ARCHITECTURE.md`: §5 tabla de claves (dos nuevas), §3 flujo.
+- [x] `src/hooks/useAppData.ts`: extender `AppDataAppliers` con `setPolizas`. Carga: 1) `contasis_polizas` si existe → `setPolizas`; 2) si NO existe Y no hay flag → cargar `contasis_journals` + `contasis_accounts` y migrar → `setPolizas(migradas)` + `markMigrated()`. Conservar la creación del "Diario Inicial" intacto (los Journals siguen vivos hasta Fase 5).
+- [x] `src/App.tsx`: montar `usePolizas` y pasar `setPolizas` a `useAppData`. **AÚN sin UI nueva.**
+- [x] `src/hooks/useAppData.test.ts`: extender — polizas cargadas desde storage; migración corriendo UNA vez (flag persiste); con flag y clave ausente → `[]` sin re-migrar; corrupto de journals → migración con `[]` + flag igual.
+- [x] `ARCHITECTURE.md`: §5 tabla de claves (dos nuevas), §3 flujo.
 
 **Comportamiento visible:** NINGUNO. La app sigue idéntica; las pólizas migradas viven en storage.
 
@@ -544,7 +545,7 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 | Fase | Estado | Fecha | Notas / commits |
 |------|--------|-------|-----------------|
 | 1 — Tipos + lógica pura | Completada | 2026-10-19 | 99 tests en verde (85 + 14 nuevos); lint y build limpios. Sin cambios de UI. Sugerencia de commit: `feat: tipos y lógica pura de pólizas contables` |
-| 2 — Hook + migración | Pendiente | — | |
+| 2 — Hook + migración | Completada | 2026-10-19 | 121 tests en verde (99 + 22 nuevos: migración, hook, hidratación); lint/build limpios. Migración ONE-SHOT activa al primer arranque. Sugerencia de commit: `feat: usePolizas con migración one-shot de diarios legacy` |
 | 3 — Módulo Pólizas + navegación | Pendiente | — | |
 | 4 — Cutover reportes + Diario read-only | Pendiente | — | |
 | 5 — Compatibilidad + limpieza legacy | Pendiente | — | |
@@ -564,6 +565,7 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 | DV-3 | def. | Especificación pedía IndexedDB; el proyecto usa `storageService` (Electron/Capacitor/localStorage) | Se conserva la capa existente. |
 | DV-4 | def. | Firma de `exportPolizasXML` sin RFC es inviable (header + filename del XML) | RFC se mantiene como parámetro. |
 | DV-5 | def. | Reconstrucción del Diario requiere Pólizas ya existente | Separación Fase 3 / Fase 4. |
+| DV-6 | 2 | El efecto de persistencia sin puerta escribía `[]` al montar y mataba la migración (condición de carrera con la hidratación async) | `usePolizas` recibe `canSave` (patrón de useCatalog): persiste solo pos-carga, SIEMPRE incluido `[]`; el App pasa `hasLoaded`. Contrato §6.4 ya corregido. |
 | — | — | _nuevo hallazgo aquí_ | |
 
 ---

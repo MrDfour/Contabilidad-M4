@@ -36,6 +36,7 @@ import type { SyncState } from './services/syncService';
 import { saveToStorage } from './services/storageService';
 import { useAppData } from './hooks/useAppData';
 import { useJournals } from './hooks/useJournals';
+import { usePolizas } from './hooks/usePolizas';
 import { useCatalog } from './hooks/useCatalog';
 import { useInventories } from './hooks/useInventories';
 import { useBackup } from './hooks/useBackup';
@@ -84,6 +85,11 @@ export default function App() {
   const journalsState = useJournals();
   const { journals, activeJournalId, setActiveJournalId, activeJournal } = journalsState;
 
+  // Pólizas (Fase 2 de PLAN_POLIZAS.md): canal de carga/migración vía useAppData;
+  // aún sin UI — la captura del módulo llega en Fase 3.
+  const polizasState = usePolizas({ canSave: hasLoaded });
+  const { setPolizas, markMigrated } = polizasState;
+
   const inventoriesState = useInventories({ activeJournalId });
   const { finalInventories, setFinalInventories, finalInventory, handleSetFinalInventory } = inventoriesState;
 
@@ -106,6 +112,8 @@ export default function App() {
   useAppData({
     setJournals: journalsState.setJournals,
     setActiveJournalId: journalsState.setActiveJournalId,
+    setPolizas: polizasState.setPolizas,
+    markPolizasMigrated: polizasState.markMigrated,
     setFinalInventories: setFinalInventories,
     setFixedAssets: setFixedAssets,
     setAccounts: setAccounts

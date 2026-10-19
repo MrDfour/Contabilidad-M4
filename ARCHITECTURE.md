@@ -111,6 +111,9 @@ Contabilidad-M4/
     │   │                        #   de la plantilla, carry-forward de celdas, groupKey por ASIENTO_ID,
     │   │                        #   cuentas por nombre normalizado/código y serial de Excel para fechas);
     │   │                        #   devuelve { entries, unmatchedAccounts } — el UI (JournalView) arma modales
+    │   ├── migrateJournalsToPolizas.ts # Migración ONE-SHOT diarios legacy → pólizas (PURA, sin storage;
+    │   │                        #   folios por tipo, ids reaprovechados, CFDI/RFC preservados).
+    │   │                        #   Se invoca solo desde useAppData; ver PLAN_POLIZAS.md D-2/D-3/D-4
     │   ├── appMeta.ts           # APP_VERSION (única fuente del número de versión mostrado en UI)
     │   ├── utils.ts             # Exportaciones y utilidades: exportToExcel, exportTAccountsStyleToExcel,
     │   │                        #   exportToPDF (captura HTML→PDF), exportTableToPDF (autotable), readExcel,
@@ -121,8 +124,9 @@ Contabilidad-M4/
     │   # ⭐ Red de pruebas (Fase 5): cada .test.ts(x) COLOCADO junto a lo que prueba,
     │   #    descubierto por src/**/*.test.{ts,tsx} (ver sección 9, "Red de pruebas"):
     │   ├── lib/accounting.test.ts · lib/format.test.ts · lib/export.test.ts
+    │   ├── lib/migrateJournalsToPolizas.test.ts
     │   ├── hooks/useJournals.test.ts · useCatalog.test.ts · useAppData.test.ts
-    │   │     · useBackup.test.ts · useInventories.test.ts
+    │   │     · useBackup.test.ts · useInventories.test.ts · usePolizas.test.ts
     │   ├── components/journal/EntryForm.test.tsx
     │   └── test/setup.ts        # Setup global: limpieza entre tests + polyfills jsdom
     │
@@ -139,6 +143,11 @@ Contabilidad-M4/
         │                            #   (protege R2: no persistir vacíos antes de cargar)
         ├── useJournals.ts           # ⭐ Dueño de `contasis_journals`: CRUD de asientos/diarios,
         │                            #   setSubAccounts (canal de useCatalog), hydrate (sync/respaldo)
+        ├── usePolizas.ts            # ⭐ Dueño de `contasis_polizas` + flag `contasis_polizas_migrated`:
+        │                            #   alta/edición/borrado con partida doble VALIDADA (D-9, lanza),
+        │                            #   folios por tipo (nextPolizaFolio), hydrate persistente SIEMPRE,
+        │                            #   alta programática (cierre/depreciación). Persistencia post-carga
+        │                            #   con puerta canSave — persiste incluso [] (anti re-migración, D-2)
         ├── useCatalog.ts            # ⭐ Dueño de `contasis_accounts`: catálogo híbrido
         │                            #   (globals read-only + subcuentas por diario, dedup por code),
         │                            #   guardado con debounce 300ms gated por canSave
@@ -162,12 +171,15 @@ Usuario → JournalView (asientos) → App.tsx (estado journals)
 
 - `App.tsx` es el orquestador: retiene navegación (`appMode`, `activeTab`), modales, activos fijos (`contasis_fixed_assets`, único dominio pendiente de migrar a hook) y compone los hooks de dominio.
 - Los saldos de Cuentas T, Balance y Estado de Resultados **no se almacenan**: se recalculan en cada render a partir de `journals` (vía `lib/accounting.ts`).
+- `useAppData` carga/migra pólizas (Fase 2 de `PLAN_POLIZAS.md`): lee `contasis_polizas` o ejecuta la migración ONE-SHOT desde los diarios + catálogo. El Libro Diario sigue siendo la captura ACTIVA hasta la Fase 4 — las pólizas viven en storage sin UI todavía.
 
 ### Propiedad de claves de storage (anti-R1)
 
 | Clave | Hook dueño |
 |---|---|
 | `contasis_journals` | `useJournals` (efecto auto-guarda + `hydrate` explícito) |
+| `contasis_polizas` | `usePolizas` (efecto con puerta `canSave` — persiste incluso `[]` — + `hydrate` explícito) |
+| `contasis_polizas_migrated` | `usePolizas` (flag de migración ONE-SHOT; solo se consulta en `useAppData`) |
 | `contasis_accounts` | `useCatalog` (debounce 300 ms, gated por `hasLoaded`) |
 | `contasis_final_inventories` | `useInventories` (solo guarda explícito — sin efecto automático, fiel al original) |
 | `contasis_fixed_assets` | `App.tsx` (efecto auto-guarda, aún sin hook) |
@@ -212,7 +224,9 @@ Claves usadas (uniformes en las tres plataformas):
 
 | Clave | Contenido |
 |---|---|
-| `contasis_journals` | `Journal[]` (diarios + asientos) |
+| `contasis_journals` | `Journal[]` (diarios + asientos; archivo histórico tras la migración de pólizas) |
+| `contasis_polizas` | `Poliza[]` (nueva unidad de captura contable, ver `PLAN_POLIZAS.md`) |
+| `contasis_polizas_migrated` | Flag `true` cuando la migración de diarios → pólizas ya corrió (una sola vez) |
 | `contasis_fixed_assets` | `FixedAsset[]` |
 | `contasis_final_inventories` | `{ [journalId]: number }` (inventario final por diario) |
 | `contasis_accounts` | Catálogo de cuentas creado/editado por el usuario (se fusiona sobre `INITIAL_ACCOUNTS`) |
