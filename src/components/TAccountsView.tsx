@@ -1,11 +1,11 @@
 import React from 'react';
 import { FileText, Download, ChevronRight } from 'lucide-react';
-import type { Account } from '../types';
+import type { Account, TAccountsData } from '../types';
 import { cn, exportTAccountsStyleToExcel, exportToPDF } from '../lib/utils';
 import { formatCurrency, normalizeAmount } from '../lib/format';
 
-export function TAccountsView({ tAccountsData, accounts, journalName }: { 
-  tAccountsData: Record<string, { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] }>, 
+export function TAccountsView({ tAccountsData, accounts, journalName }: {
+  tAccountsData: TAccountsData,
   accounts: Account[],
   journalName: string
 }) {
@@ -51,9 +51,8 @@ export function TAccountsView({ tAccountsData, accounts, journalName }: {
         ) : (
           Object.entries(tAccountsData).map(([accountId, data]) => {
             const acc = accounts.find(a => a.id === accountId);
-            const typedData = data as { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] };
-            const totalD = normalizeAmount(typedData.debits.reduce((s, d) => s + d.amount, 0));
-            const totalC = normalizeAmount(typedData.credits.reduce((s, c) => s + c.amount, 0));
+            const totalD = normalizeAmount(data.debits.reduce((s, d) => s + d.amount, 0));
+            const totalC = normalizeAmount(data.credits.reduce((s, c) => s + c.amount, 0));
             const balanceSide = (acc?.type === 'asset' || acc?.type === 'expense') ? 'left' : 'right';
             const balance = normalizeAmount(balanceSide === 'left' ? totalD - totalC : totalC - totalD);
 
@@ -72,7 +71,7 @@ export function TAccountsView({ tAccountsData, accounts, journalName }: {
                       <div className="text-[9px] font-bold text-slate-500 uppercase mb-1 flex justify-between uppercase">
                         <span>Debe</span>
                       </div>
-                      {typedData.debits.map((d, i) => (
+                      {data.debits.map((d, i) => (
                         <div key={i} className="flex justify-between items-center text-xs font-mono text-emerald-400/90">
                           <span className="text-[9px] text-slate-500 pr-2">({d.ref})</span>
                           <span>{formatCurrency(d.amount)}</span>
@@ -86,7 +85,7 @@ export function TAccountsView({ tAccountsData, accounts, journalName }: {
                       <div className="text-[9px] font-bold text-slate-500 uppercase mb-1 text-right uppercase">
                         <span>Haber</span>
                       </div>
-                      {typedData.credits.map((c, i) => (
+                      {data.credits.map((c, i) => (
                         <div key={i} className="flex justify-between items-center text-xs font-mono text-rose-400/90">
                           <span>{formatCurrency(c.amount)}</span>
                           <span className="text-[9px] text-slate-500 pl-2">({c.ref})</span>

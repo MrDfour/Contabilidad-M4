@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Monitor } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Account, FixedAsset, JournalEntry, Movement } from '../types';
-import { cn, calculateMonthlyDepreciation, calculateFiscalDeduction } from '../lib/utils';
+import { cn } from '../lib/utils';
+import { calculateMonthlyDepreciation, calculateFiscalDeduction } from '../lib/accounting';
 import { formatCurrency, normalizeAmount, parseFormattedAmount, formatAmountInput } from '../lib/format';
 import { SearchableAccountSelect } from './JournalView';
 

@@ -82,6 +82,10 @@ Contabilidad-M4/
     │   │                        #   normalizeAmount, parseFormattedAmount, parseImportedAmount,
     │   │                        #   formatAmountForInput/Input, formatCurrency (MXN),
     │   │                        #   formatSatGroupCode, normalizeString. PROHIBIDO duplicar en vistas.
+    │   ├── accounting.ts        # ⭐ Funciones PURAS de derivación contable (sin React/storage):
+    │   │                        #   buildTAccountsData, computeAccountBalances (saldo por naturaleza
+    │   │                        #   deudora/acreedora), calculateMonthlyDepreciation,
+    │   │                        #   calculateFiscalDeduction (INPC truncado a 4 dec, Art. 31 LISR)
     │   ├── utils.ts             # Exportaciones y utilidades: exportToExcel, exportTAccountsStyleToExcel,
     │   │                        #   exportToPDF (captura HTML→PDF), exportTableToPDF (autotable), readExcel,
     │   │                        #   cn (clases), calculateMonthlyDepreciation,
@@ -107,7 +111,7 @@ Regla general: **estado y persistencia viven en `App.tsx`/`services`; cálculo c
 
 ```
 Usuario → JournalView (asientos) → App.tsx (estado journals)
-       → TAccountsView / BalanceSheetView / ProfitLossView (cálculo derivado de journals + accounts)
+       → TAccountsView / BalanceSheetView / ProfitLossView (derivaciones puras de lib/accounting.ts sobre journals + accounts)
        → FixedAssetsView → genera asiento automático → journals
 ```
 
@@ -125,6 +129,7 @@ Usuario → JournalView (asientos) → App.tsx (estado journals)
 | `JournalEntry` | Asiento (id, fecha, descripción, `movements[]`, `policyType?: 'diario'\|'ingreso'\|'egreso'`) |
 | `Journal` | Libro diario (id, nombre, `entries[]`) |
 | `FixedAsset` | Activo fijo (nombre, fecha, MOI, cuentas asociadas asset/depr/gasto, `fiscalRate`, `isDisposed`) |
+| `TAccountsData` | Cuentas T derivadas: `Record<accountId, { debits: TAccountSide[], credits: TAccountSide[] }>` con `ref` = nº de asiento (1-index). **No se almacena** — se recalcula vía `lib/accounting.ts` |
 | `INITIAL_ACCOUNTS` | Catálogo base (~50 cuentas, códigos 1101…5113 con `satGroupCode` SAT). Las cuentas del catálogo base tienen `isReadOnly` y los usuarios pueden agregar cuentas nuevas |
 
 Invariantes importantes:
@@ -212,7 +217,8 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 | Quiero… | Archivo |
 |---|---|
 | Agregar/editar tipos de datos o cuentas base | `src/types.ts` |
-| Cambiar cómo se calcula Balance / P&L / Cuentas T | `src/components/BalanceSheetView.tsx` / `ProfitLossView.tsx` / `TAccountsView.tsx` |
+| Cambiar reglas de cálculo (Cuentas T, saldos, depreciación, INPC) | `src/lib/accounting.ts` |
+| Cambiar presentación de Balance / P&L / Cuentas T | `src/components/BalanceSheetView.tsx` / `ProfitLossView.tsx` / `TAccountsView.tsx` |
 | Cambiar formato de montos/moneda o formateo de inputs | `src/lib/format.ts` |
 | Cambiar formato de reportes Excel/PDF | `src/lib/utils.ts` |
 | Cambiar XML/TXT SAT o DIOT | `src/lib/satExport.ts` |

@@ -51,6 +51,21 @@ export interface FixedAsset {
   isDisposed: boolean;
 }
 
+/** Un movimiento único en una columna de Cuenta T (con referencia del asiento, 1-index). */
+export interface TAccountSide {
+  amount: number;
+  ref: number;
+}
+
+/** Debe y Haber de una Cuenta T. */
+export interface TAccountColumns {
+  debits: TAccountSide[];
+  credits: TAccountSide[];
+}
+
+/** Cuentas T agrupadas por accountId, derivadas de un Journal (no se almacenan: se recalculan). */
+export type TAccountsData = Record<string, TAccountColumns>;
+
 export const INITIAL_ACCOUNTS: Account[] = [
   // Activo Circulante
   { id: 'ac-1', code: '1101', name: 'Caja', type: 'asset', subtype: 'circulante', satGroupCode: '101.01' },

@@ -42,10 +42,9 @@ import {
   Journal,
   FixedAsset
 } from './types';
-import {
-  cn
-} from './lib/utils';
+import { cn } from './lib/utils';
 import { normalizeAmount } from './lib/format';
+import { buildTAccountsData, computeAccountBalances } from './lib/accounting';
 import FeedbackModal from './components/FeedbackModal';
 import SyncModal from './components/SyncModal';
 import { GlobalInfoModal, BACKUP_SUGGESTION_TITLE, type ModalInfo } from './components/modals/GlobalInfoModal';
@@ -304,45 +303,14 @@ export default function App() {
     }
   };
 
-  // Derived Data: T-Accounts
-  const tAccountsData = useMemo(() => {
-    const data: Record<string, { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] }> = {};
-    
-    entries.forEach((entry, index) => {
-      entry.movements.forEach(mov => {
-        if (!data[mov.accountId]) {
-          data[mov.accountId] = { debits: [], credits: [] };
-        }
-        const accountData = data[mov.accountId];
-        if (mov.type === 'debit') {
-          accountData.debits.push({ amount: normalizeAmount(mov.amount), ref: index + 1 });
-        } else {
-          accountData.credits.push({ amount: normalizeAmount(mov.amount), ref: index + 1 });
-        }
-      });
-    });
-    
-    return data;
-  }, [entries]);
+  // Derived Data: T-Accounts (funciones puras en lib/accounting.ts)
+  const tAccountsData = useMemo(() => buildTAccountsData(entries), [entries]);
 
   // Derived Data: Balances
-  const accountBalances = useMemo(() => {
-    const balances: Record<string, number> = {};
-    Object.entries(tAccountsData).forEach(([accountId, data]) => {
-      const typedData = data as { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] };
-      const totalDebit = normalizeAmount(typedData.debits.reduce((sum, d) => sum + d.amount, 0));
-      const totalCredit = normalizeAmount(typedData.credits.reduce((sum, c) => sum + c.amount, 0));
-      const account = combinedAccounts.find(a => a.id === accountId);
-      
-      // Standard balance side
-      if (account?.type === 'asset' || account?.type === 'expense') {
-        balances[accountId] = normalizeAmount(totalDebit - totalCredit);
-      } else {
-        balances[accountId] = normalizeAmount(totalCredit - totalDebit);
-      }
-    });
-    return balances;
-  }, [tAccountsData, combinedAccounts]);
+  const accountBalances = useMemo(
+    () => computeAccountBalances(tAccountsData, combinedAccounts),
+    [tAccountsData, combinedAccounts]
+  );
 
   const addEntry = (newEntry: Omit<JournalEntry, 'id'>) => {
     if (!activeJournalId) return;

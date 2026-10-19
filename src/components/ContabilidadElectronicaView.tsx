@@ -1,6 +1,6 @@
 import React from 'react';
 import { Download, FileText, FileCode } from 'lucide-react';
-import type { Account, JournalEntry } from '../types';
+import type { Account, JournalEntry, TAccountsData } from '../types';
 import { cn } from '../lib/utils';
 import { generateCatalogoXML, generateBalanzaXML, generateDIOTTxt, generatePolizasXML } from '../lib/satExport';
 
@@ -12,7 +12,7 @@ export function ContabilidadElectronicaView({
 }: {
   accounts: Account[];
   entries: JournalEntry[];
-  tAccountsData: Record<string, { debits: { amount: number; ref: number }[]; credits: { amount: number; ref: number }[] }>;
+  tAccountsData: TAccountsData;
   onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void;
 }) {
   const now = React.useMemo(() => new Date(), []);

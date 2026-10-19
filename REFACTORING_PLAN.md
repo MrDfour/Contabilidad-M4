@@ -50,16 +50,16 @@ Antes de tocar código:
 
 **Objetivo:** separar el "cerebro" del "cuerpo". Prepara el terreno para los tests (Fase 5).
 
-- [ ] Crear `src/lib/accounting.ts` con funciones puras (sin React, sin storage):
+- [x] Crear `src/lib/accounting.ts` con funciones puras (sin React, sin storage):
   - `buildTAccountsData(entries: JournalEntry[]): TAccountsData`
   - `computeAccountBalances(tAccountsData, accounts): Record<string, number>`
-  - Mover aquí también `calculateMonthlyDepreciation` y `calculateFiscalDeduction` (hoy en `utils.ts`).
-- [ ] `App.tsx` consume vía `useMemo` llamando a estas funciones (misma lógica, misma ubicación de invocación).
-- [ ] Tipar el tipo `TAccountsData` en `types.ts` (hoy está inline como Record anónimo).
+  - Movidas también `calculateMonthlyDepreciation` y `calculateFiscalDeduction` (antes en `utils.ts`; `FixedAssetsView` importa de `lib/accounting`).
+- [x] `App.tsx` consume vía `useMemo` llamando a estas funciones (misma lógica, misma ubicación de invocación).
+- [x] Tipado el tipo `TAccountsData` (+ `TAccountSide`, `TAccountColumns`) en `types.ts`. Se eliminaron **6 copias del tipo anónimo inline** (`App`, `TAccountsView` ×2, `ContabilidadElectronicaView`, `satExport`, `utils`).
 
 **Commits:** `refactor: extraer cálculos contables a lib/accounting`, `docs: actualizar ARCHITECTURE.md fase 1`.
 
-**Criterio de salida:** Balance y Cuentas T idénticos al smoke test; `lib/accounting.ts` importable sin React (esto habilita testearlo en Node puro en Fase 5).
+**Criterio de salida:** Balance y Cuentas T idénticos al smoke test; `lib/accounting.ts` importable sin React (esto habilita testearlo en Node puro en Fase 5). *(Pendiente al cierre: smoke test del usuario + commit + push.)*
 
 ---
 
