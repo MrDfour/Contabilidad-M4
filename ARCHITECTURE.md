@@ -190,10 +190,11 @@ Claves usadas (uniformes en las tres plataformas):
 ## 6. Sincronización Escritorio ↔ Móvil
 
 - Central en `src/services/syncService.ts` (lógica) + `SyncModal.tsx` (UI).
-- **WebRTC con PeerJS**: escritorio actúa de host con un ID de sesión; móvil escanea QR (MLKit) o entra un PIN de 6 dígitos (el PIN deriva el sessionId con aritmética mod CSRNG).
-- **Respaldo Redis**: si WebRTC falla, serializa el estado a Upstash Redis REST (`VITE_UPSTASH_REDIS_REST_URL` en `.env` → variables `VITE_*`).
+- **WebRTC con PeerJS**: escritorio actúa de host con un ID de sesión; móvil escanea QR (MLKit) o entra un PIN de 6 dígitos (el PIN deriva el sessionId con aritmética módulo CSRNG).
+- **Upstash Redis REST es parte integral del protocolo de emparejamiento, no un simple respaldo**: registra la sesión activa y compone el payload desktop ↔ móvil (`sync_desktop_*` / `sync_mobile_*`); el flujo de PIN usa Redis para el registro de sesiones, contadores de intentos fallidos y bloqueo temporal. Si faltan las credenciales, el escritorio lanza "Upstash Redis env vars are missing" y el companion "Failed to fetch". El rol "escritorio" solo se activa en Electron (`window.electronAPI`); un navegador puro siempre toma el flujo móvil (limitación preexistente, ver Mejoras futuras).
 - Conflictos: el móvil ofrece "mantener local" vs "sobrescribir con datos remotos" (payload completo, no merge por asiento).
 - Medidas de seguridad: límite de intentos de PIN, bloqueo temporal y regeneración de sesión.
+- **Mejora futura identificada (no en refactor):** el sistema Upstash está planificado a reemplazarse por **Cloudflare KV Workers**; candidato a considerar entonces: emparejamiento por QR vía PeerJS puro sin Redis (degradación elegante cuando no haya credenciales).
 
 ---
 
@@ -201,12 +202,14 @@ Claves usadas (uniformes en las tres plataformas):
 
 ```env
 GEMINI_API_KEY=     # funciones de IA (Google @google/genai existe en package.json)
-APP_URL=            # referencia a si mismo en despliegue
-VITE_UPSTASH_REDIS_REST_URL=   # respaldo de sync (usada por syncService)
+APP_URL=            # referencia a sí mismo en despliegue
+VITE_UPSTASH_REDIS_REST_URL=     # NO viene en .env.example (ver nota abajo)
 VITE_UPSTASH_REDIS_REST_TOKEN=
 ```
 
 > Ojo: esta app se originó como AI Studio applet; `GEMINI_API_KEY`/`APP_URL` son herencia de esa plantilla. Las variables usadas por Vite **deben** llevar el prefijo `VITE_`.
+>
+> **Credenciales de sync (Upstash):** no están en `.env.example`; en producción/despliegue se inyectan vía **GitHub Secrets**, y para desarrollo local se crea un `.env` manual (gitignoreado). Los tokens tienen vigencia (caducan) — un "Failed to fetch" del companion o el mensaje "Upstash Redis env vars are missing" en escritorio casi siempre significa token expirado o ausente. Sincronización local requiere: regenerar tokens en Upstash → `.env` local → `npm run build` + `npx electron .` (escritorio carga `dist/`, no el dev server) y reiniciar `npm run dev` (Vite solo lee `.env` al arrancar).
 
 ---
 

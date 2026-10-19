@@ -1,5 +1,14 @@
 # Plan de Modularización y Fortalecimiento — Contabilidad M4 Pro
 
+> **ESTADO ACTUAL del plan (actualizar este bloque al cerrar cada fase):**
+> - **Fase -1** — completa. Entorno instalado, lint limpio, smoke test base validado, rama `refactor/modularizacion`.
+> - **Fase 0** — completa y validada por usuario. `lib/format.ts` + modales extraídos. `App.tsx`: 1,190 → 1,034.
+> - **Fase 1** — completa (cálculos en `lib/accounting.ts` + tipo `TAccountsData`).
+> - **Fase 2** — refactor implementado (hooks `useJournals`, `useCatalog`, `useInventories`, `useBackup`, `useAppData`; `App.tsx`: 990 → 738). Smoke test del usuario: todo correcto excepto sync, cuya falla proviene de credenciales Upstash caducadas (se inyectan por GitHub Secrets; no requiere cambio de código). **Pendiente: commits y push de Fases 1 y 2.**
+> - **Sigue Fase 3** (layout → `components/layout/`; quedan ~460 líneas de shell UI en `App.tsx`).
+> - Nota de diseño: `useAppData` no es dueño de claves; solo hidrata y notifica `onLoaded`. El estado `hasLoaded` vive en `App`.
+> - Pendientes fuera del plan: sincronización => migración futura a Cloudflare KV Workers (decisión del autor, no iniciada).
+
 > **Propósito:** documento de transición. Describe el plan para desmontar los archivos monolíticos
 > (`App.tsx`, `JournalView.tsx`, `utils.ts`), añadir una red de pruebas y establecer la disciplina
 > de commits por fase. **Cuando todas las fases estén completas, este documento puede eliminarse**
@@ -72,7 +81,7 @@ Antes de tocar código:
 - [x] `src/hooks/useCatalog.ts` — catálogo híbrido: `finalGlobals`, `combinedAccounts`, `handleCombinedAccountsUpdate` (firma intacta para satisfacer `React.Dispatch<React.SetStateAction<Account[]>>` de CatalogView), persistencia con debounce gated por `canSave`.
 - [x] `src/hooks/useInventories.ts` — `finalInventories` + `finalInventory` sincronizado + `handleSetFinalInventory`. **Nota fiel al original: esta clave no tiene auto-guardado** (solo guarda explícito).
 - [x] `src/hooks/useBackup.ts` — vigilante semanal + `handleExportBackup` + `handleImportBackup` (parseo/validación en el hook; los writes multi-dominio van al orquestador `restore` de App).
-- [x] **Regla anti-R1 (atomicidad):** implementada con "orquestadores en App": `applyRemoteSyncState` compone `journalsState.hydrate` + `inventoriesState.hydrateFromRemote` en UNA función; la restauración de respaldo compone hydrate + writes crudos de cada hook. Cada usuarios de clave documentado en JSDoc:
+- [x] **Regla anti-R1 (atomicidad):** implementada con "orquestadores en App": `applyRemoteSyncState` compone `journalsState.hydrate` + `inventoriesState.hydrateFromRemote` en UNA función; la restauración de respaldo compone hydrate + writes crudos de cada hook. Cada hook documenta su clave en JSDoc:
 
   | Hook | Clave de storage de la que es dueño |
   |---|---|
