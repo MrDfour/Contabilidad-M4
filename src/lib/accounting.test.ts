@@ -8,9 +8,13 @@ import {
   buildTAccountsData,
   computeAccountBalances,
   calculateMonthlyDepreciation,
-  calculateFiscalDeduction
+  calculateFiscalDeduction,
+  validatePolizaBalance,
+  flattenPolizasToJournalEntries,
+  nextPolizaFolio,
+  formatPolizaFolio
 } from './accounting';
-import type { Account, FixedAsset, JournalEntry, Movement } from '../types';
+import type { Account, FixedAsset, JournalEntry, Movement, Poliza, PartidaPoliza } from '../types';
 
 /** Fábrica de asiento con id determinista y movimientos dados. */
 const entry = (id: string, movements: Movement[], date = '2024-01-15'): JournalEntry => ({
@@ -129,5 +133,147 @@ describe('calculateFiscalDeduction (Art. 31 LISR, factor truncado a 4 dec.)', ()
 
   it('factor exacto 1.0 da la deducción sin actualización', () => {
     expect(calculateFiscalDeduction(asset, 100, 100)).toBe(3000);
+  });
+});
+
+// --- Fase 1 módulo Pólizas: funciones puras de pólizas ---
+
+/** Fábrica de partida determinista. */
+const partida = (overrides: Partial<PartidaPoliza> & { accountId: string }): PartidaPoliza => ({
+  id: `p-${overrides.accountId}`,
+  accountCode: '1000',
+  accountName: `Cuenta ${overrides.accountId}`,
+  debit: 0,
+  credit: 0,
+  ...overrides
+});
+
+/** Fábrica de póliza determinista (sin crypto). */
+const poliza = (ocultar?: Partial<Poliza>): Poliza => ({
+  id: 'pol-1',
+  folio: 1,
+  tipo: 'diario',
+  fecha: '2024-01-15',
+  concepto: 'Póliza de prueba',
+  partidas: [],
+  totalDebe: 0,
+  totalHaber: 0,
+  ...ocultar
+});
+
+describe('validatePolizaBalance', () => {
+  it('póliza cuadrada: isBalanced true, difference 0 y totales correctos', () => {
+    const resultado = validatePolizaBalance([
+      partida({ accountId: 'a1', debit: 500 }),
+      partida({ accountId: 'a2', credit: 500 })
+    ]);
+    expect(resultado).toEqual({ isBalanced: true, totalDebe: 500, totalHaber: 500, difference: 0 });
+  });
+
+  it('desbalance de 1 centavo: isBalanced false', () => {
+    const resultado = validatePolizaBalance([
+      partida({ accountId: 'a1', debit: 100.01 }),
+      partida({ accountId: 'a2', credit: 100 })
+    ]);
+    expect(resultado.isBalanced).toBe(false);
+    expect(resultado.difference).toBe(0.01);
+  });
+
+  it('sin partidas: isBalanced false con totales en 0', () => {
+    expect(validatePolizaBalance([])).toEqual({
+      isBalanced: false, totalDebe: 0, totalHaber: 0, difference: 0
+    });
+  });
+
+  it('mono-partida: desbalanceada (el cargo no tiene abono espejo)', () => {
+    const resultado = validatePolizaBalance([partida({ accountId: 'a1', debit: 300 })]);
+    expect(resultado).toEqual({ isBalanced: false, totalDebe: 300, totalHaber: 0, difference: 300 });
+  });
+
+  it('redondeo a 2 decimales vía normalizeAmount (0.005 → 0.01)', () => {
+    const resultado = validatePolizaBalance([
+      partida({ accountId: 'a1', debit: 100.005 }),
+      partida({ accountId: 'a2', credit: 100 })
+    ]);
+    expect(resultado.totalDebe).toBe(100.01);
+    expect(resultado.difference).toBe(0.01);
+  });
+});
+
+describe('flattenPolizasToJournalEntries', () => {
+  it('mapea exacto debit/credit, respeta uuidCFDI/rfcTercero y copia policyType', () => {
+    const entrada = poliza({
+      partidas: [
+        partida({ accountId: 'a1', debit: 400, uuidCFDI: 'uuid-36-chars', rfcTercero: 'XAXX010101000' }),
+        partida({ accountId: 'a2', credit: 400 })
+      ]
+    });
+    const salida = flattenPolizasToJournalEntries([entrada]);
+
+    expect(salida).toHaveLength(1);
+    expect(salida[0]).toEqual({
+      id: 'pol-1',
+      date: '2024-01-15',
+      description: 'Póliza de prueba',
+      policyType: 'diario',
+      movements: [
+        { accountId: 'a1', type: 'debit', amount: 400, uuidCFDI: 'uuid-36-chars', rfcTercero: 'XAXX010101000' },
+        { accountId: 'a2', type: 'credit', amount: 400 }
+      ]
+    });
+  });
+
+  it('partida 0/0 no genera movimiento', () => {
+    const salida = flattenPolizasToJournalEntries([
+      poliza({ partidas: [partida({ accountId: 'a1' })] })
+    ]);
+    expect(salida[0].movements).toEqual([]);
+  });
+
+  it('NO ordena: respeta el orden de entrada de las pólizas', () => {
+    const salida = flattenPolizasToJournalEntries([
+      poliza({ id: 'b', fecha: '2024-03-01', concepto: 'Tarde' }),
+      poliza({ id: 'a', fecha: '2024-01-01', concepto: 'Temprano' })
+    ]);
+    expect(salida.map(e => e.id)).toEqual(['b', 'a']);
+  });
+});
+
+describe('nextPolizaFolio', () => {
+  it('sin pólizas: 1', () => {
+    expect(nextPolizaFolio([], 'egreso')).toBe(1);
+  });
+
+  it('tipo sin folios (solo hay de otro tipo): 1', () => {
+    const lista = [poliza({ id: '1', tipo: 'ingreso', folio: 7 })];
+    expect(nextPolizaFolio(lista, 'egreso')).toBe(1);
+  });
+
+  it('con huecos: max(folio del tipo) + 1', () => {
+    const lista = [
+      poliza({ id: '1', tipo: 'egreso', folio: 1 }),
+      poliza({ id: '2', tipo: 'egreso', folio: 9 })
+    ];
+    expect(nextPolizaFolio(lista, 'egreso')).toBe(10);
+  });
+
+  it('independencia entre tipos: los folios de ingreso no contaminan diario', () => {
+    const lista: Poliza[] = [
+      poliza({ id: '1', tipo: 'ingreso', folio: 1 }),
+      poliza({ id: '2', tipo: 'ingreso', folio: 2 })
+    ];
+    expect(nextPolizaFolio(lista, 'diario')).toBe(1);
+  });
+});
+
+describe('formatPolizaFolio', () => {
+  it('prefijo por tipo y relleno a 4 dígitos', () => {
+    expect(formatPolizaFolio(poliza({ tipo: 'ingreso', folio: 1 }))).toBe('ING-0001');
+    expect(formatPolizaFolio(poliza({ tipo: 'egreso', folio: 12 }))).toBe('EGR-0012');
+    expect(formatPolizaFolio(poliza({ tipo: 'diario', folio: 123 }))).toBe('DIA-0123');
+  });
+
+  it('folio de 5 dígitos no se trunca', () => {
+    expect(formatPolizaFolio(poliza({ tipo: 'diario', folio: 10000 }))).toBe('DIA-10000');
   });
 });

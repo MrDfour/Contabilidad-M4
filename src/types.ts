@@ -32,6 +32,37 @@ export interface JournalEntry {
   policyType?: 'diario' | 'ingreso' | 'egreso';
 }
 
+/** Tipo de póliza contable: captura de Ingreso (1), Egreso (2) o Diario (3) para SAT. */
+export type TipoPoliza = 'ingreso' | 'egreso' | 'diario';
+
+/** Una línea de una póliza (partida contable de un solo lado). */
+export interface PartidaPoliza {
+  id: string;
+  accountId: string;   // id del catálogo (Account.id)
+  accountCode: string; // Snapshot de código (para XML/imprimir sin buscar en catálogo)
+  accountName: string; // Snapshot de nombre
+  debit: number;       // cargo — ≥ 0
+  credit: number;      // abono — ≥ 0
+  concept?: string;
+  uuidCFDI?: string;   // preserva Movement.uuidCFDI (CompNal XML y DIOT)
+  rfcTercero?: string; // preserva Movement.rfcTercero (DIOT)
+}
+
+/** Póliza contable formal: la unidad de captura primaria del sistema. */
+export interface Poliza {
+  id: string;          // = id de JournalEntry migrado, o crypto.randomUUID() en alta manual
+  folio: number;       // Consecutivo INDEPENDIENTE por tipo (nextPolizaFolio)
+  tipo: TipoPoliza;
+  fecha: string;       // YYYY-MM-DD
+  concepto: string;
+  partidas: PartidaPoliza[];
+  totalDebe: number;   // Recalculado con normalizeAmount en cada guardado
+  totalHaber: number;  // idem
+  uuidSat?: string;
+  elaboro?: string;
+  autorizo?: string;
+}
+
 export interface Journal {
   id: string;
   name: string;

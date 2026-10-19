@@ -183,6 +183,9 @@ Usuario → JournalView (asientos) → App.tsx (estado journals)
 | `Account` | Cuenta contable (`id, code, name, type: 'asset'\|'liability'\|'equity'\|'revenue'\|'expense', subtype?, satGroupCode?, isReadOnly?`) |
 | `Movement` | Línea de asiento (`accountId` → referencia a Account, `type: 'debit'\|'credit'`, `amount`, `uuidCFDI?`, `rfcTercero?`) |
 | `JournalEntry` | Asiento (id, fecha, descripción, `movements[]`, `policyType?: 'diario'\|'ingreso'\|'egreso'`) |
+| `TipoPoliza` | Tipo de póliza contable: `'ingreso' \| 'egreso' \| 'diario'` (mapea a TipoPoliza SAT 1/2/3 en el XML Anexo 24) |
+| `PartidaPoliza` | Línea de una póliza de un solo lado (`accountId`, snapshot `accountCode`/`accountName`, `debit ≥ 0`, `credit ≥ 0`, `concept?`, `uuidCFDI?`, `rfcTercero?`). Regla: si `debit > 0` entonces es cargo, si no, es abono en `credit` — nunca ambos |
+| `Poliza` | Póliza contable formal (id, `folio` consecutivo INDEPENDIENTE por tipo, `tipo: TipoPoliza`, fecha, concepto, `partidas[]`, `totalDebe`/`totalHaber` recalculados al guardar con `normalizeAmount`, `elaboro?`, `autorizo?`). Unidad de captura del nuevo módulo de Pólizas (ver `PLAN_POLIZAS.md`) |
 | `Journal` | Libro diario (id, nombre, `entries[]`) |
 | `FixedAsset` | Activo fijo (nombre, fecha, MOI, cuentas asociadas asset/depr/gasto, `fiscalRate`, `isDisposed`) |
 | `TAccountsData` | Cuentas T derivadas: `Record<accountId, { debits: TAccountSide[], credits: TAccountSide[] }>` con `ref` = nº de asiento (1-index). **No se almacena** — se recalcula vía `lib/accounting.ts` |
