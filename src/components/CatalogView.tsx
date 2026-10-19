@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Edit2, Check, X } from 'lucide-react';
 import type { Account, JournalEntry } from '../types';
-import { formatSatGroupCode } from '../lib/utils';
+import { formatSatGroupCode } from '../lib/format';
 
 type AppMode = 'basic' | 'fiscal';
 

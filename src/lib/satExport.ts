@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Account, JournalEntry } from '../types';
+import { Account, JournalEntry, TAccountsData } from '../types';
 
 export const downloadXML = (filename: string, content: string) => {
   const blob = new Blob([content], { type: 'application/xml;charset=utf-8;' });
@@ -45,7 +45,7 @@ export const generateBalanzaXML = (
   anio: string,
   mes: string,
   accounts: Account[],
-  tAccountsData: Record<string, { debits: { amount: number, ref?: number }[], credits: { amount: number, ref?: number }[] }>
+  tAccountsData: TAccountsData
 ) => {
   const cuentasXML = accounts
     .filter(a => a.satGroupCode && tAccountsData[a.id])

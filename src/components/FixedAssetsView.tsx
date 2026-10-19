@@ -2,32 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Monitor } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Account, FixedAsset, JournalEntry, Movement } from '../types';
-import { cn, formatCurrency, calculateMonthlyDepreciation, calculateFiscalDeduction } from '../lib/utils';
-import { SearchableAccountSelect } from './JournalView';
-
-const normalizeAmount = (value: number) => {
-  if (!Number.isFinite(value)) return 0;
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-};
-
-const parseFormattedAmount = (value: string) => {
-  const parsed = Number(value.replace(/,/g, ''));
-  return normalizeAmount(parsed);
-};
-
-const formatAmountInput = (value: string) => {
-  const sanitized = value.replace(/[^0-9.]/g, '');
-  if (!sanitized) return '';
-
-  const [integerPartRaw, ...decimalParts] = sanitized.split('.');
-  const hasDecimalPoint = sanitized.includes('.');
-  const normalizedInteger = (integerPartRaw || '0').replace(/^0+(?=\d)/, '') || '0';
-  const formattedInteger = normalizedInteger.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  const decimalPart = decimalParts.join('').slice(0, 2);
-
-  if (!hasDecimalPoint) return formattedInteger;
-  return `${formattedInteger}.${decimalPart}`;
-};
+import { cn } from '../lib/utils';
+import { calculateMonthlyDepreciation, calculateFiscalDeduction } from '../lib/accounting';
+import { formatCurrency, normalizeAmount, parseFormattedAmount, formatAmountInput } from '../lib/format';
+import { SearchableAccountSelect } from './journal/AccountPicker';
 
 export function FixedAssetsView({
   accounts,

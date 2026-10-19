@@ -9,7 +9,7 @@ import html2canvas from 'html2canvas-pro';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { Account, FixedAsset } from '../types';
+import { Account, TAccountsData } from '../types';
 
 /** Returns true when running inside a native Capacitor app (iOS / Android). */
 const isNative = () => Capacitor.isNativePlatform();
@@ -59,19 +59,6 @@ const saveFile = async (blob: Blob, fileName: string): Promise<void> => {
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
-
-export function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-  }).format(amount);
-}
-
-export const formatSatGroupCode = (code: string) => {
-  // Regla SAT: códigos de 4+ dígitos se muestran como XX.XX.
-  if (code.length >= 4) return `${code.slice(0, 2)}.${code.slice(2)}`;
-  return code;
-};
 
 export const exportToExcel = async (data: any[], fileName: string, sheetName: string) => {
   const workbook = new ExcelJS.Workbook();
@@ -153,7 +140,7 @@ export const exportToExcel = async (data: any[], fileName: string, sheetName: st
 };
 
 export const exportTAccountsStyleToExcel = async (
-  tAccountsData: Record<string, { debits: { amount: number, ref: number }[], credits: { amount: number, ref: number }[] }>,
+  tAccountsData: TAccountsData,
   accounts: Account[],
   fileName: string
 ) => {
@@ -669,9 +656,6 @@ export const exportTableToPDF = async (headers: string[][], body: (string | numb
   await saveFile(pdfBlob, `${fileName}.pdf`);
 };
 
-export const normalizeString = (str: string) => 
-  str.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
 export const readExcel = (file: File): Promise<any[]> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -690,19 +674,4 @@ export const readExcel = (file: File): Promise<any[]> => {
     reader.onerror = (err) => reject(err);
     reader.readAsArrayBuffer(file);
   });
-};
-
-export const calculateMonthlyDepreciation = (asset: FixedAsset): number => {
-  return (asset.originalAmount * asset.fiscalRate) / 12;
-};
-
-export const calculateFiscalDeduction = (
-  asset: FixedAsset,
-  inpcUltimoMesMitadPeriodo: number,
-  inpcMesAdquisicion: number
-): number => {
-  const factorActualizacion = inpcUltimoMesMitadPeriodo / inpcMesAdquisicion;
-  // Art. 31 LISR: el factor de actualización fiscal se trunca (no se redondea) a 4 decimales.
-  const factorTruncado = Math.trunc(factorActualizacion * 10000) / 10000;
-  return (asset.originalAmount * asset.fiscalRate) * factorTruncado;
 };

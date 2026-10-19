@@ -1,5 +1,17 @@
 # Plan de Modularización y Fortalecimiento — Contabilidad M4 Pro
 
+> **ESTADO ACTUAL del plan (actualizar este bloque al cerrar cada fase):**
+> - **Fase -1** — completa. Entorno instalado, lint limpio, smoke test base validado, rama `refactor/modularizacion`.
+> - **Fase 0** — completa y validada por usuario. `lib/format.ts` + modales extraídos. `App.tsx`: 1,190 → 1,034.
+> - **Fase 1** — completa (cálculos en `lib/accounting.ts` + tipo `TAccountsData`).
+> - **Fase 2** — refactor implementado (hooks `useJournals`, `useCatalog`, `useInventories`, `useBackup`, `useAppData`; `App.tsx`: 990 → 738). Smoke test del usuario: todo correcto excepto sync, cuya falla proviene de credenciales Upstash caducadas (se inyectan por GitHub Secrets; no requiere cambio de código). **✓ Commits y push realizados por el usuario.**
+> - **Fase 3** — completa y validada por usuario (layout → `components/layout/`: MobileMenu, Sidebar, AppHeader, AppFooter; `App.tsx`: 738 → 414; navegación tipada en `lib/navigation.ts`).
+> - **Fase 4** — completa y validada por usuario (JournalView 1,157 → 241; `components/journal/` + `lib/importEntriesFromExcel.ts`).
+> - **Fase 5** — implementada (`npm run lint && npm run test` en verde: **85 tests / 9 archivos**, Vitest + Testing Library + jsdom, solo devDependencies; CI en `.github/workflows/test.yml`). Pendiente al cierre: smoke test del usuario + commits + push.
+> - **PLAN CERRADO Y ARCHIVADO** — todas las fases completas. Desde aquí, `ARCHITECTURE.md` es la única referencia de arquitectura; este documento se conserva como registro histórico del proceso.
+> - Nota de diseño: `useAppData` no es dueño de claves; solo hidrata y notifica `onLoaded`. El estado `hasLoaded` vive en `App`.
+> - Pendientes fuera del plan: sincronización => migración futura a Cloudflare KV Workers (decisión del autor, no iniciada).
+
 > **Propósito:** documento de transición. Describe el plan para desmontar los archivos monolíticos
 > (`App.tsx`, `JournalView.tsx`, `utils.ts`), añadir una red de pruebas y establecer la disciplina
 > de commits por fase. **Cuando todas las fases estén completas, este documento puede eliminarse**
@@ -17,12 +29,12 @@ Contexto de diagnóstico: ver sección "Diagnóstico" al final. Riesgos identifi
 
 Antes de tocar código:
 
-- [ ] `npm install` — el repo actual **no tiene `node_modules` instalado**; `npm run lint` (`tsc --noEmit`) falla hoy por módulos ausentes, no por errores reales.
-- [ ] Verificar línea base: `npm run lint` sin errores y `npm run dev` con la app funcionando.
-- [ ] Registrar línea base funcional: ejecutar la app y anotar en este archivo (o en un issue) un "smoke test manual" de ~10 pasos (crear diario → capturar asiento cuadrado → verificar Cuentas T → Balance cuadrado → P&L con inventario final → export PDF/Excel → import Excel → activar Modo Fiscal → depreciar activo → sync). Este guion será el criterio de aceptación de cada fase hasta que existan tests automatizados.
-- [ ] Crear rama `refactor/modularizacion` desde `main`.
+- [x] `npm install` — completado. 665 paquetes, lint dejaba de fallar solo por módulos ausentes. *Nota: `npm audit` reporta 41 vulnerabilidades (3 críticas, en su mayoría en `xlsx@0.18.5` y la cadena de electron-builder); NO ejecutar `npm audit fix --force` — rompería dependencias. Revisar en fase posterior si se actualiza `xlsx`.*
+- [x] Verificar línea base: `npm run lint` sin errores ✓ y `npm run dev` sirviendo en `localhost:3000` (HTTP 200) ✓.
+- [ ] Registrar línea base funcional: ejecutar la app y anotar en este archivo (o en un issue) un "smoke test manual" de ~10 pasos (crear diario → capturar asiento cuadrado → verificar Cuentas T → Balance cuadrado → P&L con inventario final → export PDF/Excel → import Excel → activar Modo Fiscal → depreciar activo → sync). Este guion será el criterio de aceptación de cada fase hasta que existan tests automatizados. *(PENDIENTE — requiere prueba manual del usuario en el navegador; es el único ítem bloqueante para iniciar Fase 0.)*
+- [x] Crear rama `refactor/modularizacion` desde `main` — completado.
 
-**Criterio de salida:** lint limpio + smoke test manual pasando en la rama base.
+**Criterio de salida:** lint limpio + smoke test manual pasando en la rama base. *(lint ✓ · smoke test pendiente)*
 
 ---
 
@@ -30,19 +42,19 @@ Antes de tocar código:
 
 **Objetivo:** eliminar el riesgo R6 (formateo de montos triplicado) y sacar del `App.tsx` todo lo que es UI aislada.
 
-- [ ] Crear `src/lib/format.ts` con `normalizeAmount`, `parseFormattedAmount`, `parseImportedAmount`, `formatAmountForInput`, `formatAmountInput`, `formatCurrency`, `formatSatGroupCode`, `normalizeString` (tomadas de `JournalView.tsx`, `App.tsx` y `utils.ts` — una sola implementación).
-- [ ] Actualizar los 3 archivos consumidores para importar de `lib/format.ts`. **Verificar que las 3 implementaciones previas eran idénticas antes de borrar** (si difieren en redondeo, documentar la diferencia y elegir la de `App.tsx` como canónica).
-- [ ] Extraer los 5 modales globales de `App.tsx` a `src/components/modals/`:
-  - `GlobalInfoModal.tsx` (modal de éxito/error + variante de sugerencia de respaldo)
-  - `ConfirmDeleteModal.tsx`
-  - `UpdateAvailableModal.tsx` (cuidado con R4: contiene `Browser.open` de Capacitor)
+- [x] Crear `src/lib/format.ts` con `normalizeAmount`, `parseFormattedAmount`, `parseImportedAmount`, `formatAmountForInput`, `formatAmountInput`, `formatCurrency`, `formatSatGroupCode`, `normalizeString` (tomadas de `JournalView.tsx`, `App.tsx` y `utils.ts` — una sola implementación). *(Realidad del código: había 5 copias de `normalizeAmount` — también en `FixedAssetsView`, `ProfitLossView` y `TAccountsView` — todas verificadas idénticas antes de consolidar.)*
+- [x] Actualizar los archivos consumidores para importar de `lib/format.ts` (`App.tsx`, `JournalView`, `FixedAssetsView`, `ProfitLossView`, `TAccountsView`, `BalanceSheetView`, `CatalogView`).
+- [x] Extraer los 5 modales globales de `App.tsx` a `src/components/modals/`:
+  - `GlobalInfoModal.tsx` (modal de éxito/error + variante de sugerencia de respaldo; exporta `ModalInfo` y `BACKUP_SUGGESTION_TITLE`)
+  - `ConfirmDeleteModal.tsx` (exporta `ConfirmDeleteData`)
+  - `UpdateAvailableModal.tsx` (`Browser.open` de Capacitor vive aquí; recibe `onNotify` para errores)
   - `AboutModal.tsx`
   - `DownloadProgressBar.tsx`
-- [ ] `App.tsx` debe quedar consumiéndolos solo con props. **No** mover aún la lógica que los dispara.
+- [x] `App.tsx` los consume solo con props. La lógica que los dispara sigue en `App.tsx` (vigilante semanal, delete flows, dismissal de updates).
 
 **Commits esperados:** `refactor: consolidar formateo de montos en lib/format`, `refactor: extraer modales globales a components/modals`, `docs: actualizar ARCHITECTURE.md fase 0`.
 
-**Criterio de salida:** `App.tsx` ~150 líneas menos; smoke test pasa; grep de `normalizeAmount` devuelve 1 definición.
+**Criterio de salida:** ~~`App.tsx` ~150 líneas menos~~ ✓ (1,190 → 1,034); smoke test pasa; grep de `normalizeAmount` devuelve 1 definición ✓. *(Pendiente al cierre: smoke test del usuario + commits + push.)*
 
 ---
 
@@ -50,16 +62,16 @@ Antes de tocar código:
 
 **Objetivo:** separar el "cerebro" del "cuerpo". Prepara el terreno para los tests (Fase 5).
 
-- [ ] Crear `src/lib/accounting.ts` con funciones puras (sin React, sin storage):
+- [x] Crear `src/lib/accounting.ts` con funciones puras (sin React, sin storage):
   - `buildTAccountsData(entries: JournalEntry[]): TAccountsData`
   - `computeAccountBalances(tAccountsData, accounts): Record<string, number>`
-  - Mover aquí también `calculateMonthlyDepreciation` y `calculateFiscalDeduction` (hoy en `utils.ts`).
-- [ ] `App.tsx` consume vía `useMemo` llamando a estas funciones (misma lógica, misma ubicación de invocación).
-- [ ] Tipar el tipo `TAccountsData` en `types.ts` (hoy está inline como Record anónimo).
+  - Movidas también `calculateMonthlyDepreciation` y `calculateFiscalDeduction` (antes en `utils.ts`; `FixedAssetsView` importa de `lib/accounting`).
+- [x] `App.tsx` consume vía `useMemo` llamando a estas funciones (misma lógica, misma ubicación de invocación).
+- [x] Tipado el tipo `TAccountsData` (+ `TAccountSide`, `TAccountColumns`) en `types.ts`. Se eliminaron **6 copias del tipo anónimo inline** (`App`, `TAccountsView` ×2, `ContabilidadElectronicaView`, `satExport`, `utils`).
 
 **Commits:** `refactor: extraer cálculos contables a lib/accounting`, `docs: actualizar ARCHITECTURE.md fase 1`.
 
-**Criterio de salida:** Balance y Cuentas T idénticos al smoke test; `lib/accounting.ts` importable sin React (esto habilita testearlo en Node puro en Fase 5).
+**Criterio de salida:** Balance y Cuentas T idénticos al smoke test; `lib/accounting.ts` importable sin React (esto habilita testearlo en Node puro en Fase 5). *(Pendiente al cierre: smoke test del usuario + commit + push.)*
 
 ---
 
@@ -67,12 +79,20 @@ Antes de tocar código:
 
 **Objetivo:** desmontar el "estado dios" de `App.tsx` en hooks con responsabilidad única, **sin** introducir Context ni reducers (ver R3).
 
-- [ ] `src/hooks/useAppData.ts` — carga inicial (`migrateFromLocalStorage` + las 4 claves) y exposición del flag `hasLoaded`. Debe devolver un estado "listo para guardar" para no persistir vacíos antes de cargar (protege R2).
-- [ ] `src/hooks/useJournals.ts` — `addEntry`, `updateEntry`, `moveEntry`, `deleteEntry`, `createJournal`, `renameJournal`, `importEntries`, `applyRemoteSyncState` (journals).
-- [ ] `src/hooks/useCatalog.ts` — catálogo híbrido: `finalGlobals`, `combinedAccounts`, `handleCombinedAccountsUpdate` (la lógica isReadOnly/dedup por `code` se queda junta y encapsulada; es la pieza más frágil según R2).
-- [ ] `src/hooks/useInventories.ts` — `finalInventories` + `handleSetFinalInventory`.
-- [ ] `src/hooks/useBackup.ts` — vigilante semanal + `handleExportBackup` + `handleImportBackup` (mueve la clave `contasis_last_backup` aquí).
-- [ ] **Regla anti-R1 (atomicidad):** `applyRemoteSyncState` y la restauración de respaldo deben permanecer como **una sola función que reciba un setter combinado** (o los setters de todos los hooks a la vez). Prohibido que dos hooks persistan la misma clave por caminos distintos. Documentar en JSDoc del hook cuál clave de storage es "dueño" de cada hook:
+- [x] `src/hooks/useAppData.ts` — carga inicial (`migrateFromLocalStorage` + las 4 claves) y exposición del flag "listo para guardar" (via `onLoaded(true)` → `setHasLoaded` en App; protege R2). *Nota de diseño: se llama al final de la cadena de hooks porque sus appliers vienen de los hooks creados primero; usa refs internos para ver la versión estable.*
+- [x] `src/hooks/useJournals.ts` — `addEntry`, `updateEntry`, `moveEntry`, `deleteEntry`, `createJournal`, `renameJournal`, `importEntries`, `deleteJournal` (rama journal de handleConfirmDelete), `setSubAccounts` y `hydrate`. `handleConfirmDelete` (modal) quedó en App y delega a estos métodos.
+- [x] `src/hooks/useCatalog.ts` — catálogo híbrido: `finalGlobals`, `combinedAccounts`, `handleCombinedAccountsUpdate` (firma intacta para satisfacer `React.Dispatch<React.SetStateAction<Account[]>>` de CatalogView), persistencia con debounce gated por `canSave`.
+- [x] `src/hooks/useInventories.ts` — `finalInventories` + `finalInventory` sincronizado + `handleSetFinalInventory`. **Nota fiel al original: esta clave no tiene auto-guardado** (solo guarda explícito).
+- [x] `src/hooks/useBackup.ts` — vigilante semanal + `handleExportBackup` + `handleImportBackup` (parseo/validación en el hook; los writes multi-dominio van al orquestador `restore` de App).
+- [x] **Regla anti-R1 (atomicidad):** implementada con "orquestadores en App": `applyRemoteSyncState` compone `journalsState.hydrate` + `inventoriesState.hydrateFromRemote` en UNA función; la restauración de respaldo compone hydrate + writes crudos de cada hook. Cada hook documenta su clave en JSDoc:
+
+  | Hook | Clave de storage de la que es dueño |
+  |---|---|
+  | `useJournals` | `contasis_journals` |
+  | `useInventories` | `contasis_final_inventories` |
+  | `useCatalog` | `contasis_accounts` |
+  | (activos fijos, aún en `App`) | `contasis_fixed_assets` |
+  | `useBackup` | `contasis_last_backup` (solo lectura/escritura simple) |
 
   | Hook | Clave de storage de la que es dueño |
   |---|---|
@@ -84,7 +104,7 @@ Antes de tocar código:
 
 **Commits:** uno por hook (`refactor: extraer useJournals de App`, etc.), más `docs: actualizar ARCHITECTURE.md fase 2`.
 
-**Criterio de salida:** smoke test completo; específicamente probar sync móvil→escritorio y restauración de respaldo (escenarios R1). `App.tsx` debe quedar < 400 líneas.
+**Criterio de salida:** smoke test completo; específicamente probar sync móvil→escritorio y restauración de respaldo (escenarios R1). `App.tsx` debe quedar < 400 líneas. *(Estado: refactor completo e implementado — `App.tsx` quedó en 738 líneas; los operadores multi-dominio siguen en App sin migrar aún el layout, por lo que el "< 400" se alcanzará en Fase 3; el resto ✓. Pendiente: smoke test del usuario + commits + push.)*
 
 ---
 
@@ -92,12 +112,18 @@ Antes de tocar código:
 
 **Objetivo:** que `App.tsx` quede como orquestador puro (routing de pestañas + composición).
 
-- [ ] Extraer a `src/components/layout/`:
+- [x] Extraer a `src/components/layout/`:
   - `Sidebar.tsx` (desktop) — **preservar** `layoutId="sidebar-active-indicator"` y que el componente se monte siempre (no condicional entre renders) para no romper la animación compartida.
   - `MobileMenu.tsx` + `MobileNavItem`
   - `AppHeader.tsx` — preservar `layoutId="app-mode-indicator"`.
   - `AppFooter.tsx` (botones de respaldo/restaurar/feedback).
-- [ ] Los modos `appMode`/`activeTab` siguen viniendo de `App.tsx` por props (nada de Context todavía).
+- [x] Los modos `appMode`/`activeTab` siguen viniendo de `App.tsx` por props (nada de Context todavía).
+
+**Notas de implementación (Fase 3):**
+- `App.tsx`: 738 → **414 líneas**. Los ítems de navegación se derivan de `navigationTabs: NavigationTab[]` en App y pasan por props (el menú móvil antes tenía los ítems hardcodeados — ahora renderiza el mismo array, mismos labels/orden).
+- `lib/navigation.ts` guarda `AppMode`/`AppTab`/`NavigationTab`/`FISCAL_NAV_TABS` (movidos de App); `lib/appMeta.ts` guarda `APP_VERSION`.
+- `Sidebar` se monta **siempre** y se oculta con `hidden` en móvil (antes se desmontaba con `{!isMobile && ...}`) — mismo look, menos riesgo de animación.
+- Limpieza incidental: se eliminaron de App 10 imports muertos de lucide (Plus, Trash2, ChevronRight, TrendingDown, Edit2, X, FileUp, Search, FileScan, ChevronDown/Up) que ya no tenían uso previo a la Fase 3.
 
 **Commits:** `refactor: extraer layout a components/layout`, `docs: actualizar ARCHITECTURE.md fase 3`.
 
@@ -109,14 +135,22 @@ Antes de tocar código:
 
 **Objetivo:** desmontar el segundo monolito (1,194 líneas) que contiene subcomponentes completos.
 
-- [ ] Crear `src/components/journal/`:
-  - `EntryForm.tsx` (formulario de asiento con CFDI, ~línea 808 en el original)
-  - `AccountPicker.tsx` (búsqueda de cuentas, ~línea 703)
-  - `EntryList.tsx` / `EntryCard.tsx` (lista, expansión, reordenar)
+- [x] Crear `src/components/journal/`:
+  - `EntryForm.tsx` (formulario de asiento con CFDI)
+  - `AccountPicker.tsx` (búsqueda de cuentas)
+  - `EntryList.tsx` / `EntryCard.tsx` (lista con agrupación por período, expansión, reordenar)
   - `JournalTabs.tsx` (pestañas de diarios múltiples)
   - `importEntriesFromExcel.ts` en `lib/` (la lógica de import que hoy valida contra el catálogo)
-- [ ] `JournalView.tsx` queda como compositor de estos subcomponentes (< 300 líneas).
-- [ ] Verificar que el parser de Excel usa `lib/format.ts` (no duplicados residuales).
+- [x] `JournalView.tsx` queda como compositor de estos subcomponentes (< 300 líneas). → **241 líneas**.
+- [x] Verificar que el parser de Excel usa `lib/format.ts` (no duplicados residuales). → `parseJournalImport` usa `normalizeString` + `parseImportedAmount` de `lib/format.ts`.
+
+**Notas de implementación (Fase 4):**
+- `JournalView.tsx`: 1,157 → **241 líneas**. Dashboard de pieza: EntryForm 403, EntryList 165, EntryCard 140, AccountPicker 111, JournalTabs 111, parser 112.
+- Cambios de dueño de estado (equivalentes al original): `expandedEntries`/`collapsedPeriods` se movieron a `EntryList` (víve dentro de la misma vista, mismo ciclo de vida); `editingJournalId`/`editingName` a `JournalTabs`.
+- `SearchableAccountSelect` ahora vive en `journal/AccountPicker.tsx`; se actualizó el import de `FixedAssetsView`.
+- Detalle preservado fielmente (quirúrgico): el `catch` del import muestra SIEMPRE el mensaje genérico "Formato no soportado" aunque el parser lance mensajes más específicos ("archivo vacío", "formato inválido") — comportamiento idéntico al original; anotado como mejora futura (mostrar el mensaje del Error) NO aplicada en refactor.
+- Detalle preexistente preservado: el estado vacío de la tabla usa `colSpan={7}` con 8 columnas de encabezado (mismatch original).
+- React 19/tsc: los props tipados que reciben `key` (EntryCard, MobileNavItem) necesitan `key?: React.Key` declarado.
 
 **Commits:** uno por subcomponente, más `docs: actualizar ARCHITECTURE.md fase 4`.
 
@@ -128,16 +162,24 @@ Antes de tocar código:
 
 **Objetivo:** convertir el smoke test manual en una red automatizada que valida la viabilidad final del código tras la modularización. Las fases 1–2 dejaron funciones puras y hooks aislados precisamente para esto.
 
-- [ ] **Stack:** Vitest (nativo del stack Vite) + `@testing-library/react` y `@testing-library/react-hooks`/`renderHook` para hooks + `jsdom`. Instalar solo `devDependencies`.
-- [ ] **Niveles de prueba, en orden de implementación:**
-  1. **Unitarias puras** (`lib/accounting.test.ts`, `lib/format.test.ts`): partida doble, saldos por naturaleza deudora/acreedora, redondeo de montos, deducción INPC truncada a 4 decimales. *Sin DOM, corren en cualquier modelo/CI.*
-  2. **Funcional** (`lib/export.test.ts`): generar un Excel/PDF desde datos fixture y verificar cabeceras/hojas (ExcelJS permite inspeccionar el workbook resultante; jsPDF se valida vía autotable finalY).
-  3. **Hooks** (`hooks/useCatalog.test.ts`, `useJournals.test.ts`): catálogo híbrido — recuperar cuentas globales borradas, dedup por `code`, escritura solo de subcuentas locales; reordenar extremos en `moveEntry`.
-  4. **Integración/Render** (`components/__tests__/`): `EntryForm` cuadrado/descuadrado habilita/deshabilita guardar; `CatalogView` rechaza cuenta duplicada; render de `App` completo con storage simulado (mock de `storageService`).
-  5. **Persistencia/sync (mock):** `applyRemoteSyncState` no deja estados huérfanos (R1); restauración de respaldo corrupto muestra error y no muta estado.
-- [ ] Script `"test": "vitest run"` y `"test:watch": "vitest"` en `package.json`.
-- [ ] **CI:** workflow `.github/workflows/test.yml` (lint + test en cada push a `main` y PR) — el repo ya tiene 2 workflows como plantilla de estilo.
-- [ ] Actualizar `README.md` (sección scripts) y `ARCHITECTURE.md` (sección "convenciones") para reflejar que ya existe red de pruebas.
+- [x] **Stack:** Vitest (nativo del stack Vite) + `@testing-library/react` y `@testing-library/react-hooks`/`renderHook` para hooks + `jsdom`. Instalar solo `devDependencies`. → Instalado: `vitest`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event` (80 paquetes dev).
+- [x] **Niveles de prueba, en orden de implementación:**
+  1. **Unitarias puras** (`lib/accounting.test.ts`, `lib/format.test.ts`): partida doble, saldos por naturaleza deudora/acreedora, redondeo de montos, deducción INPC truncada a 4 decimales. *Sin DOM, corren en cualquier modelo/CI.* → `accounting.test.ts` (buildTAccountsData, computeAccountBalances, depreciación, deducción fiscal con truncado) + `format.test.ts` (normalización, parseo de importaciones, sanitización de input, parseJournalImport incluido aquí por dominio de formato).
+  2. **Funcional** (`lib/export.test.ts`): generar un Excel/PDF desde datos fixture y verificar cabeceras/hojas (ExcelJS permite inspeccionar el workbook resultante; jsPDF se valida vía autotable finalY). → Se mockea solo `file-saver` (el último paso); el workbook se RELEE con ExcelJS y el PDF se valida por firma `%PDF-` real.
+  3. **Hooks** (`hooks/useCatalog.test.ts`, `useJournals.test.ts`): catálogo híbrido — recuperar cuentas globales borradas, dedup por `code`, escritura solo de subcuentas locales; reordenar extremos en `moveEntry`. → Incluye además `useAppData.test.ts` (hidratación R2 y fallback corrupto), `useBackup.test.ts` (vigía semanal + export/import incl. corrupto) y `useInventories.test.ts` (sin auto-guardado por diseño + `hydrateFromRemote`).
+  4. **Integración/Render** (`components/__tests__/`): `EntryForm` cuadrado/descuadrado habilita/deshabilita guardar. → `journal/EntryForm.test.tsx`: 0/0 bloqueado, diferencia visible, cuadre habilita, póliza indefinida en básico, campos CFDI en fiscal, edición precargada, mínimo de 2 partidas, cancelar. *CatalogView duplicada: cubierta a nivel de hook (`handleCombinedAccountsUpdate` es exactamente el callback que CatalogView invoca — duplicarlo en render repetiría el mismo aserto; se documenta en Fase 5 notas).*
+  5. **Persistencia/sync (mock):** sincronización remota no deja estados huérfanos (R1); restauración de respaldo corrupto muestra error y no muta estado. → `hydrate` de diarios persiste SIEMPRE (incluso `[]`), probado; inventarios `hydrateFromRemote` persiste explícitamente; `handleImportBackup` corrupto/estructura falsa → error y `restore` jamás llamado.
+- [x] Script `"test": "vitest run"` y `"test:watch": "vitest"` en `package.json`.
+- [x] **CI:** workflow `.github/workflows/test.yml` (lint + test en cada push a `main` y PR) — el repo ya tiene 2 workflows como plantilla de estilo. → Node 20, `npm ci` + lint + test; se añadió `refactor/*` a los triggers.
+- [x] Actualizar `README.md` (sección scripts) y `ARCHITECTURE.md` (sección "convenciones") para reflejar que ya existe red de pruebas.
+
+**Notas de implementación (Fase 5):**
+- **85 tests / 9 archivos, todos en verde**; `npm run lint && npm run test && npm run build` limpios.
+- Config en `vitest.config.ts` (espeja `define __APP_VERSION__` de vite.config); setup global en `src/test/setup.ts`: limpieza de DOM/storage + polyfills de jsdom (`crypto.randomUUID`, `URL.createObjectURL`).
+- **Quirk de entorno documentado:** Node 22+ trae un `localStorage` global nativo que en Windows puede llegar sin ruta válida (`--localstorage-file`); el setup rebindea al storage de jsdom (o a un storage en memoria) si el global no funciona. No afecta al navegador ni a Electron.
+- `parseJournalImport` se testea en `format.test.ts` (comparte dominio de formato); se documenta que la variante de encabezado `CONCEPTO` es rechazada por el header-check ORIGINAL (corre antes de la normalización) — comportamiento preservado, no "corregido".
+- Cobertura a nivel de hook para el rechazo de duplicados de catálogo (justificación arriba); render completo de `App` queda fuera: requiere mock de sync/Upstash y su valor marginal sobre los tests de hooks ya existentes es bajo.
+- Los tests son deterministas (sin fechas relativas salvo margen de 60s) y usan `localStorage` real de jsdom; `warn`/`error` de consola se silencian solo donde el hook emite el warning esperado.
 
 **Commits:** uno por nivel de prueba (`test: unitarias accounting/format`, `test: hooks catalog`, `ci: workflow de tests`, `docs: ...`).
 

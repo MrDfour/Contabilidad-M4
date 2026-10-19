@@ -1,7 +1,8 @@
 import React from 'react';
 import { FileText, Download } from 'lucide-react';
 import type { Account } from '../types';
-import { cn, formatCurrency, exportToExcel, exportToPDF, formatSatGroupCode } from '../lib/utils';
+import { cn, exportToExcel, exportToPDF } from '../lib/utils';
+import { formatCurrency, formatSatGroupCode } from '../lib/format';
 
 type AppMode = 'basic' | 'fiscal';
 type FiscalAccount = Account & { satGroupCode?: string };
