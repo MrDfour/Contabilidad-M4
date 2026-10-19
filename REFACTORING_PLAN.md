@@ -17,12 +17,12 @@ Contexto de diagnóstico: ver sección "Diagnóstico" al final. Riesgos identifi
 
 Antes de tocar código:
 
-- [ ] `npm install` — el repo actual **no tiene `node_modules` instalado**; `npm run lint` (`tsc --noEmit`) falla hoy por módulos ausentes, no por errores reales.
-- [ ] Verificar línea base: `npm run lint` sin errores y `npm run dev` con la app funcionando.
-- [ ] Registrar línea base funcional: ejecutar la app y anotar en este archivo (o en un issue) un "smoke test manual" de ~10 pasos (crear diario → capturar asiento cuadrado → verificar Cuentas T → Balance cuadrado → P&L con inventario final → export PDF/Excel → import Excel → activar Modo Fiscal → depreciar activo → sync). Este guion será el criterio de aceptación de cada fase hasta que existan tests automatizados.
-- [ ] Crear rama `refactor/modularizacion` desde `main`.
+- [x] `npm install` — completado. 665 paquetes, lint dejaba de fallar solo por módulos ausentes. *Nota: `npm audit` reporta 41 vulnerabilidades (3 críticas, en su mayoría en `xlsx@0.18.5` y la cadena de electron-builder); NO ejecutar `npm audit fix --force` — rompería dependencias. Revisar en fase posterior si se actualiza `xlsx`.*
+- [x] Verificar línea base: `npm run lint` sin errores ✓ y `npm run dev` sirviendo en `localhost:3000` (HTTP 200) ✓.
+- [ ] Registrar línea base funcional: ejecutar la app y anotar en este archivo (o en un issue) un "smoke test manual" de ~10 pasos (crear diario → capturar asiento cuadrado → verificar Cuentas T → Balance cuadrado → P&L con inventario final → export PDF/Excel → import Excel → activar Modo Fiscal → depreciar activo → sync). Este guion será el criterio de aceptación de cada fase hasta que existan tests automatizados. *(PENDIENTE — requiere prueba manual del usuario en el navegador; es el único ítem bloqueante para iniciar Fase 0.)*
+- [x] Crear rama `refactor/modularizacion` desde `main` — completado.
 
-**Criterio de salida:** lint limpio + smoke test manual pasando en la rama base.
+**Criterio de salida:** lint limpio + smoke test manual pasando en la rama base. *(lint ✓ · smoke test pendiente)*
 
 ---
 
