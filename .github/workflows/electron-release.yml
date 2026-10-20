@@ -43,8 +43,7 @@ jobs:
       - name: Build Vite + Electron
         run: npx vite build && npx electron-builder --${{ matrix.eb_flag }} --publish never
         env:
-          VITE_UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_URL }}
-          VITE_UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
+          VITE_RELAY_URL: ${{ secrets.VITE_RELAY_URL }}
 
       - name: Generate latest.yml for Windows updater
         if: matrix.platform == 'windows'
@@ -104,6 +103,11 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # El default del action pide el paquete "tools", que YA NO EXISTE en
+          # el repositorio del SDK (se partió en cmdline-tools/platform-tools):
+          # pedirlo falla con "Failed to find package 'tools'". Solo lo vigente.
+          packages: 'platform-tools'
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -117,8 +121,7 @@ jobs:
       - name: Build Vite
         run: npx vite build
         env:
-          VITE_UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_URL }}
-          VITE_UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_TOKEN }}
+          VITE_RELAY_URL: ${{ secrets.VITE_RELAY_URL }}
 
       - name: Add Android platform
         run: npx cap add android
