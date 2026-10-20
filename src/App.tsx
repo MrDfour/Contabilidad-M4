@@ -613,6 +613,9 @@ export default function App() {
         isDesktop={isDesktopRuntime}
         onNotify={(type, title, message) => setModalInfo({ type, title, message })}
         onPublicar={async () => (motorRef.current ? motorRef.current.publicarAhora() : false)}
+        onRestaurarHistorial={async (entrada) =>
+          motorRef.current ? motorRef.current.restaurarVersionHistorica(entrada) : false
+        }
         detalleFallo={falloBoveda}
       />
 

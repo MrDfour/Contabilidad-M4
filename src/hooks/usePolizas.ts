@@ -53,6 +53,9 @@ export function usePolizas({ canSave, empresaId }: { canSave: boolean; empresaId
     return balance;
   };
 
+  /** Fecha ISO con hora (estampados silenciosos del merge futuro); fallback: ahora. */
+  const ahoraIso = () => new Date().toISOString();
+
   const createPoliza = (data: PolizaInput): Poliza => {
     const balance = validarGuardar(data.partidas);
     const nueva: Poliza = {
@@ -60,7 +63,9 @@ export function usePolizas({ canSave, empresaId }: { canSave: boolean; empresaId
       id: crypto.randomUUID(),
       folio: nextPolizaFolio(polizas, data.tipo),
       totalDebe: balance.totalDebe,
-      totalHaber: balance.totalHaber
+      totalHaber: balance.totalHaber,
+      capturadoEn: ahoraIso(),
+      editadoEn: ahoraIso()
     };
     setPolizas(prev => [...prev, nueva]);
     return nueva;
@@ -69,7 +74,8 @@ export function usePolizas({ canSave, empresaId }: { canSave: boolean; empresaId
   /** D-10: alta programática sin UI (cierre de resultados, depreciación de activos). */
   const createProgrammaticPoliza = (data: PolizaInput): Poliza => createPoliza(data);
 
-  /** D-8: tipo y folio congelados en edición; los totales SIEMPRE se recalculan. */
+  /** D-8: tipo y folio congelados en edición; los totales SIEMPRE se recalculan.
+   *  El estampado editadoEn es silencioso: solo sirve al futuro merge (gana la última). */
   const updatePoliza = (id: string, data: PolizaInput): void => {
     const balance = validarGuardar(data.partidas);
     setPolizas(prev => prev.map(p =>
@@ -80,7 +86,8 @@ export function usePolizas({ canSave, empresaId }: { canSave: boolean; empresaId
             tipo: p.tipo,
             folio: p.folio,
             totalDebe: balance.totalDebe,
-            totalHaber: balance.totalHaber
+            totalHaber: balance.totalHaber,
+            editadoEn: ahoraIso()
           }
         : p
     ));
@@ -90,7 +97,9 @@ export function usePolizas({ canSave, empresaId }: { canSave: boolean; empresaId
     setPolizas(prev => prev.filter(p => p.id !== id));
   };
 
-  /** Importación masiva (Excel / respaldos): folio ausente o colisionante → se reasigna por tipo. */
+  /** Importación masiva (Excel / respaldos): folio ausente o colisionante → se reasigna por tipo.
+   *  Si la póliza no trae capturadoEn se ESTIMA con su fecha contable (respaldos viejos importan
+   *  de golpe; estamparlos todos "ahora" guardaría un orden falso — la fecha fiscal la conserva). */
   const importPolizas = (nuevas: Poliza[]): void => {
     setPolizas(prev => {
       const working = [...prev];
@@ -99,7 +108,9 @@ export function usePolizas({ canSave, empresaId }: { canSave: boolean; empresaId
         if (!folio || working.some(w => w.tipo === nueva.tipo && w.folio === folio)) {
           folio = nextPolizaFolio(working, nueva.tipo);
         }
-        const polizaFinal: Poliza = { ...nueva, folio };
+        const captura = nueva.capturadoEn
+          ?? (Number.isNaN(Date.parse(nueva.fecha)) ? ahoraIso() : new Date(nueva.fecha).toISOString());
+        const polizaFinal: Poliza = { ...nueva, folio, capturadoEn: captura };
         working.push(polizaFinal);
         return polizaFinal;
       });

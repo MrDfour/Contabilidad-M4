@@ -270,6 +270,21 @@ describe('rutas del worker con KV simulado (K-4, K-5, K-8, K-13)', () => {
     expect(cuerpo.entradas[0].blob).toBeUndefined(); // sin blob: solo metadatos
   });
 
+  it('GET history con ?full=1 trae blobs cifrados (restauración de UI); por defecto sigue sin ellos', async () => {
+    await putState(kv, VAULT, docValido(1));
+    await putState(kv, VAULT, docValido(2, 'dos'));
+
+    const respuesta = await worker.fetch(
+      new Request(`https://relay.test/api/vault/${VAULT}/history?full=1`),
+      { CONTABILIDAD_VAULT: kv as unknown as KVNamespace },
+    );
+    const cuerpo = (await respuesta.json()) as { entradas: { version: number; blob?: string }[] };
+
+    expect(cuerpo.entradas).toHaveLength(1);
+    expect(cuerpo.entradas[0].version).toBe(1);
+    expect(cuerpo.entradas[0].blob).toBeTypeOf('string'); // el blob E2EE completo va al cliente
+  });
+
   it('vaultId inválido bloquea state y history (400); método no soportado → 405', async () => {
     const r1 = await getState('corto', kv); // 'corto' (5) pasa la ruta pero falla la forma (mín 6)
     expect(r1.status).toBe(400);

@@ -61,6 +61,8 @@ export interface Poliza {
   uuidSat?: string;
   elaboro?: string;
   autorizo?: string;
+  capturadoEn?: string; // ISO con hora de captura (silencioso; ordena el merge futuro, no toca UI/SAT)
+  editadoEn?: string;   // ISO de la última edición (silencioso; el merge gana por la más reciente)
 }
 
 export interface Journal {

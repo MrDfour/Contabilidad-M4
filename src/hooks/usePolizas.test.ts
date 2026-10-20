@@ -165,6 +165,31 @@ describe('usePolizas (dominio contasis_polizas_e1 — clave por cliente, regla a
     expect(result.current.polizas).toHaveLength(4);
   });
 
+  it('estampados silenciosos: alta/edición llevan hora; el import ESTIMA con la fecha fiscal (merge futuro K-7)', () => {
+    const { result } = renderHook(() => usePolizas({ canSave: true, empresaId: E1 }));
+    let creada!: Poliza;
+    act(() => { creada = result.current.createPoliza(inputCuadrada()); });
+    expect(creada.capturadoEn).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(creada.editadoEn).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    act(() => { result.current.updatePoliza(creada.id, { ...inputCuadrada(), concepto: 'Editada' }); });
+    expect(result.current.polizas[0].concepto).toBe('Editada');
+    expect(result.current.polizas[0].editadoEn).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    // El respaldo/import SIN estampado se estima con su fecha contable (no "ahora",
+    // que guardaría un orden falso); con estampado propio se respeta tal cual.
+    act(() => {
+      result.current.importPolizas([
+        polizaCompleta('n1', 'diario', 9),
+        { ...polizaCompleta('n2', 'diario', 10), capturadoEn: '2019-06-01T10:00:00.000Z' },
+      ]);
+    });
+    const importada1 = result.current.polizas.find(p => p.id === 'n1');
+    const importada2 = result.current.polizas.find(p => p.id === 'n2');
+    expect(importada1?.capturadoEn).toBe(new Date('2024-01-15').toISOString());
+    expect(importada2?.capturadoEn).toBe('2019-06-01T10:00:00.000Z');
+  });
+
   it('createProgrammaticPoliza es la misma lógica de alta validada (D-10)', () => {
     const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
     let creada!: Poliza;

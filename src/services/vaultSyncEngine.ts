@@ -345,7 +345,7 @@ export class VaultSyncEngine {
    * el gap existe para limitar auto-publicaciones en ráfaga, no para censurar
    * la orden explícita del usuario.
    */
-  private async publicar(opciones?: { forzar?: boolean }): Promise<boolean> {
+  private async publicar(opciones?: { forzar?: boolean; saltarChequeoRemoto?: boolean }): Promise<boolean> {
     const credencial = this.credencial;
     if (!credencial || !this.activo) return false;
     if (this.estado === 'aplicando') return false; // conflicto en curso (K-7: decide la UI)
@@ -368,7 +368,7 @@ export class VaultSyncEngine {
       }
     }
 
-    const vuelo = this.publicacionReal();
+    const vuelo = this.publicacionReal({ saltarChequeoRemoto: opciones?.saltarChequeoRemoto });
     this.promesaEnVuelo = vuelo;
     try {
       return await vuelo;
@@ -378,7 +378,7 @@ export class VaultSyncEngine {
   }
 
   /** Cuerpo efectivo de una publicación (PUT al relay). Llamar vía publicar(). */
-  private async publicacionReal(): Promise<boolean> {
+  private async publicacionReal(opciones?: { saltarChequeoRemoto?: boolean }): Promise<boolean> {
     const credencial = this.credencial;
     if (!credencial || !this.activo) return false;
 
@@ -386,6 +386,61 @@ export class VaultSyncEngine {
     if (!relayUrl) {
       this.notificar({ tipo: 'error', detalle: 'URL del relay no configurada.' });
       return false;
+    }
+
+    // CHEQUEO PRE-PUBLICACIÓN (protección anti-colisión de versiones): antes de
+    // creer que la versión siguiente de aquí es “máx+1”, se lee el documento
+    // vigente del relay con 1 GET barato. Tomado del bug observado: dos
+    // dispositivos publicaban el MISMO número (v3 vs v3) sin haberse visto —
+    // el PUT sobrescribía el "actual" con contenido más viejo, la otra pieza
+    // solo quedaba en el historial y por la igualdad de versión cada lado la
+    // ignoraba para siempre (pseudo-bloqueo). Con el chequeo:
+    // - remoto más nuevo + LIMPIO → se ABSORBE el contenido y se publica encima
+    //   (fusión natural, exactamente lo que haría el sondeo).
+    // - remoto más nuevo + SUCIO → conflicto K-7 honesto: decide la UI, NUNCA
+    //   un PUT a tientas.
+    let remotoVigente: DocumentoRemoto | null = null;
+    if (!opciones?.saltarChequeoRemoto) {
+      try {
+        const fetchImpl = this.opciones.fetchImpl ?? fetch;
+        const respuesta = await fetchImpl(`${relayUrl}/api/vault/${credencial.vaultId}/state`);
+        if (respuesta.ok) {
+          const cuerpo = (await respuesta.json()) as CuerpoEstadoRemoto;
+          remotoVigente = cuerpo.payload ? parseDocumentoRemoto(cuerpo.payload) : null;
+        }
+        // GET sin respuesta: se publica como hasta ahora (comportamiento previo).
+      } catch {
+        // Relay inalcanivable: continúa la publicación clásica (fallará si falla red).
+      }
+    }
+    if (remotoVigente && remotoVigente.version > this.versionLocal) {
+      if (this.sucio) {
+        const cambiado = this.conflicto?.version !== remotoVigente.version;
+        this.conflicto = remotoVigente;
+        this.ultimaPublicacion = 0; // abortado sin PUT: no consume gap
+        this.setEstado('conflicto');
+        if (cambiado) {
+          this.notificar({
+            tipo: 'conflicto',
+            version: remotoVigente.version,
+            deviceLabel: remotoVigente.deviceLabel,
+            updatedAt: remotoVigente.updatedAt,
+          });
+        }
+        return false;
+      }
+      // Limpio: absorbe el remoto y publica ENCIMA (v = remota + 1).
+      const aplicado = await this.aplicarContenidoDoc(remotoVigente, {
+        ajustarVersion: true,
+        fijarHuella: true,
+      });
+      if (!aplicado) {
+        // Contenido ilegible (p. ej. blob dañado): falla pública, sin PUT a tientas.
+        this.setEstado('error');
+        this.ultimaPublicacion = 0;
+        return false;
+      }
+      this.setEstado('publicando');
     }
 
     // La marca temporal se anota AL ENTRAR: publicaciones concurrentes ven un
@@ -632,9 +687,11 @@ export class VaultSyncEngine {
     if (mantenerLocal) {
       // Se publica el estado local TOMANDO en cuenta la versión del remoto:
       // quien elige local "gana" y ambos lados terminan con la misma versión nueva.
-      // Forzado como publicarAhora: la resolución es acción explícita del usuario
-      // y no debe morderse el coalescing de 120 s.
-      const ok = await this.publicar({ forzar: true });
+      // Forzado como publicarAhora, y SIN chequeo remoto: este PUT ya es la
+      // resolución explícita "conservo lo local" — el conflicto vigente informa
+      // la versión (definirSiguienteVersion usa max(local, conflicto)+1) y el
+      // chequeo gatillaría de nuevo el conflicto que se acaba de decidir.
+      const ok = await this.publicar({ forzar: true, saltarChequeoRemoto: true });
       if (ok) {
         this.conflicto = null;
         this.setEstado('al dia');
@@ -665,15 +722,31 @@ export class VaultSyncEngine {
       return;
     }
 
+    await this.aplicarContenidoDoc(doc, { ajustarVersion: true, fijarHuella: true });
+  }
+
+  /**
+   * Descifra y restaura el CONTENIDO de un documento. Los efectos laterales
+   * (huella anti-eco, puntero de versión) son configurables porque la
+   * restauración de historial NO debe retroceder el puntero (el sondeo con
+   * `?version=` re-aplicaría el "actual" y desharía la restauración) ni fijar
+   * la huella (así el auto-publica próximo sube el estado restaurado como
+   * versión nueva hacia TODA la bóveda en vez de callarse por anti-eco).
+   */
+  private async aplicarContenidoDoc(
+    doc: DocumentoRemoto,
+    opciones?: { ajustarVersion?: boolean; fijarHuella?: boolean },
+  ): Promise<boolean> {
     const credencial = this.credencial;
-    if (!credencial) return;
+    if (!credencial) return false;
 
     this.setEstado('aplicando');
     this.aplicandoRemoto = true;
     try {
       const sobre = JSON.parse(doc.blob) as unknown;
       const texto = await decryptPayload(sobre, credencial.secretKey);
-      this.huellaUltimoRemoto = await huellaSnapshot(texto);
+      const huella = await huellaSnapshot(texto);
+      if (opciones?.fijarHuella ?? true) this.huellaUltimoRemoto = huella;
       const snapshotV3 = JSON.parse(texto) as unknown;
       if (!esBackupV3(snapshotV3 as RestorableBackup)) {
         throw new Error('El documento remoto no contiene un snapshot v3 válido.');
@@ -682,19 +755,43 @@ export class VaultSyncEngine {
       if (!aplicado) {
         throw new Error('El orquestador no aplicó la restauración remota.');
       }
-      await this.persistirVersion(doc.version);
+      if (opciones?.ajustarVersion ?? true) {
+        await this.persistirVersion(doc.version);
+        this.versionLocal = doc.version;
+      }
       const guardarHuella = this.opciones.guardar ?? saveToStorage;
       await guardarHuella(CLAVE_HUELLA_REMOTA, this.huellaUltimoRemoto);
-      this.versionLocal = doc.version;
       this.setEstado('al dia');
       this.notificar({ tipo: 'aplicado', version: doc.version });
+      return true;
     } catch (error) {
       this.notificar({
         tipo: 'error',
         detalle: error instanceof Error ? error.message : 'No se pudo aplicar el remoto.',
       });
+      return false;
     } finally {
       this.aplicandoRemoto = false;
     }
+  }
+
+  /**
+   * Restauración explícita de una versión del historial (botón del SyncModal).
+   * Aplica el contenido EN PANTALLA **sin** retroceder `versionLocal` ni fijar
+   * la huella: el próximo auto-publica sube el estado restaurado como versión
+   * nueva de la bóveda completa. Devuelve false si el motor no puede.
+   */
+  async restaurarVersionHistorica(crudo: unknown): Promise<boolean> {
+    const doc = parseDocumentoRemoto(crudo);
+    if (!doc) return false;
+    if (!this.activo || !this.credencial) return false;
+    if (!this.puente.puedeEscribir() || this.estado === 'publicando' || this.aplicandoRemoto) {
+      this.notificar({
+        tipo: 'error',
+        detalle: 'El motor está ocupado o la pantalla bloqueada; reintenta.',
+      });
+      return false;
+    }
+    return this.aplicarContenidoDoc(doc, { ajustarVersion: false, fijarHuella: false });
   }
 }

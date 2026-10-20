@@ -49,6 +49,9 @@ interface SyncModalProps {
   onPublicar?: () => Promise<boolean>;
   /** Último error crudo del motor (evento 'error'): el fallo real, no el genérico. */
   detalleFallo?: string | null;
+  /** Restaura una versión del historial (trae con blob); el motor la aplica en pantalla
+   *  y el auto-publica la sube como versión nueva para toda la bóveda. Opcional. */
+  onRestaurarHistorial?: (entrada: EntradaHistorialVista & { blob: string }) => Promise<boolean>;
   onNotify: (type: 'success' | 'error', title: string, message: string) => void;
 }
 
@@ -56,13 +59,18 @@ interface EntradaHistorialVista {
   version: number;
   updatedAt: string;
   deviceLabel: string;
+  blob?: string; // presente solo al pedir el historial con `?full=1` (restauración)
 }
 
-/** Lee la lista de versiones del relay (solo metadatos, K-8; nunca lanza). */
-async function leerHistorial(credenciales: CredencialesBoveda, relayUrl: string) {
+/** Lee la lista de versiones del relay. Por defecto SOLO metadatos (listado
+ *  barato, K-8); con `conBlobs` (restauración) pide `?full=1` al worker y trae
+ *  también los snapshots cifrados. Nunca lanza. */
+async function leerHistorial(credenciales: CredencialesBoveda, relayUrl: string, conBlobs = false) {
   if (!esUrlRelayValida(relayUrl)) return [];
   try {
-    const respuesta = await fetch(`${relayUrl}/api/vault/${credenciales.vaultId}/history`);
+    const respuesta = await fetch(
+      `${relayUrl}/api/vault/${credenciales.vaultId}/history${conBlobs ? '?full=1' : ''}`,
+    );
     if (!respuesta.ok) return [];
     const cuerpo = (await respuesta.json()) as { entradas?: EntradaHistorialVista[] };
     return Array.isArray(cuerpo.entradas) ? cuerpo.entradas : [];
@@ -77,6 +85,7 @@ export default function SyncModal({
   isDesktop,
   onPublicar,
   detalleFallo,
+  onRestaurarHistorial,
   onNotify,
 }: SyncModalProps) {
   const [credenciales, setCredenciales] = useState<CredencialesBoveda | null>(null);
@@ -89,6 +98,8 @@ export default function SyncModal({
   const [fraseEscrita, setFraseEscrita] = useState('');
   const [crearConfirmado, setCrearConfirmado] = useState(false);
   const [desalistarConfirmado, setDesalistarConfirmado] = useState(false);
+  /** Versión cuya restauración está esperando el segundo clic (estilo desalistar). */
+  const [restaurarPendiente, setRestaurarPendiente] = useState<number | null>(null);
 
   const etiqueta = isDesktop ? ETIQUETA_DESKTOP : ETIQUETA_MOVIL;
   const relayUrl = obtenerRelayUrl();
@@ -117,6 +128,7 @@ export default function SyncModal({
       setFraseEscrita('');
       setCrearConfirmado(false);
       setDesalistarConfirmado(false);
+      setRestaurarPendiente(null);
       return;
     }
     refrescar();
@@ -210,8 +222,46 @@ export default function SyncModal({
     try {
       const entradas = await leerHistorial(credenciales, relayUrl);
       setHistorial(entradas);
+      setRestaurarPendiente(null);
       if (entradas.length === 0) {
         onNotify('error', 'Sin historial', 'No hay versiones previas accesibles en el relay.');
+      }
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  /** Dos clics: el primero arma la confirmación, el segundo ejecuta. La entrada
+   *  con blob se re-lee del relay fresca (la listada puede estar desactualizada). */
+  const restaurarVersion = async (entrada: EntradaHistorialVista) => {
+    if (!credenciales || !onRestaurarHistorial) return;
+    if (restaurarPendiente !== entrada.version) {
+      setRestaurarPendiente(entrada.version);
+      return;
+    }
+    setOcupado(true);
+    setRestaurarPendiente(null);
+    try {
+      const completas = await leerHistorial(credenciales, relayUrl, true);
+      const objetivo = completas.find((e) => e.version === entrada.version);
+      const blob = objetivo?.blob;
+      if (!blob) {
+        onNotify('error', 'Sin contenido', 'No se pudo leer el snapshot de esa versión del relay.');
+        return;
+      }
+      const ok = await onRestaurarHistorial({ ...objetivo, blob });
+      if (ok) {
+        onNotify(
+          'success',
+          'Versión restaurada',
+          `Se aplicó v${entrada.version} en pantalla; se publicará como versión nueva para toda la bóveda.`,
+        );
+      } else {
+        onNotify(
+          'error',
+          'No se pudo restaurar',
+          'El motor rechazó la versión (contenido ilegible o escritura bloqueada); intenta otra.',
+        );
       }
     } finally {
       setOcupado(false);
@@ -368,19 +418,39 @@ export default function SyncModal({
 
                     {historial !== null && (
                       <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                        <p className="text-xs uppercase tracking-wider font-bold text-slate-400 mb-2">Versiones previas (solo metadatos)</p>
+                        <p className="text-xs uppercase tracking-wider font-bold text-slate-400 mb-2">Versiones previas</p>
                         {historial.length === 0 ? (
                           <p className="text-sm text-slate-400">No hay versiones previas en el relay.</p>
                         ) : (
-                          <ul className="space-y-1 text-xs text-slate-300">
-                            {historial.map((entrada, indice) => (
-                              <li key={indice} className="flex justify-between gap-2">
-                                <span className="font-mono">v{entrada.version}</span>
-                                <span>{entrada.deviceLabel}</span>
-                                <span className="text-slate-500">{new Date(entrada.updatedAt).toLocaleString()}</span>
-                              </li>
-                            ))}
-                          </ul>
+                          <>
+                            <ul className="space-y-1 text-xs text-slate-300">
+                              {historial.map((entrada, indice) => (
+                                <li key={indice} className="flex items-center justify-between gap-2">
+                                  <span className="font-mono">v{entrada.version}</span>
+                                  <span className="truncate">{entrada.deviceLabel}</span>
+                                  <span className="text-slate-500">{new Date(entrada.updatedAt).toLocaleString()}</span>
+                                  {onRestaurarHistorial && (
+                                    <button
+                                      onClick={() => restaurarVersion(entrada)}
+                                      disabled={ocupado}
+                                      className={`shrink-0 px-2 py-1 rounded-md border text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                                        restaurarPendiente === entrada.version
+                                          ? 'bg-amber-600/30 border-amber-500/50 text-amber-200 hover:bg-amber-600/50'
+                                          : 'bg-white/5 hover:bg-white/10 border-white/10 text-indigo-300'
+                                      }`}
+                                    >
+                                      {restaurarPendiente === entrada.version ? '¿Confirmar?' : 'Restaurar'}
+                                    </button>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                            <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
+                              Restaurar aplica esa versión EN PANTALLA y la publica como versión nueva
+                              para todos los dispositivos. La "actual" de la bóveda queda en el historial
+                              (hasta 5, 30 días).
+                            </p>
+                          </>
                         )}
                       </div>
                     )}

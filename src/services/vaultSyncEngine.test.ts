@@ -283,6 +283,140 @@ describe('vaultSyncEngine: push con debounce y coalescing', () => {
 
     motor.parar();
   });
+
+  it('chequeo pre-publicación: flujo normal (remoto acorde) no altera el PUT', async () => {
+    // GET devuelve el "actual" ALINEADO con lo local (v = 2 tras la 1.ª puesta):
+    // el chequeo respeta el floor y la cronología queda intacta.
+    const puente = fabricarPuente();
+    const puestas: number[] = [];
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        const cuerpo = JSON.parse(String(init.body)) as { version: number };
+        puestas.push(cuerpo.version);
+        return new Response('{"success":true}', { status: 200 });
+      }
+      const vigente = puestas.length > 0
+        ? { payload: { version: puestas.length, updatedAt: FECHA, deviceLabel: 'Escritorio', blob: 'zz' } }
+        : { noChanges: true };
+      return new Response(JSON.stringify({ success: true, ...vigente }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const motor = new VaultSyncEngine(puente, { fetchImpl });
+    await motor.activar();
+
+    motor.schedulePublicacion();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
+    await vi.waitFor(() => expect(puestas).toEqual([1]));
+
+    motor.parar();
+  });
+
+  it('chequeo pre-publicación: LIMPIO con remoto más nuevo absorbe y NO repite versión', async () => {
+    // El flush del modal sobre un dispositivo limpio con remoto v5 existente:
+    // se absorbe el contenido y el anti-eco suprime el PUT (nada nuevo que dar).
+    const puente = fabricarPuente();
+    const doc = await docRemoto(5);
+    let puts = 0;
+    let gets = 0;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        puts += 1;
+        return new Response('{"success":true}', { status: 200 });
+      }
+      gets += 1;
+      return gets === 1
+        ? new Response(JSON.stringify({ success: true, noChanges: true }), { status: 200 })
+        : new Response(JSON.stringify({ success: true, noChanges: false, payload: doc }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const motor = new VaultSyncEngine(puente, { fetchImpl });
+    await motor.activar();
+
+    const ok = await motor.publicarAhora();
+    expect(ok).toBe(true);
+    expect(puente.registro.aplicados).toHaveLength(1); // se absorbió el remoto
+    expect(motor.getVersionLocal()).toBe(5); // el puntero subió al remoto
+    expect(puts).toBe(0); // anti-eco: el contenido absorbido no se repite al PUT
+
+    motor.parar();
+  });
+
+  it('chequeo pre-publicación: SUCIO con remoto más nuevo → conflicto K-7, sin PUT a tientas', async () => {
+    // El fusible del escenario "batería": el motor DESCUBRE por sí mismo la
+    // colisión de versión ANTES del PUT y abre el modal en vez de pisar el blob.
+    const puente = fabricarPuente();
+    const doc = await docRemoto(5);
+    let puts = 0;
+    let gets = 0;
+    const eventos: EventoMotor[] = [];
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        puts += 1;
+        return new Response('{"success":true}', { status: 200 });
+      }
+      gets += 1;
+      return gets === 1
+        ? new Response(JSON.stringify({ success: true, noChanges: true }), { status: 200 })
+        : new Response(JSON.stringify({ success: true, noChanges: false, payload: doc }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const motor = new VaultSyncEngine(puente, { fetchImpl });
+    motor.suscribir((evento) => eventos.push(evento));
+    await motor.activar();
+
+    motor.schedulePublicacion(); // sucio
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
+    await vi.waitFor(() => expect(motor.getEstado()).toBe('conflicto'));
+
+    expect(puts).toBe(0); // el PUT fue ABORTADO, no publicado a ciegas
+    expect(motor.getConflicto()?.version).toBe(5);
+    expect(motor.getVersionLocal()).toBeNull(); // nada cumplió: ninguna versión al puntero
+    expect(eventos.some((e) => e.tipo === 'conflicto')).toBe(true);
+
+    // Resolver conservando lo local: publica ENCIMA (v6, conflicto v5 informado)
+    const ok = await motor.resolverConflicto(true);
+    expect(ok).toBe(true);
+    await vi.waitFor(() => expect(puts).toBe(1));
+    // (la versión 6 = max(null, conflicto 5) + 1: por encima del remoto, nunca IGUAL)
+    motor.parar();
+  });
+
+  it('restaurarVersionHistorica: aplica el HISTORIAL sin retroceder el puntero ni alterar la huella', async () => {
+    const puente = fabricarPuente();
+    const puestas: number[] = [];
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        const cuerpo = JSON.parse(String(init.body)) as { version: number };
+        puestas.push(cuerpo.version);
+        return new Response('{"success":true}', { status: 200 });
+      }
+      return new Response(JSON.stringify({ success: true, noChanges: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const motor = new VaultSyncEngine(puente, { fetchImpl });
+    await motor.activar();
+
+    // Dos publicaciones: el local quedó en v2.
+    motor.schedulePublicacion();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
+    await vi.waitFor(() => expect(puestas).toEqual([1]));
+    motor.schedulePublicacion();
+    await vi.advanceTimersByTimeAsync(GAP_ESCRITURA_MS + DEBOUNCE_PUBLICACION_MS);
+    await vi.waitFor(() => expect(puestas).toEqual([1, 2]));
+    expect(motor.getVersionLocal()).toBe(2);
+
+    // El historial guarda una versión ANTERIOR (v1). La UI la restaura:
+    const historica = await docRemoto(1);
+    const ok = await motor.restaurarVersionHistorica(historica);
+    expect(ok).toBe(true);
+    expect(puente.registro.aplicados).toHaveLength(1); // contenido v1 aplicado
+    expect(motor.getVersionLocal()).toBe(2); // ⚠ el puntero NO retrocedió
+
+    // El estado restaurado se re-publica como NUEVA versión (no eco callado);
+    // antes hay que cruzar el coalescing K-5 de la publicación de arriba.
+    await vi.advanceTimersByTimeAsync(GAP_ESCRITURA_MS + DEBOUNCE_PUBLICACION_MS);
+    motor.schedulePublicacion();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
+    await vi.waitFor(() => expect(puestas).toEqual([1, 2, 3]));
+
+    motor.parar();
+  });
 });
 
 // --- PULL y manos sucias (K-6/K-7) --------------------------------------------

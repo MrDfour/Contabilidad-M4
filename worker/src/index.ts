@@ -12,7 +12,8 @@
  * - GET  /api/vault/:vaultId/state    → documento vigente (o "noChanges" si
  *                                        ?version= ya lo tiene, K-5).
  * - WS   /ws?vaultId=...              → canal vivo: push_state/remote_state (K-6).
- * - GET  /api/vault/:vaultId/history  → metadatos del historial (sin blob, K-8).
+ * - GET  /api/vault/:vaultId/history  → metadatos del historial; con
+ *                                        `?full=1` incluye los blobs (restauración de UI).
  *
  * Registro en memoria de conexiones por bóveda: retransmisión instantánea dentro
  * del runtime que acepta el socket; el sondeo pasivo (K-5) cubre clientes que
@@ -175,19 +176,26 @@ async function manejarEstadoGet(
   return respuestaJson({ success: true, noChanges: false, payload: doc });
 }
 
-/** Historial como metadatos (sin blobs): K-8. */
-async function manejarHistorialGet(env: ContabilidadEnv, vaultId: string): Promise<Response> {
-  const entradas: { version: number; updatedAt: string; deviceLabel: string }[] = [];
+/** Historial: SOLO metadatos por defecto (K-8, listado barato); con `?full=1`
+ *  incluye los blobs cifrados para la restauración desde UI del cliente. */
+async function manejarHistorialGet(
+  env: ContabilidadEnv,
+  vaultId: string,
+  url: URL,
+): Promise<Response> {
+  const conBlobs = url.searchParams.get('full') === '1';
+  const entradas: { version: number; updatedAt: string; deviceLabel: string; blob?: string }[] = [];
   for (let n = 0; n < HISTORIAL_MAX; n += 1) {
     const cruda = await env.CONTABILIDAD_VAULT.get(claveHistorial(vaultId, n));
     if (!cruda) continue;
     const entrada = parseEntradaHistorial(JSON.parse(cruda));
     if (entrada) {
-      entradas.push({
+      const metadatos = {
         version: entrada.version,
         updatedAt: entrada.updatedAt,
         deviceLabel: entrada.deviceLabel,
-      });
+      };
+      entradas.push(conBlobs ? { ...metadatos, blob: entrada.blob } : metadatos);
     }
   }
   return respuestaJson({ success: true, entradas });
@@ -290,7 +298,7 @@ export default {
         if (request.method === 'GET') return manejarEstadoGet(env, vaultId, url);
       }
       if (recurso === 'history' && request.method === 'GET') {
-        return manejarHistorialGet(env, vaultId);
+        return manejarHistorialGet(env, vaultId, url);
       }
       return respuestaError('Método no soportado para este recurso.', 405);
     }

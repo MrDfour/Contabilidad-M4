@@ -22,13 +22,24 @@
 
 ## BL-3 · Monotonicidad de versiones en el PUT del relay
 
-- **Contexto:** hoy el worker acepta cualquier `{version}`; un atacante con `vaultId` puede sobrescribir con una versión inferior (la app local la ignoraría por K-7, pero el blob bueno se pierde del slot "actual" salvo que el historial lo conserve).
-- **Propuesta:** el worker compara contra la versión vigente y rechaza el PUT con `version <= actual` (HTTP 440 conflicto de versión o equivalente): fuerza a que el emisor supere la huella del estado vigente y conserva el historial intacto para recuperación. Cambio acotado con tests de worker; riesgo bajo de regresión en el motor (que ya publica con `max+1` en conflicto, DV-K-7).
+- **Contexto:** hoy el worker acepta cualquier `{version}`; un atacante con `vaultId` puede sobrescribir con una versión inferior. NOTA v0.9.8: el CLIENTE ya protege la integridad propia con el chequeo pre-publicación (GET del vigente + conflicto/absorber + `max(remota, local)+1`), que elimina las colisiones casuales de versión; lo que queda expuesto es el PUT directo malicioso.
+- **Propuesta:** el worker compara contra la versión vigente y rechaza el PUT con `version <= actual` (HTTP 409 o equivalente): fuerza a que el emisor supere la huella del estado vigente y conserva el historial intacto para recuperación. Cambio acotado con tests de worker; el cliente ya está alineado con la semántica (debe re-chequear y aplicar conflicto al recibir 409).
 
 ## BL-4 · Purga remota coordinada de la bóveda
 
 - **Contexto:** heredado de PLAN_SYNC_KV §7: hoy "desalistar" quita las credenciales del dispositivo, pero el documento remoto y su historial siguen viviendo en KV (por diseño: alguien más puede estar sincronizado). Falta el flujo "esta bóveda se disuelve": si el dispositivo fuente (creador) queda solo, borrar `vlt:<id>:actual` + historial vía un endpoint dedicado.
 - **Propuesta:** endpoint `DELETE /api/vault/<id>` controlado por el token de control de BL-1 (por eso conviene resolver BL-1 primero o conjuntamente) + opción de UI en SyncModal ("Disolver bóveda remota") con doble confirmación.
+
+## BL-6 · Fusión de bóveda por hora de captura (tercer botón del conflicto)
+
+- **Contexto:** v0.9.8 ya estampa `capturadoEn`/`editadoEn` en cada póliza (silencio total de UI/SAT) y la UI hace "conservar una" con aviso de historial. Falta el tercer camino: **"Fusionar ambos"** en `ConflictoBovedaModal` para conservar las entradas de los DOS lados con su orden de captura.
+- **Decisiones pendientes ANTES de codear** (definidas en sesión de diseño):
+  1. **Folios**: ¿re-foliar en orden de captura (como la importación Excel asigna por `nextPolizaFolio`) o los folios ya impresos/reportados son sagrados y el merge los conserva (posibles huecos)?
+  2. **Ediciones cruzadas** del mismo `id` en ambos dispositivos: gana el `editadoEn` más reciente; ¿se muestra un listado de revisión o se aplica silencio?
+  3. **Borrados**: el snapshot no guarda eliminaciones — hacer tumbstones (lista de IDs borrados) implica un snapshot v4 con lectura tolerante v3. ¿Vale la pena, o el merge solo cubre ALTAS (el caso típico: capturas paralelas)?
+  4. **Dominios no foliables**: cuentas y activos fijos se pueden unir por `id`; los inventarios finales son saldos numéricos no mergeables → se mantienen del lado que decida el usuario (elección explícita en el modal).
+  5. **Fallback**: si el merge produce duplicados de concepto/total sospechosos (misma captura real desde dos dispositivos), ¿bloquear con listado de revisión o aplicar igual?
+- **Alcance tentativo:** nueva API `fusionar(remoto)` en el puente (App orquesta hooks), opción tercera del modal, tests del motor con snapshots divergentes, snapshot v4 si se aprueban tumbstones.
 
 ## BL-5 · Respaldos cifrados remotos con la misma lib AES-GCM
 

@@ -43,9 +43,15 @@ export function ConflictoBovedaModal({
             <p className="text-slate-300 mb-2 leading-relaxed">
               {`Hay cambios locales sin publicar y el dispositivo "${conflicto.deviceLabel}" publicó una versión más reciente (v${conflicto.version}, ${new Date(conflicto.updatedAt).toLocaleString()}).`}
             </p>
-            <p className="text-slate-400 text-sm mb-8 leading-relaxed">
+            <p className="text-slate-400 text-sm mb-4 leading-relaxed">
               Elige qué datos se quedan: la versión ganadora queda vigente para
-              todos los dispositivos de la bóveda.
+              todos los dispositivos de la bóveda. La bóveda es UNA sola: no hay
+              fusión automática de pólizas.
+            </p>
+            <p className="text-slate-500 text-xs mb-8 leading-relaxed">
+              El lado que NO se conserve queda como versión en el historial de la
+              nube (hasta 5, vigencia 30 días) y puede restaurarse después desde
+              el modal de sincronización (Historial → Restaurar).
             </p>
             <div className="flex flex-col gap-3">
               <button
