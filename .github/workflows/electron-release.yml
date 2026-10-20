@@ -145,13 +145,8 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-          # OJO: aquí NO se usa `cache: 'gradle'` — el proyecto android/ aún no
-          # existe en checkout (lo genera `cap add android` más adelante) y el
-          # hashFiles del action aborta sin matches. La cache de Gradle va con
-          # actions/cache y clave ESTÁTICA:
-          # las dependencias de Gradle de Capacitor son estables, así que la
-          # clave solo debe renacer cuando se suba @capacitor/android
-          # (bump v1 -> v2, o borra el cache desde Actions > Management > Caches).
+          # La cache de Gradle va con actions/cache (abajo): setup-java no se usa
+          # con cache: 'gradle' porque su hashFiles es de checkout y basta.
 
       - name: Cache de Gradle
         uses: actions/cache@v4
@@ -159,7 +154,9 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: cache-gradle-android-v1
+          key: cache-gradle-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            cache-gradle-
 
       - name: Install dependencies
         run: npm ci
@@ -173,15 +170,18 @@ jobs:
         env:
           VITE_RELAY_URL: ${{ secrets.VITE_RELAY_URL }}
 
-      - name: Add Android platform
-        run: npx cap add android
+      - name: Sync Android (android/ ya vive en el repo)
+        run: npx cap sync android
 
-      - name: Add Android camera permission
+      - name: Fijar versionCode y versionName desde package.json
         run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if ! grep -q 'android.permission.CAMERA' "$MANIFEST"; then
-            sed -i 's|<manifest|<manifest|; s|<application|<uses-permission android:name="android.permission.CAMERA" />\n    <application|' "$MANIFEST"
-          fi
+          # Android exige versionCode monotónico estricto para aceptar una
+          # actualización encima; sin este paso todos los APK nacían con
+          # versionCode 1 y "App not installed" al actualizar.
+          APP_VERSION=$(jq -r .version package.json)
+          APP_CODE=$(echo "$APP_VERSION" | awk -F. '{print $1*10000 + $2*100 + $3}')
+          sed -i "s/versionCode .*/versionCode $APP_CODE/; s/versionName .*/versionName \"$APP_VERSION\"/" android/app/build.gradle
+          grep -E 'versionCode|versionName' android/app/build.gradle
 
       - name: Decode keystore
         run: |

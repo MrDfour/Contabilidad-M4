@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Contabilidad M4 Pro</string>
+    <string name="title_activity_main">Contabilidad M4 Pro</string>
+    <string name="package_name">com.fernandomartinez.contabilidadm4pro</string>
+    <string name="custom_url_scheme">com.fernandomartinez.contabilidadm4pro</string>
+</resources>

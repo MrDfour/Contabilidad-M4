@@ -4,7 +4,7 @@
  */
 
 import { useState, useMemo, useEffect, useRef } from 'react';import { motion, AnimatePresence } from 'motion/react';
-import { useCheckForUpdates } from './hooks/useCheckForUpdates';
+import { saltarVersion, useCheckForUpdates } from './hooks/useCheckForUpdates';
 import { useUpdateProgress } from './hooks/useUpdateProgress';
 import type { Account, FixedAsset, Poliza } from './types';
 import { buildTAccountsData, computeAccountBalances, formatPolizaFolio, flattenPolizasToJournalEntries, entryToPolizaInput } from './lib/accounting';
@@ -59,7 +59,7 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
-  const { isUpdateAvailable, latestVersion, downloadUrl } = useCheckForUpdates();
+  const { isUpdateAvailable, latestVersion, downloadUrl, changelog } = useCheckForUpdates();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -571,8 +571,10 @@ export default function App() {
       <UpdateAvailableModal
         isOpen={isUpdateAvailable && !updateDismissed}
         latestVersion={latestVersion}
+        changelog={changelog}
         downloadUrl={downloadUrl}
         onDismiss={() => setUpdateDismissed(true)}
+        onSkipVersion={(v) => saltarVersion(v)}
         onNotify={(info) => setModalInfo(info)}
       />
 
