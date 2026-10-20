@@ -1,62 +1,71 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+/**
+ * SyncModal.tsx — Modal de bóveda de sincronización (Fase 3 de PLAN_SYNC_KV.md).
+ *
+ * Sustituye al flujo efímero PIN/QR de sesión: ahora gestiona la BÓVEDA E2EE
+ * (K-2/K-9). Escritorio: estado de la bóveda + QR/frase para alistar otros
+ * dispositivos. Móvil: escaneo/pegado del payload o la frase de 6 palabras.
+ * El motor de auto-sync (Fase 4) se conecta vía `onPublicar`.
+ */
+
+import React, { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { QrCode, ScanLine, Wifi, WifiOff, X } from 'lucide-react';
+import {
+  CheckCircle2,
+  ClipboardCopy,
+  Cloud,
+  CloudOff,
+  History,
+  QrCode,
+  ScanLine,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Capacitor } from '@capacitor/core';
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
 import {
-  clearPinRegenerationRequest,
-  connectToSessionPeer,
-  createSyncPayload,
-  getPinSecurityStatus,
-  getRedisSyncData,
-  getSessionIdFromPin,
-  initializeHostPeer,
-  resetPinMappingForSession,
-  setRedisSyncData,
-  setPinMapping,
-  type PeerController,
-  type SyncPayload,
-  type SyncState,
-  type SyncTransport,
-} from '../services/syncService';
+  alistarDesdeFrase,
+  alistarDesdeQr,
+  construirPayloadQr,
+  crearBoveda,
+  desalistar,
+  ETIQUETA_DESKTOP,
+  ETIQUETA_MOVIL,
+  esUrlRelayValida,
+  obtenerCredenciales,
+  obtenerRelayUrl,
+  sufijoBoveda,
+  verificarRelay,
+  type CredencialesBoveda,
+} from '../services/vaultService';
 
 interface SyncModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** TRUE en escritorio (crea/muestra bóveda); FALSE en móvil (alinea este dispositivo). */
   isDesktop: boolean;
-  localState: SyncState;
-  onApplyRemoteState: (state: SyncState) => void;
+  /** Publicación forzada del snapshot (motor de auto-sync, Fase 4/5). Opcional. */
+  onPublicar?: () => Promise<boolean>;
   onNotify: (type: 'success' | 'error', title: string, message: string) => void;
 }
 
-function parseSessionId(raw: string): string {
-  const value = raw.trim();
-  if (!value) return '';
-
-  try {
-    const url = new URL(value);
-    const fromParam = url.searchParams.get('sessionId');
-    if (fromParam) return fromParam.trim();
-  } catch {
-    // no-op
-  }
-
-  return value;
+interface EntradaHistorialVista {
+  version: number;
+  updatedAt: string;
+  deviceLabel: string;
 }
 
-function generateSixDigitPin(): string {
-  const range = 900000;
-  const maxUint32 = 0x1_0000_0000;
-  const limit = Math.floor(maxUint32 / range) * range;
-  const randomBuffer = new Uint32Array(1);
-
-  while (true) {
-    crypto.getRandomValues(randomBuffer);
-    const value = randomBuffer[0];
-    if (value < limit) {
-      return String((value % range) + 100000);
-    }
+/** Lee la lista de versiones del relay (solo metadatos, K-8; nunca lanza). */
+async function leerHistorial(credenciales: CredencialesBoveda, relayUrl: string) {
+  if (!esUrlRelayValida(relayUrl)) return [];
+  try {
+    const respuesta = await fetch(`${relayUrl}/api/vault/${credenciales.vaultId}/history`);
+    if (!respuesta.ok) return [];
+    const cuerpo = (await respuesta.json()) as { entradas?: EntradaHistorialVista[] };
+    return Array.isArray(cuerpo.entradas) ? cuerpo.entradas : [];
+  } catch {
+    return [];
   }
 }
 
@@ -64,390 +73,168 @@ export default function SyncModal({
   isOpen,
   onClose,
   isDesktop,
-  localState,
-  onApplyRemoteState,
+  onPublicar,
   onNotify,
 }: SyncModalProps) {
-  const [sessionId, setSessionId] = useState('');
-  const [pin, setPin] = useState('');
-  const [scanInput, setScanInput] = useState('');
-  const [status, setStatus] = useState('');
-  const [isBusy, setIsBusy] = useState(false);
-  const [remotePayload, setRemotePayload] = useState<SyncPayload | null>(null);
-  const [remoteTransport, setRemoteTransport] = useState<SyncTransport | null>(null);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [desktopSessionNonce, setDesktopSessionNonce] = useState(0);
+  const [credenciales, setCredenciales] = useState<CredencialesBoveda | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [ocupado, setOcupado] = useState(false);
+  const [relayOk, setRelayOk] = useState<boolean | null>(null);
+  const [qrPayload, setQrPayload] = useState('');
+  const [historial, setHistorial] = useState<EntradaHistorialVista[] | null>(null);
+  const [pegado, setPegado] = useState('');
+  const [fraseEscrita, setFraseEscrita] = useState('');
+  const [crearConfirmado, setCrearConfirmado] = useState(false);
+  const [desalistarConfirmado, setDesalistarConfirmado] = useState(false);
 
-  const peerControllerRef = useRef<PeerController | null>(null);
-  const pollingIntervalRef = useRef<number | null>(null);
-  const securityIntervalRef = useRef<number | null>(null);
-  const pollingAttemptsRef = useRef(0);
-  const securityRequestInFlightRef = useRef(false);
-  const isPollingRequestInFlight = useRef(false);
-  const activeDesktopSessionRef = useRef('');
-  const isRegeneratingSessionRef = useRef(false);
-  const isBlockedRef = useRef(false);
-  const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
+  const etiqueta = isDesktop ? ETIQUETA_DESKTOP : ETIQUETA_MOVIL;
+  const relayUrl = obtenerRelayUrl();
 
-  const stopSyncRuntime = useCallback(() => {
-    if (pollingIntervalRef.current !== null) {
-      window.clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
+  const refrescar = useCallback(async () => {
+    const leidas = await obtenerCredenciales();
+    setCredenciales(leidas);
+    if (leidas) {
+      setQrPayload(construirPayloadQr(leidas, relayUrl) ?? '');
+      const salud = await verificarRelay(relayUrl);
+      setRelayOk(salud.ok);
+    } else {
+      setQrPayload('');
+      setRelayOk(null);
     }
-    if (peerControllerRef.current) {
-      peerControllerRef.current.close();
-      peerControllerRef.current = null;
-    }
-    pollingAttemptsRef.current = 0;
-    isPollingRequestInFlight.current = false;
-  }, []);
+  }, [relayUrl]);
 
-  const cleanup = useCallback(() => {
-    stopSyncRuntime();
-    if (securityIntervalRef.current !== null) {
-      window.clearInterval(securityIntervalRef.current);
-      securityIntervalRef.current = null;
-    }
-    securityRequestInFlightRef.current = false;
-    isRegeneratingSessionRef.current = false;
-    isBlockedRef.current = false;
-  }, [stopSyncRuntime]);
-
-  const pushLocalStateToPeer = useCallback((activeSessionId: string) => {
-    if (!peerControllerRef.current) return;
-    const payload = createSyncPayload(activeSessionId, isDesktop ? 'desktop' : 'mobile', 'peerjs', localState);
-    peerControllerRef.current.send({ type: 'sync_payload', payload });
-  }, [isDesktop, localState]);
-
-  const handleIncomingPayload = useCallback((payload: SyncPayload, transport: SyncTransport) => {
-    setRemotePayload(payload);
-    setRemoteTransport(transport);
-    setStatus(`Datos remotos recibidos por ${transport === 'peerjs' ? 'WebRTC' : 'Redis'}.`);
-    setErrorMessage('');
-    setIsBusy(false);
-  }, []);
-
-  const startDesktopFlow = useCallback(async (activeSessionId: string) => {
-    try {
-      peerControllerRef.current = initializeHostPeer(activeSessionId, {
-        onReady: () => {
-          setStatus('Sesión activa. Esperando conexión móvil...');
-        },
-        onOpen: () => {
-          setStatus('Conexión WebRTC establecida. Intercambiando datos...');
-          pushLocalStateToPeer(activeSessionId);
-        },
-        onData: (message) => {
-          handleIncomingPayload(message.payload, 'peerjs');
-        },
-        onError: (error) => {
-          setErrorMessage(error.message || 'Error de conexión WebRTC.');
-        },
-      });
-
-      const desktopKey = `sync_desktop_${activeSessionId}`;
-      const mobileKey = `sync_mobile_${activeSessionId}`;
-      const payload = createSyncPayload(activeSessionId, 'desktop', 'redis', localState);
-      await setRedisSyncData(desktopKey, payload);
-
-      setStatus('Datos publicados en respaldo Redis. Esperando respuesta móvil...');
-
-      pollingAttemptsRef.current = 0;
-      pollingIntervalRef.current = window.setInterval(async () => {
-        if (isPollingRequestInFlight.current) return;
-        if (pollingAttemptsRef.current >= 10) {
-          if (pollingIntervalRef.current !== null) {
-            window.clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-          }
-          setStatus('Respaldo Redis finalizado (sin respuesta móvil).');
-          return;
-        }
-
-        pollingAttemptsRef.current += 1;
-        isPollingRequestInFlight.current = true;
-
-        try {
-          const mobilePayload = await getRedisSyncData(mobileKey);
-          if (mobilePayload) {
-            if (pollingIntervalRef.current !== null) {
-              window.clearInterval(pollingIntervalRef.current);
-              pollingIntervalRef.current = null;
-            }
-            handleIncomingPayload(mobilePayload, 'redis');
-          }
-        } catch (error) {
-          setErrorMessage(error instanceof Error ? error.message : 'Error consultando respaldo Redis.');
-        } finally {
-          isPollingRequestInFlight.current = false;
-        }
-      }, 3000);
-    } catch (error) {
-      setIsBusy(false);
-      setErrorMessage(error instanceof Error ? error.message : 'No se pudo iniciar la sincronización.');
-    }
-  }, [handleIncomingPayload, localState, pushLocalStateToPeer]);
-
-  const clearActiveDesktopSession = useCallback(async () => {
-    if (!activeDesktopSessionRef.current) return;
-    const sessionToClear = activeDesktopSessionRef.current;
-    activeDesktopSessionRef.current = '';
-    try {
-      await resetPinMappingForSession(sessionToClear);
-    } catch {
-      // best-effort cleanup
-    }
-  }, []);
-
-  const initializeDesktopSession = useCallback(async () => {
-    if (!isDesktop || !isOpen) return;
-
-    cleanup();
-    await clearActiveDesktopSession();
-
-    const generatedSessionId = crypto.randomUUID();
-    const generatedPin = generateSixDigitPin();
-
-    activeDesktopSessionRef.current = generatedSessionId;
-    isBlockedRef.current = false;
-    setBlockedUntil(null);
-    setSessionId(generatedSessionId);
-    setPin(generatedPin);
-    setRemotePayload(null);
-    setRemoteTransport(null);
-    setErrorMessage('');
-    setIsBusy(true);
-    setStatus('Inicializando sincronización...');
-
-    setPinMapping(generatedPin, generatedSessionId).catch(() => {
-      // PIN mapping is best-effort; proceed even if it fails
-    });
-
-    startDesktopFlow(generatedSessionId);
-
-    securityIntervalRef.current = window.setInterval(async () => {
-      if (securityRequestInFlightRef.current || isRegeneratingSessionRef.current) return;
-      securityRequestInFlightRef.current = true;
-
-      try {
-        const securityStatus = await getPinSecurityStatus(generatedSessionId);
-
-        if (securityStatus.blockedUntil) {
-          isBlockedRef.current = true;
-          setBlockedUntil(securityStatus.blockedUntil);
-          setIsBusy(false);
-          setSessionId('');
-          setPin('');
-          stopSyncRuntime();
-          const remainingSeconds = Math.max(1, Math.ceil((securityStatus.blockedUntil - Date.now()) / 1000));
-          setStatus(`Bloqueado temporalmente por seguridad. Reintenta en ${remainingSeconds} segundos.`);
-          setErrorMessage('Se detectaron múltiples intentos inválidos de PIN.');
-          return;
-        }
-
-        if (isBlockedRef.current) {
-          isBlockedRef.current = false;
-          isRegeneratingSessionRef.current = true;
-          if (securityIntervalRef.current !== null) {
-            window.clearInterval(securityIntervalRef.current);
-            securityIntervalRef.current = null;
-          }
-          setBlockedUntil(null);
-          setStatus('Tiempo de bloqueo finalizado. Regenerando código de sincronización...');
-          setErrorMessage('');
-          setDesktopSessionNonce((current) => current + 1);
-          return;
-        }
-
-        if (securityStatus.regenerateRequested) {
-          isRegeneratingSessionRef.current = true;
-          if (securityIntervalRef.current !== null) {
-            window.clearInterval(securityIntervalRef.current);
-            securityIntervalRef.current = null;
-          }
-          setStatus('Se detectaron intentos inválidos. Regenerando código de sincronización...');
-          setErrorMessage('');
-          await clearPinRegenerationRequest(generatedSessionId);
-          setDesktopSessionNonce((current) => current + 1);
-        }
-      } catch {
-        // non-critical security check failure
-      } finally {
-        securityRequestInFlightRef.current = false;
-      }
-    }, 2000);
-  }, [cleanup, clearActiveDesktopSession, isDesktop, isOpen, startDesktopFlow, stopSyncRuntime]);
-
+  // Carga inicial al abrir el modal (el relay se verifica una vez por apertura).
   useEffect(() => {
     if (!isOpen) {
-      cleanup();
-      clearActiveDesktopSession();
-      activeDesktopSessionRef.current = '';
-      setSessionId('');
-      setPin('');
-      setScanInput('');
-      setStatus('');
-      setRemotePayload(null);
-      setRemoteTransport(null);
-      setErrorMessage('');
-      setIsBusy(false);
-      setBlockedUntil(null);
+      setCredenciales(null);
+      setQrPayload('');
+      setRelayOk(null);
+      setHistorial(null);
+      setPegado('');
+      setFraseEscrita('');
+      setCrearConfirmado(false);
+      setDesalistarConfirmado(false);
       return;
     }
+    refrescar();
+    return () => undefined;
+  }, [isOpen, refrescar]);
 
-    if (!isDesktop) {
-      setStatus('Escanea el QR de escritorio para iniciar la sincronización.');
-      return;
+  const crear = async () => {
+    setOcupado(true);
+    try {
+      const creada = await crearBoveda(etiqueta);
+      onNotify('success', 'Bóveda creada', `Se generó la bóveda ${sufijoBoveda(creada.vaultId)}. Guarda la frase de 6 palabras en papel.`);
+      await refrescar();
+    } catch {
+      onNotify('error', 'No se pudo crear', 'Inténtalo de nuevo.');
+    } finally {
+      setOcupado(false);
     }
+  };
 
-    initializeDesktopSession();
-
-    return cleanup;
-  }, [cleanup, clearActiveDesktopSession, desktopSessionNonce, initializeDesktopSession, isDesktop, isOpen]);
-
-  const handleScanQr = async () => {
-    setErrorMessage('');
-
+  const alistarConQrEscaneado = async () => {
+    setOcupado(true);
     try {
       if (Capacitor.getPlatform() === 'web') {
-        throw new Error('Escáner nativo no disponible en web. Ingresa el ID de sesión manualmente.');
+        throw new Error('Escáner nativo no disponible en web. Pega el contenido del QR.');
       }
-
-      const permission = await BarcodeScanner.requestPermissions();
-      if (permission.camera !== 'granted' && permission.camera !== 'limited') {
+      const permiso = await BarcodeScanner.requestPermissions();
+      if (permiso.camera !== 'granted' && permiso.camera !== 'limited') {
         throw new Error('Permiso de cámara denegado.');
       }
-
-      const result = await BarcodeScanner.scan();
-      const rawValue = result.barcodes?.[0]?.displayValue?.trim() ?? '';
-      const parsedSession = parseSessionId(rawValue);
-      if (!parsedSession) {
-        throw new Error('No se detectó un ID de sesión válido en el QR.');
-      }
-
-      setScanInput(parsedSession);
-      setStatus('ID de sesión detectado. Presiona “Conectar”.');
+      const resultado = await BarcodeScanner.scan();
+      const crudo = resultado.barcodes?.[0]?.displayValue?.trim() ?? '';
+      const alistada = await alistarDesdeQr(crudo, etiqueta);
+      if (!alistada) throw new Error('El QR no contiene una bóveda válida.');
+      onNotify('success', 'Bóveda alineada', `Este dispositivo usará la bóveda ${sufijoBoveda(alistada.vaultId)}.`);
+      await refrescar();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'No se pudo escanear el QR.');
+      onNotify('error', 'No se pudo alinear', error instanceof Error ? error.message : 'Inténtalo de nuevo.');
+    } finally {
+      setOcupado(false);
     }
   };
 
-  const handleConnectMobile = async () => {
-    const rawInput = parseSessionId(scanInput);
-    if (!rawInput) {
-      setErrorMessage('Ingresa o escanea un código PIN o ID de sesión válido.');
-      return;
-    }
-
-    let resolvedSessionId = rawInput;
-
-    if (/^\d{6}$/.test(rawInput)) {
-      setStatus('Resolviendo PIN...');
-      try {
-        const fromPin = await getSessionIdFromPin(rawInput);
-        if (!fromPin) {
-          setErrorMessage('PIN inválido o expirado. Solicita uno nuevo en el escritorio.');
+  const alistarConPegado = async () => {
+    setOcupado(true);
+    try {
+      let alistada = await alistarDesdeQr(pegado, etiqueta);
+      if (!alistada) {
+        // El pegado pudo ser la frase de 6 palabras (alternativa sin cámara).
+        const desdeFrase = await alistarDesdeFrase(pegado, etiqueta);
+        if (!desdeFrase.ok) {
+          onNotify('error', 'No se pudo alinear', desdeFrase.detalle);
           return;
         }
-        resolvedSessionId = fromPin;
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : 'No se pudo resolver el PIN.');
+        alistada = desdeFrase.credenciales ?? null;
+      }
+      if (!alistada) {
+        onNotify('error', 'No se pudo alinear', 'El texto pegado no es un QR de bóveda ni una frase de 6 palabras.');
         return;
       }
-    }
-
-    cleanup();
-    setRemotePayload(null);
-    setRemoteTransport(null);
-    setSessionId(resolvedSessionId);
-    setErrorMessage('');
-    setIsBusy(true);
-    setStatus('Conectando por WebRTC...');
-
-    try {
-      peerControllerRef.current = await connectToSessionPeer(
-        resolvedSessionId,
-        {
-          onOpen: () => {
-            setStatus('Conexión WebRTC establecida. Intercambiando datos...');
-            pushLocalStateToPeer(resolvedSessionId);
-            const mobileReply = createSyncPayload(resolvedSessionId, 'mobile', 'redis', localState);
-            setRedisSyncData(`sync_mobile_${resolvedSessionId}`, mobileReply).catch(() => {
-              // best-effort mirror reply for desktop Redis polling
-            });
-          },
-          onData: (message) => {
-            handleIncomingPayload(message.payload, 'peerjs');
-          },
-          onError: (error) => {
-            setErrorMessage(error.message || 'Error de conexión WebRTC.');
-          },
-        },
-        5000,
-      );
-      setIsBusy(false);
-    } catch {
-      setStatus('WebRTC no disponible. Intentando respaldo Redis...');
-
-      try {
-        const fallbackPayload = await getRedisSyncData(`sync_desktop_${resolvedSessionId}`);
-        if (!fallbackPayload) {
-          throw new Error('No se encontró información en respaldo Redis para esta sesión.');
-        }
-
-        handleIncomingPayload(fallbackPayload, 'redis');
-      } catch (error) {
-        setIsBusy(false);
-        setErrorMessage(error instanceof Error ? error.message : 'No se pudo obtener datos desde Redis.');
-      }
-    }
-  };
-
-  const publishMobileRedisReply = useCallback(async (stateToShare: SyncState) => {
-    if (isDesktop || !sessionId) return;
-    const payload = createSyncPayload(sessionId, 'mobile', 'redis', stateToShare);
-    await setRedisSyncData(`sync_mobile_${sessionId}`, payload);
-  }, [isDesktop, sessionId]);
-
-  const handleKeepLocal = async () => {
-    if (!sessionId) return;
-
-    setIsBusy(true);
-    setStatus('Aplicando decisión: mantener datos locales...');
-
-    try {
-      await publishMobileRedisReply(localState);
-
-      pushLocalStateToPeer(sessionId);
-      setRemotePayload(null);
-      onNotify('success', 'Sincronización completada', 'Se conservaron los datos locales en este dispositivo.');
-      setStatus('Sincronización completada.');
-      onClose();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'No se pudo enviar la decisión.');
+      onNotify('success', 'Bóveda alineada', `Este dispositivo usará la bóveda ${sufijoBoveda(alistada.vaultId)}.`);
+      await refrescar();
     } finally {
-      setIsBusy(false);
+      setOcupado(false);
     }
   };
 
-  const handleOverwriteWithRemote = async () => {
-    if (!remotePayload) return;
-
+  const publicarAhora = async () => {
+    if (!onPublicar) return;
+    setOcupado(true);
     try {
-      onApplyRemoteState(remotePayload.state);
-      if (!isDesktop && sessionId) {
-        await publishMobileRedisReply(remotePayload.state);
+      const ok = await onPublicar();
+      if (ok) {
+        onNotify('success', 'Estado publicado', 'El snapshot contable se publicó en la bóveda.');
+      } else {
+        onNotify('error', 'Publicación fallida', 'El relay no respondió. Revisa la conexión.');
       }
-      setRemotePayload(null);
-      onNotify('success', 'Datos actualizados', 'Se aplicaron correctamente los datos remotos.');
-      setStatus('Datos remotos aplicados correctamente.');
-      onClose();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'No se pudieron aplicar los datos remotos.');
+    } finally {
+      setOcupado(false);
     }
   };
 
-  const isConflictVisible = Boolean(remotePayload);
+  const abrirHistorial = async () => {
+    if (!credenciales) return;
+    setOcupado(true);
+    try {
+      const entradas = await leerHistorial(credenciales, relayUrl);
+      setHistorial(entradas);
+      if (entradas.length === 0) {
+        onNotify('error', 'Sin historial', 'No hay versiones previas accesibles en el relay.');
+      }
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const borrarCredencialLocal = async () => {
+    if (!desalistarConfirmado) {
+      setDesalistarConfirmado(true);
+      return;
+    }
+    setOcupado(true);
+    try {
+      await desalistar();
+      onNotify('success', 'Dispositivo desalistado', 'La bóveda se conserva; este dispositivo salió de ella.');
+      await refrescar();
+    } finally {
+      setDesalistarConfirmado(false);
+      setOcupado(false);
+    }
+  };
+
+  const copiarAlPortapapeles = async (texto: string) => {
+    try {
+      await navigator.clipboard.writeText(texto);
+      onNotify('success', 'Copiado', 'El contenido quedó en el portapapeles.');
+    } catch {
+      onNotify('error', 'No se pudo copiar', 'Se muestra el texto para copiarlo a mano.');
+    }
+  };
+
+  const esCreador = Boolean(credenciales?.frase);
 
   return (
     <AnimatePresence>
@@ -457,17 +244,18 @@ export default function SyncModal({
             initial={{ opacity: 0, scale: 0.95, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 12 }}
-            className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-lg w-full"
+            className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
           >
+            {/* Encabezado */}
             <div className="flex items-center justify-between p-5 border-b border-white/10">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center">
                   {isDesktop ? <QrCode className="w-5 h-5" /> : <ScanLine className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Sincronización de datos</h3>
+                  <h3 className="text-lg font-bold text-white">Sincronización con bóveda</h3>
                   <p className="text-xs text-slate-400">
-                    {isDesktop ? 'Modo Escritorio' : 'Modo Móvil'} • WebRTC + respaldo Redis
+                    {isDesktop ? 'Modo Escritorio' : 'Modo Móvil'} • cifrado AES-GCM de extremo a extremo
                   </p>
                 </div>
               </div>
@@ -481,92 +269,228 @@ export default function SyncModal({
             </div>
 
             <div className="p-5 space-y-5">
-              {isDesktop ? (
-                <div className="space-y-4">
-                  <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
-                    {blockedUntil && blockedUntil > Date.now() ? (
-                      <p className="text-sm text-rose-300">
-                        Bloqueado temporalmente por seguridad. Espera a que termine el tiempo de bloqueo para generar un nuevo PIN.
-                      </p>
-                    ) : sessionId ? (
-                      <div className="inline-flex flex-col items-center gap-3">
-                        <div className="bg-white p-3 rounded-xl">
-                          <QRCodeSVG value={sessionId} size={180} includeMargin />
-                        </div>
-                        <p className="text-xs text-slate-300 break-all">ID de sesión: {sessionId}</p>
-                        <div className="w-full border-t border-white/10 pt-3">
-                          <p className="text-xs text-slate-400 mb-1">Escanea el QR o ingresa este código de 6 dígitos en tu móvil:</p>
-                          <p className="text-3xl font-bold tracking-[0.25em] text-indigo-300" role="text" aria-label="Código PIN de seis dígitos">{pin}</p>
-                        </div>
+              {/* Estado del relay */}
+              {relayOk !== null && (
+                <div className="flex items-center gap-2 text-xs">
+                  {relayOk ? (
+                    <span className="flex items-center gap-1 text-emerald-300">
+                      <CheckCircle2 className="w-4 h-4" /> Relay en línea
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-amber-300">
+                      <CloudOff className="w-4 h-4" /> Relay inaccesible (el sync local sigue funcionando)
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* --- Escritorio --- */}
+              {isDesktop && (
+                credenciales ? (
+                  <div className="space-y-4">
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm font-semibold text-slate-200">
+                          Bóveda <span className="font-mono text-indigo-300">{sufijoBoveda(credenciales.vaultId)}</span>
+                        </p>
+                        <Cloud className="w-4 h-4 text-slate-400" />
                       </div>
-                    ) : (
-                      <p className="text-sm text-slate-400">Generando sesión...</p>
+                      {qrPayload ? (
+                        <div className="space-y-3">
+                          <div className="flex justify-center">
+                            <div className="bg-white p-3 rounded-xl">
+                              <QRCodeSVG value={qrPayload} size={180} includeMargin />
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => copiarAlPortapapeles(qrPayload)}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs border border-white/10"
+                          >
+                            <ClipboardCopy className="w-4 h-4" /> Copiar payload del QR (para pegar en el móvil)
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-amber-300">
+                          Configura VITE_RELAY_URL para compartir la bóveda por QR.
+                        </p>
+                      )}
+                    </div>
+
+                    {esCreador && (
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                        <p className="text-xs uppercase tracking-wider font-bold text-slate-400 mb-2">Frase de respaldo (papel)</p>
+                        <p className="font-mono text-base text-slate-100 tracking-wide">{credenciales.frase}</p>
+                        <p className="text-xs text-slate-500 mt-2">
+                          Quien teclee estas 6 palabras en otro dispositivo llega a la misma bóveda.
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {onPublicar && (
+                        <button
+                          onClick={publicarAhora}
+                          disabled={ocupado}
+                          className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
+                        >
+                          <Upload className="w-4 h-4" /> Publicar ahora
+                        </button>
+                      )}
+                      <button
+                        onClick={abrirHistorial}
+                        disabled={ocupado}
+                        className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 text-sm font-medium disabled:opacity-60"
+                      >
+                        <History className="w-4 h-4" /> Historial
+                      </button>
+                      <button
+                        onClick={borrarCredencialLocal}
+                        disabled={ocupado}
+                        className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium disabled:opacity-60 transition-colors ${
+                          desalistarConfirmado
+                            ? 'bg-rose-600/30 border-rose-500/50 text-rose-200 hover:bg-rose-600/50'
+                            : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-200'
+                        }`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        {desalistarConfirmado ? '¿Confirmar salida?' : 'Desalistar'}
+                      </button>
+                    </div>
+
+                    {historial !== null && (
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-xs uppercase tracking-wider font-bold text-slate-400 mb-2">Versiones previas (solo metadatos)</p>
+                        {historial.length === 0 ? (
+                          <p className="text-sm text-slate-400">No hay versiones previas en el relay.</p>
+                        ) : (
+                          <ul className="space-y-1 text-xs text-slate-300">
+                            {historial.map((entrada, indice) => (
+                              <li key={indice} className="flex justify-between gap-2">
+                                <span className="font-mono">v{entrada.version}</span>
+                                <span>{entrada.deviceLabel}</span>
+                                <span className="text-slate-500">{new Date(entrada.updatedAt).toLocaleString()}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ) : (
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-slate-300">
+                      Este dispositivo no pertenece a ninguna bóveda. Crea una para comenzar,
+                      o alínea con la frase de una bóveda existente.
+                    </p>
+                    {crearConfirmado ? (
+                      <button
+                        onClick={crear}
+                        disabled={ocupado}
+                        className="w-full px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
+                      >
+                        {ocupado ? 'Creando...' : 'Sí, crear bóveda nueva'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setCrearConfirmado(true)}
+                        className="w-full px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold"
+                      >
+                        Crear bóveda nueva
+                      </button>
+                    )}
+                    <div className="space-y-2">
+                      <label className="text-xs uppercase tracking-wider font-bold text-slate-400">
+                        O alinear con la frase de una bóveda existente
+                      </label>
+                      <input
+                        value={fraseEscrita}
+                        onChange={(e) => setFraseEscrita(e.target.value)}
+                        placeholder="arbol-faro-sol-luz-mar-nube (6 palabras)"
+                        className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 font-mono text-sm"
+                      />
+                      <button
+                        onClick={async () => {
+                          setOcupado(true);
+                          try {
+                            const resultado = await alistarDesdeFrase(fraseEscrita, etiqueta);
+                            if (!resultado.ok) {
+                              onNotify('error', 'No se pudo alinear', resultado.detalle);
+                              return;
+                            }
+                            onNotify('success', 'Bóveda alineada', `Este dispositivo usará la bóveda ${resultado.credenciales ? sufijoBoveda(resultado.credenciales.vaultId) : ''}.`);
+                            await refrescar();
+                          } finally {
+                            setOcupado(false);
+                          }
+                        }}
+                        disabled={ocupado || !fraseEscrita.trim()}
+                        className="w-full px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 text-sm font-medium disabled:opacity-60"
+                      >
+                        Alinear con frase
+                      </button>
+                    </div>
+                  </div>
+                )
+              )}
+
+              {/* --- Móvil --- */}
+              {!isDesktop && (
                 <div className="space-y-3">
-                  <div className="space-y-2">
-                    <label className="text-xs uppercase tracking-wider font-bold text-slate-400">Código PIN o ID de sesión</label>
-                    <input
-                      value={scanInput}
-                      onChange={(e) => setScanInput(e.target.value)}
-                      placeholder="Código de 6 dígitos o ID de sesión completo"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-                    />
-                    <p className="text-xs text-slate-500">Escanea el QR o ingresa el código de 6 dígitos que aparece en el escritorio.</p>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button
-                      onClick={handleScanQr}
-                      className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/30 transition-colors text-sm font-medium"
-                    >
-                      <ScanLine className="w-4 h-4" /> Escanear QR
-                    </button>
-                    <button
-                      onClick={handleConnectMobile}
-                      disabled={isBusy}
-                      className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors text-sm font-semibold disabled:opacity-60"
-                    >
-                      {isBusy ? <WifiOff className="w-4 h-4 animate-pulse" /> : <Wifi className="w-4 h-4" />} Conectar
-                    </button>
-                  </div>
+                  {credenciales ? (
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center space-y-2">
+                      <p className="text-sm font-semibold text-slate-200">
+                        Alineado con la bóveda <span className="font-mono text-indigo-300">{sufijoBoveda(credenciales.vaultId)}</span>
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Etiqueta: {credenciales.deviceLabel} • El sync automático opera en segundo plano.
+                      </p>
+                      <button
+                        onClick={borrarCredencialLocal}
+                        disabled={ocupado}
+                        className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium disabled:opacity-60 ${
+                          desalistarConfirmado ? 'bg-rose-600/30 border-rose-500/50 text-rose-200' : 'bg-white/5 border-white/10 text-slate-200 hover:bg-white/10'
+                        }`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        {desalistarConfirmado ? '¿Confirmar salida?' : 'Desalistar este dispositivo'}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 gap-2">
+                        <button
+                          onClick={alistarConQrEscaneado}
+                          disabled={ocupado}
+                          className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/30 transition-colors text-sm font-medium disabled:opacity-60"
+                        >
+                          <ScanLine className="w-4 h-4" /> Escanear QR de la bóveda
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs uppercase tracking-wider font-bold text-slate-400">
+                          Pegar contenido del QR o la frase de 6 palabras
+                        </label>
+                        <textarea
+                          value={pegado}
+                          onChange={(e) => setPegado(e.target.value)}
+                          rows={3}
+                          placeholder='{"v":1,"url":...} · o · arbol-faro-sol-luz-mar-nube'
+                          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 text-xs font-mono"
+                        />
+                        <button
+                          onClick={alistarConPegado}
+                          disabled={ocupado || !pegado.trim()}
+                          className="w-full px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
+                        >
+                          {ocupado ? 'Alineando...' : 'Alinear'}
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3 min-h-[64px]">
-                <p className="text-sm text-slate-200">{status || 'Esperando acción...'}</p>
-                {isBusy && <p className="text-xs text-indigo-300 mt-1">Conectando...</p>}
-                {errorMessage && <p className="text-xs text-rose-400 mt-1">{errorMessage}</p>}
-              </div>
-
-              {isConflictVisible && remotePayload && (
-                <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 space-y-3">
-                  <h4 className="text-sm font-semibold text-indigo-200">Se detectó un conflicto de datos contables. ¿Qué versión deseas conservar en ambos dispositivos?</h4>
-                  <p className="text-xs text-slate-300">
-                    Datos remotos desde: <span className="font-mono">{remoteTransport}</span> · origen: <span className="font-mono">{remotePayload.origin}</span>
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button
-                      onClick={handleKeepLocal}
-                      disabled={isBusy}
-                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-slate-100 text-sm font-medium border border-white/10 disabled:opacity-60"
-                    >
-                      Conservar datos locales
-                    </button>
-                    <button
-                      onClick={handleOverwriteWithRemote}
-                      disabled={isBusy}
-                      className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
-                    >
-                      Sobrescribir con datos remotos
-                    </button>
-                  </div>
-                  {isBusy && <p className="text-xs text-indigo-300">Esperando decisión...</p>}
-                </div>
-              )}
+              {cargando && <p className="text-xs text-slate-500">Abriendo bóveda...</p>}
             </div>
           </motion.div>
         </div>

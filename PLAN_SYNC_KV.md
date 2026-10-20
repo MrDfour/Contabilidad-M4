@@ -292,3 +292,68 @@ son piezas existentes o envolturas.
 - **DV-K-2:** la validación de `vaultId` corre DESPUÉS del matching de ruta, y las URLs con
   rutas relativas (`../`) las normaliza el constructor de `URL` antes del worker (404, no
   400). Cubierto en `worker/tests/relay.test.ts` con un id que sí llega a la validación.
+- **Fase 2 — Librería de cifrado: EJECUTADA (2026-10-20).** Creados `src/lib/crypto.ts`
+  (`encryptPayload`/`decryptPayload` AES-GCM 256 con Web Crypto, IV de 96 bits por blob,
+  Base64 por bloques para blobs grandes, `generarClaveSecreta`, `derivarClaveDesdeFrase`
+  con PBKDF2/100k para respaldos cifrados futuros y `sha256Bytes`) y `src/lib/mnemonic.ts`
+  (diccionario de 128 palabras único — se corrigió el 'estrella' duplicado de Teacher-Buddy
+  por 'abeto' —, `elegirFraseAleatoria`, `normalizarFrase` tolerante con tildes/comas/espacios,
+  `esFraseValida` y `credencialDesdeFrase` determinista: `vaultId = vlt_<hash12>` +
+  `secretKey = SHA-256(vaultId:frase)` en Base64 = 256 bits). 23 pruebas nuevas
+  (13 crypto + 10 mnemónica). Gate: lint ✓ / test ✓ (216, 20 archivos) / build ✓ /
+  escaneo anti-CJK ✓.
+- **DV-K-3 (resolución del esquema frase↔clave):** 6 palabras NO codifican reversiblemente
+  256 bits (~42 bits disponibles). Se adopta el esquema real de Teacher-Buddy: la frase es
+  la FUENTE de la credencial y ambos hashes la derivan de forma determinista en cualquier
+  dispositivo (sin transporte adicional del secreto). Consecuencia: el sobre cifrado NO
+  lleva `salt` (la clave siempre es de 256 bits; el PBKDF2 solo aplica a derivación desde
+  frase con salt explícito fuera del sobre, `derivarClaveDesdeFrase`). K-3 leído en ese
+  sentido (`{ ciphertext, iv, algoritmo, version }`).
+- **Fase 3 — Credenciales y modal de alistamiento: EJECUTADA (2026-10-20).** Creados
+  `src/services/vaultService.ts` (+ 10 pruebas) y reescrito `src/components/SyncModal.tsx`
+  como modal de bóveda. Servicio: `contasis_vault_creds` vía storage existente
+  (Electron/Capacitor/web), `crearBoveda` (frase aleatoria → credencial determinista),
+  `alistarDesdeQr` (`{v,url,vaultId,secretKey}`, válido https/http-local),
+  `alistarDesdeFrase` (deriva y COMPRA el vaultId esperado; rechazo sin escritura),
+  `desalistar`, `actualizarEtiqueta`, `verificarRelay` (/health, jamás lanza) y
+  `construirPayloadQr`. Modal: escritorio crea/muestra QR + frase + historial
+  (metadatos del relay) + "Desalistar" con confirmación inline; móvil escanea
+  (BarcodeScanner, igual que antes) o pega el payload/frase. `SyncModal` ya no recibe
+  `localState`/`onApplyRemoteState` (esas integraciones pasan a `App` en Fase 5);
+  `vite-env.d.ts` ganó `VITE_RELAY_URL` (K-12; el retiro de `VITE_UPSTASH_*` sigue
+  siendo Fase 6). Gate: lint ✓ / test ✓ (233, 21 archivos) / build ✓ / escaneo CJK ✓.
+- **DV-K-4:** los dispositivos alineados por QR guardan `frase: ''` (solo su creador
+  tiene la frase); la validación de credenciales lo tolera. Antes fallaría la
+  relectura por un mínimo de 4 caracteres erróneo — corregido a tope de 120.
+- **DV-K-5:** `alistarDesdeFrase` sin `vaultIdEsperado` crea/se adhiere la bóveda que
+  nace de la frase tecleada (escritorio y móvil); la búsqueda de `vaultIdEsperado`
+  es opcional para blindar la alineación contra frases de otras bóvedas.
+- **Fase 4 — Motor de auto-sync: EJECUTADA (2026-10-20).** Creado
+  `src/services/vaultSyncEngine.ts` con clase `VaultSyncEngine` (dependencias
+  inyectables: `fetchImpl`, `socketFactory`, `guardar`/`leer`) y lógica pura
+  exportada (`decidirFrenteDocumento`, `definirSiguienteVersion`,
+  `parseDocumentoRemoto` — espejo local del validador del worker, sin acople
+  carpeta app↔worker). Comportamiento: push con debounce 1.5 s + coalescing
+  120 s (marca temporal anotada AL ENTRAR a `publicar`, con anti-reingreso y
+  reinicio de la marca si falla, para reintentos sin castigo); pull pasivo 60 s
+  con `?version=` barato + WebSocket vivo con latido de 25 s y reconexión de
+  5 s; sondeo suspendido si hay socket vivo o pestaña oculta, y re-tirado al
+  volver `online`/`visible`. K-7: remoto ≤ versión local se ignora; remoto
+  mayor con local limpio auto-se aplica; con local sucio emite evento
+  `conflicto` y expone `resolverConflicto(mantenerLocal)` (elegir local
+  publica con `max(local, remoto) + 1`; aceptar remoto restaura y toma su
+  versión). K-11: documento en cola cuando `puedeEscribir()` es falso o el
+  motor está ocupado, desatado por `aplicarPendiente()`; anti-eco
+  (`aplicandoRemoto`) suprime `schedulePublicacion` durante la restauración.
+  Punteros persistentes: `contasis_vault_last_version` y `contasis_vault_dirty`
+  (la bandera se escribe DESPUÉS de limpiar `sucio` — DV interna de orden).
+  15 pruebas nuevas (decisiones puras, debounce/coalescing con timers
+  virtuales, push/pull/conflicto con cifrado real, cola canSave, anti-eco, WS
+  y persistencia). Gate: lint ✓ / test ✓ (248, 22 archivos) / build ✓ /
+  escaneo CJK ✓.
+- **DV-K-6:** el snapshot de la bóveda se guarda sin el envoltorio de
+  exportación (metadatos `version`/`generatedAt` del modal resumen a la fecha
+  del documento KV): el blob contiene el `BackupSnapshotV3` crudo
+  (`{empresas, activaId}`); `esBackupV3` valida antes de restaurar. La
+  versión entera del documento ES la de la bóveda (K-5), separada de la
+  "3.0.0" del formato de respaldo.

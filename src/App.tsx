@@ -547,14 +547,6 @@ export default function App() {
         isOpen={showSyncModal}
         onClose={() => setShowSyncModal(false)}
         isDesktop={isDesktopRuntime}
-        localState={{
-          journals: [],
-          polizas,
-          finalInventories,
-          empresaId: activaId ?? undefined,
-          empresaNombre: empresaActiva?.nombre
-        }}
-        onApplyRemoteState={applyRemoteSyncState}
         onNotify={(type, title, message) => setModalInfo({ type, title, message })}
       />
 
