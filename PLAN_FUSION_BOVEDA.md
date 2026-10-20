@@ -149,3 +149,16 @@ manual multi-dispositivo del escenario de uso.
 ## 7. Registro de fases / desviaciones
 
 (fechas y compromisos conforme se ejecutan; una entrada por fase)
+
+- **Fase A — COMPLETADA (2026-10-20).** `src/lib/unionBovedas.ts` con
+  `analizarFusion(local, remoto)` → `AnalisisFusion` (ediciones F-3, entrantes
+  directos, colisiones de folio con contraLocal/contraEntrantes, duplicados F-5,
+  empresasFaltantes F-4) y `aplicarFusion(local, remoto, decisiones)` →
+  `{ snapshot, resumen }`; decisión de folios por entrante
+  ('refoliar'/'pendiente'/'final'} con SOBRE-esquema base predeterminado:
+  colisionante sin decisión → 'pendiente', duplicado sin inclusión → excluido.
+  La pasada de re-foliación reordena el lote (emisores locales + entrantes del
+  conflicto) por `capturadoEn` con salto de folios tomados fuera del lote.
+  15 tests en `src/lib/unionBovedas.test.ts` (total del proyecto: 273). Gate
+  limpio (lint/tsc, vitest, build) y escaneo anti-CJK/mojibake sin hallazgos.
+- Fase B (motor) — PENDIENTE.
