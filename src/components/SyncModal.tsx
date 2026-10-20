@@ -47,6 +47,8 @@ interface SyncModalProps {
   isDesktop: boolean;
   /** Publicación forzada del snapshot (motor de auto-sync, Fase 4/5). Opcional. */
   onPublicar?: () => Promise<boolean>;
+  /** Último error crudo del motor (evento 'error'): el fallo real, no el genérico. */
+  detalleFallo?: string | null;
   onNotify: (type: 'success' | 'error', title: string, message: string) => void;
 }
 
@@ -74,6 +76,7 @@ export default function SyncModal({
   onClose,
   isDesktop,
   onPublicar,
+  detalleFallo,
   onNotify,
 }: SyncModalProps) {
   const [credenciales, setCredenciales] = useState<CredencialesBoveda | null>(null);
@@ -188,7 +191,13 @@ export default function SyncModal({
       if (ok) {
         onNotify('success', 'Estado publicado', 'El snapshot contable se publicó en la bóveda.');
       } else {
-        onNotify('error', 'Publicación fallida', 'El relay no respondió. Revisa la conexión.');
+        // Con detalle crudo del motor hay causa real (HTTP status, snapshot
+        // inválido…); sin él, el mensaje genérico de red.
+        onNotify(
+          'error',
+          'Publicación fallida',
+          detalleFallo || 'El relay no respondió. Revisa la conexión.',
+        );
       }
     } finally {
       setOcupado(false);

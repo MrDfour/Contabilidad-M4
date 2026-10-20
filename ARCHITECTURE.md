@@ -12,7 +12,7 @@
 > estructura. La tabla de archivos y la sección 9 (convenciones) son las que
 > envejecen más rápido.
 
-Versión del código: v0.8.0 · Licencia: Apache-2.0 · README de usuario: `README.md`
+Versión del código: v0.9.7 · Licencia: Apache-2.0 · README de usuario: `README.md`
 
 ---
 
@@ -22,13 +22,13 @@ App de gestión contable (español, dominio fiscal mexicano) que funciona en **t
 
 | Plataforma | Empaquetado | Punto de entrada extra |
 |---|---|---|
-| Web/navegador | Vite (build estático en `dist/`) | — |
+| Web/PWA (Cloudflare Pages) | Vite (build estático en `dist/`) + `vite-plugin-pwa` (manifest + service worker) | — |
 | Escritorio | Electron (instaladores con `electron-builder`) | `electron/main.js` |
-| Android | Capacitor (`capacitor.config.ts`) | — |
+| Android | Capacitor (`capacitor.config.ts`, proyecto `android/` committeado) | `MainActivity` (plugin `AppUpdater`) |
 
 Módulos funcionales: Pólizas Contables (captura principal: Ingreso/Egreso/Diario), Multi-Cliente (contador con varios clientes: cada cliente = workspace con catálogo/activos/inventario/pólizas/RFC propios), Libro Diario (reporte consolidado de solo lectura), Cuentas T, Balance General, Estado de Resultados, Catálogo de Cuentas, Activos Fijos con depreciación, Contabilidad Electrónica SAT (Anexo 24) y sincronización Escritorio ↔ Móvil.
 
-**Stack:** React 19 + TypeScript strict + Vite + Tailwind CSS v4 (sin componentes de UI externos; la UI es propia). Exportación con ExcelJS / jsPDF / html2canvas-pro. Sincronización con PeerJS (WebRTC) + Upstash Redis REST como respaldo.
+**Stack:** React 19 + TypeScript strict + Vite + Tailwind CSS v4 (sin componentes de UI externos; la UI es propia). Exportación con ExcelJS / jsPDF / html2canvas-pro. Sincronización con relay propio en Cloudflare Workers + KV (bóveda E2EE, §6). PWA con `vite-plugin-pwa` (autoUpdate).
 
 ---
 
@@ -36,19 +36,35 @@ Módulos funcionales: Pólizas Contables (captura principal: Ingreso/Egreso/Diar
 
 ```
 Contabilidad-M4/
-├── index.html                  # Plantilla HTML de Vite
-├── vite.config.ts              # Config Vite + plugin React + Tailwind (puerto 3000)
+├── index.html                  # Plantilla HTML de Vite (+ metas PWA/iOS: apple-touch-icon)
+├── vite.config.ts              # Config Vite + React + Tailwind + VitePWA (manifest/SW autoUpdate)
 ├── vitest.config.ts            # Config de la red de pruebas (espeja define/alias de Vite)
 ├── tsconfig.json               # TS strict, bundler moduleResolution
 ├── capacitor.config.ts         # Config de empaquetado Android
 ├── package.json                # Scripts + config de electron-builder (app: "main" arriba)
+├── public/
+│   ├── icon-192.png            # Icono PWA 192x192 (art del launcher Android sobre #0a0f1d)
+│   └── icon-512.png            # Icono PWA 512x512 (mismo método, propósito any+maskable)
+│
+├── android/                    # ⭐ Plataforma Capacitor COMMITTEADA (ya no se regenera en CI):
+│   ├── app/build.gradle        #   versionCode/versionName; el CI los re-escribe desde package.json
+│   │                           #   (fórmula maj*10000+min*100+pat; sin ello el APK nacía con
+│   │                           #   versionCode 1 fijo y Android rechazaba actualizarlo)
+│   └── app/src/main/java/…/    #   MainActivity (registra AppUpdater en load() ANTES de
+│   │                           #   super.load(); tras super.onCreate() el registro es un
+│   │                           #   no-op silencioso — bug real ya documentado) y
+│   │                           #   AppUpdaterPlugin: descarga del APK a cache con progreso
+│   │                           #   por eventos + instalación via FileProvider/ACTION_VIEW
+│   │                           #   (estilo Mihon: NewUpdateScreenModel).
 │
 ├── electron/
 │   ├── main.js                 # Proceso principal Electron: ventana, IPC de persistencia en disco,
 │   │                           #   auto-actualización (electron-updater), menú.
 │   └── preload.js              # Expone window.electronAPI (saveData/loadData/progress) al renderer.
 │
-├── .github/workflows/          # CI: release de Electron (electron-release.yml) y update de lockfile
+├── .github/workflows/          # CI: electron-release.yml (desktop WIN/LIN/MAC + APK Android
+│                               #   firmado + release con versionCode desde package.json);
+│                               #   deploy-relay.yml (Worker); test.yml; update-package-lock.yml
 │
 └── src/
     ├── main.tsx                # Montaje de React (renderRoot), importa index.css
@@ -108,7 +124,10 @@ Contabilidad-M4/
     │       ├── GlobalInfoModal.tsx     #   éxito/error + variante de sugerencia de respaldo,
     │       │                          #   exporta ModalInfo y BACKUP_SUGGESTION_TITLE
     │       ├── ConfirmDeleteModal.tsx  #   confirmación de borrado (exporta ConfirmDeleteData)
-    │       ├── UpdateAvailableModal.tsx # aviso de nueva versión (Browser.open de Capacitor vive aquí)
+    │       ├── UpdateAvailableModal.tsx # Aviso de nueva versión para APK Android MÁQUINA DE
+    │       │                          #   ESTADOS estilo Mihon: Descargar → Descargando %
+    │       │                          #   (via plugin nativo) → Instalar / Reintentar, changelog,
+    │       │                          #   saltar versión; en web cae a Browser.open (fallback)
     │       ├── AboutModal.tsx          #   "Acerca de" + puente a Feedback
     │       └── DownloadProgressBar.tsx #   barra de progreso de descarga (Electron updater)
     │
@@ -168,13 +187,19 @@ Contabilidad-M4/
     │   ├── vaultService.ts      # ⭐ Ciclo de vida de la bóveda E2EE (PLAN_SYNC_KV.md): credenciales
     │   │                        #   en `contasis_vault_creds`, alistamiento por QR/frase, desalistado,
     │   │                        #   verificación de relay /health y construcción del payload QR
+    │   ├── appUpdater.ts        # Envoltura tipada del plugin nativo AppUpdater (Android):
+    │   │                        #   descargarApkConProgreso (eventos progreso/completado/error),
+    │   │                        #   instalarApk, permisos de instalación y const esAndroidNativo
     │   └── vaultSyncEngine.ts   # ⭐ Motor de auto-sync (Fase 4): push con debounce 1.5 s + coalescing
     │                            #   120 s (K-5), sondeo pasivo 60 s + WebSocket vivo (K-6), regla de
     │                            #   conflicto "manos sucias" (K-7), cola hasta canSave y anti-echo por
     │                            #   huella SHA-256 (K-11/DV-K-7) — cipher en src/lib/crypto.ts
     │
     └── hooks/
-        ├── useCheckForUpdates.ts    # Consulta GitHub Releases vs versión actual
+        ├── useCheckForUpdates.ts    # Consulta GitHub Releases vs versión actual: SOLO APK Android
+        │                            #   (Electron usa electron-updater; la PWA usa el service
+        │                            #   worker de vite-plugin-pwa con autoUpdate). Respeta la
+        │                            #   versión "saltada" por el usuario (estilo Mihon)
         ├── useUpdateProgress.ts     # Progreso de descarga de la actualización (Electron)
         ├── useAppData.ts            # ⭐ HYDRATION + ORQUESTADOR MULTI-CLIENTE: boot con migración
         │                            #   ONE-SHOT legacy → empresa por defecto "Mi Empresa" (C-2,
@@ -313,11 +338,26 @@ La composición de las claves por cliente se hace SIEMPRE con el helper puro `cl
 - **Transporte único**: Worker propio en Cloudflare (`worker/src/index.ts`) + KV namespace (`CONTABILIDAD_VAULT`). Nada de PeerJS ni de credenciales de tercero; deploy por GitHub Actions (`workflow_dispatch`) con Tokens `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID`.
 - **Ciclo de vida** (`src/services/vaultService.ts`): credenciales por dispositivo en `contasis_vault_creds` vía `storageService`; alistamiento por **QR** (`{v,url,vaultId,secretKey}`) o **frase mnemónica determinista** de 6 palabras (la frase GENERA la misma credencial en cualquier dispositivo: `vaultId = vlt_<sha256(frase)[0..12]>`, `secretKey = SHA-256(vaultId:frase)`).
 - **Cifrado** (`src/lib/crypto.ts`): AES-GCM 256 con IV de 96 bits por blob; el relay SOLO ve blobs ilegibles. El sobre es `{ciphertext, iv, algoritmo, version}` sin salt.
-- **Motor** (`src/services/vaultSyncEngine.ts`, Fase 4): push con debounce 1.5 s + coalescing 120 s (K-5), sondeo pasivo de 60 s con consulta barata `?version=` + WebSocket en vivo (`/ws`) con degradación natural (K-6). Carga útil = snapshot v3 completo de TODAS las empresas (K-4); la restauración remota reusa el camino `restore` v3 (DV-C-3).
+- **Motor** (`src/services/vaultSyncEngine.ts`, Fase 4): push con debounce 1.5 s + coalescing 120 s (K-5; el flush manual `publicarAhora` y la resolución de conflicto lo SALTAN, y con publicación en vuelo esperan su resultado — bugs de 0.9.6 corregidos: el botón "Publicar ahora" mentía "El relay no respondió" tras una auto-publicación exitosa), sondeo pasivo de 60 s con consulta barata `?version=` + WebSocket en vivo (`/ws`) con degradación natural (K-6; el sondeo corre SIEMPRE — el broadcast del WS solo alcanza al mismo runtime/isolate del worker, el sondeo es la coherencia entre runtimes). Los eventos `error` del motor suben su detalle real hasta SyncModal (App.tsx conecta `falloBoveda`). Carga útil = snapshot v3 completo de TODAS las empresas (K-4); la restauración remota reusa el camino `restore` v3 (DV-C-3).
 - **Conflicto "manos sucias"** (K-7): remoto ≤ versión local → ignorar; remoto mayor y local limpio → auto-aplicar; ambos lados cambiaron → `ConflictoBovedaModal` ("Conservar datos locales" publica con `max+1` / "Sobrescribir con datos remotos"). El que gana deja una sola versión para todos.
 - **Historial** (K-8): `vlt:<id>:hist:<n>` máx 5, TTL 30 d; consultable en el modal (solo metadatos).
 - **Cuota** (K-5, DV-K-1): por push − 1 `put()` + hasta 5 `put()` de historial; sondeo = 1 `get()`, y con WebSocket conectado sondeo suspendido. Presupuesto ajustado al free tier de KV (1 000 escrituras/día, 100 000 lecturas/día).
 - **Indicador**: punto en el botón Sync del `AppHeader` (gris sin bóveda / verde al día / naranja pendiente / rojo conflicto o error).
+
+### Distribución y actualizaciones (escritorio · Android · PWA)
+
+Un solo build (`dist/`) alimenta las tres plataformas; cada una con su estrategia de update:
+
+| Plataforma | Distribución | Actualización |
+|---|---|---|
+| Escritorio | `electron-release.yml` → Release de GitHub (NSIS/DMG/AppImage) | `electron-updater` (`electron/main.js`), progreso en `DownloadProgressBar` |
+| Android APK | `electron-release.yml` job `build-android` → asset `.apk` del Release (requiere Secrets `ANDROID_KEYSTORE*`; el `versionCode` lo fija el CI desde `package.json`) | In-app estilo Mihon: `useCheckForUpdates` (solo Android nativo) → `UpdateAvailableModal` (máquina Descargar→%→Instalar) → plugin nativo `AppUpdater` (descarga con progreso a cache + `ACTION_VIEW` vía FileProvider; permiso `REQUEST_INSTALL_PACKAGES`) |
+| PWA (web) | Cloudflare Pages, integración Git del dashboard (build `npm run build`, output `dist`, env `VITE_RELAY_URL` en la config del proyecto) | Service worker de `vite-plugin-pwa` (`registerType: 'autoUpdate'`): precache de `**/*.{js,css,html,ico,png,svg,woff2}`, refresco al reabrir/visitar |
+
+Notas operativas duras ganadas en la Fase de updater:
+- `MainActivity.load()` registra `AppUpdaterPlugin` ANTES de `super.load()`: el Bridge de Capacitor crea la lista de plugins en `create()`; registrar después de `super.onCreate()` es un no-op silencioso ("plugin not implemented").
+- El runtime se limita al APK: `esAndroidNativo` (Capacitor nativo + plataforma android). En web/PWA y Electron el hook no corre (cada quien tiene su updater).
+- El fallo de descarga muestra el mensaje real en caja roja del modal (nativo reporta `Throwable` con nombre de excepción) — diagnósticado el caso "plugin no registrado" en pantalla.
 
 ---
 
@@ -332,6 +372,8 @@ VITE_RELAY_URL=     # URL base del relay propio (ej. https://…workers.dev) —
 > Ojo: esta app se originó como AI Studio applet; `GEMINI_API_KEY`/`APP_URL` son herencia de esa plantilla. Las variables usadas por Vite **deben** llevar el prefijo `VITE_`.
 >
 > **Relay de la bóveda:** `VITE_RELAY_URL` es opcional; sin ella el botón Sync avisa "Relay no configurado" y la app funciona igual. Para desarrollo local se incluye en un `.env` manual (gitignoreado). El despliegue del worker y su namespace KV está documentado en `worker/README.md`; las credenciales de deploy van como **GitHub Secrets** por el convenio del plan.
+>
+> **PWA en Cloudflare Pages (integración Git del dashboard):** el build de Pages corre con las variables definidas EN SU PROPIA configuración — los Secrets de GitHub (deploy del relay, firma del APK) no le alcanzan. Hoy la única variable requerida del proyecto Pages es `VITE_RELAY_URL` (el runtime habla HTTPS/WS contra el relay; el cache de KV vive del lado del Worker, sin tokens — ver §6 y `BACKLOG.md` para el blindaje del relay).
 
 ---
 
@@ -347,7 +389,9 @@ VITE_RELAY_URL=     # URL base del relay propio (ej. https://…workers.dev) —
 | `npm run test:watch` | Vitest en modo vigilante (re-ejecuta al guardar) |
 | `npm run electron:build` | `vite build` + electron-builder → instaladores en `release/` |
 
-Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), ExcelJS, **xlsx** (lectura de imports), jsPDF + jspdf-autotable, html2canvas-pro, peerjs + qrcode.react, @capacitor-mlkit/barcode-scanning, electron-updater, Motion, lucide-react, @google/genai.
+Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), ExcelJS, **xlsx** (lectura de imports), jsPDF + jspdf-autotable, html2canvas-pro, qrcode.react, vite-plugin-pwa, @capacitor-mlkit/barcode-scanning, @capacitor/android (proyecto `android/` committeado), electron-updater, Motion, lucide-react.
+
+El `npm run build` genera además del `dist/` clásico: `manifest.webmanifest`, `sw.js` y `registerSW.js` (PWA). En el APK el SW no aplica (Capacitor WebView no ejecuta service workers); en escritorio nadie lo registra — neutro.
 
 ---
 
@@ -364,7 +408,7 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 
 - Stack: `vitest` + `@testing-library/react` + `jest-dom`, **solo devDependencies**. Config en `vitest.config.ts` (espeja el `define __APP_VERSION__` de Vite); setup global en `src/test/setup.ts` (limpieza de DOM/storage entre tests + polyfills de jsdom: `crypto.randomUUID`, `URL.createObjectURL`).
 - **Ubicación:** cada `.test.ts(x)` vive COLOCADO junto al código que prueba (`lib/`, `hooks/`, `components/`). Vitest descubre `src/**/*.test.{ts,tsx}`.
-- **Niveles cubiertos (17 archivos / 174 tests):**
+- **Niveles cubiertos (22 archivos / 249 tests):**
   1. Unitarias puras: `lib/accounting.test.ts` (Cuentas T, saldos por naturaleza, depreciación, INPC truncado + validación/flatten/folios/entrada-a-póliza), `lib/format.test.ts` (normalización, parseo de importaciones, sanitización de input y contrato de `parseJournalImport`), `lib/satExport.test.ts` (XML PL re-parseado: folios reales, tipos 1/2/3, CompNal, escaping, filename) y `lib/empresas.test.ts` (C-2: composición de claves por cliente + normalizadores `arrayDe`/`objetoDe`).
   2. Funcional: `lib/export.test.ts` — el workbook Excel se RELEE con ExcelJS (solo `file-saver` mockeado) y el PDF se valida por firma `%PDF-` real.
   3. Migraciones: `lib/migrateJournalsToPolizas.test.ts` (determinismo congelado: folios por tipo, ids, CFDI/RFC) y `lib/migrateCatalogToGlobal.test.ts` (D-12: dedup por código, idempotencia, orden).
@@ -394,7 +438,9 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 | Cambiar navegación de pestañas / tab inicial | `src/lib/navigation.ts` (BASIC_NAV_TABS, FISCAL_NAV_TABS, DEFAULT_TAB) |
 | Cambiar XML/TXT SAT o DIOT | `src/lib/satExport.ts` (el XML de Pólizas consume PÓLIZAS reales desde ContabilidadElectronicaView: folio real = NumUnIdenPol, Fase 6) |
 | Cambiar reglas de persistencia | `src/services/storageService.ts` (+ IPC en `electron/main.js`) |
-| Cambiar lógica de sync | `src/services/syncService.ts` (motor) y `SyncModal.tsx` (UI) |
+| Cambiar lógica de sync | `src/services/vaultSyncEngine.ts` (motor) · `SyncModal.tsx` / `ConflictoBovedaModal.tsx` (UI) · `src/services/vaultService.ts` (credenciales/opera) |
+| Cambiar el updater in-app de Android | plugin nativo `android/app/src/main/java/…/AppUpdaterPlugin.java` (descarga/instalación) · `src/services/appUpdater.ts` (puente JS) · `src/components/modals/UpdateAvailableModal.tsx` (UX máquina de estados) |
+| Cambiar la build/distribución (desktop · APK · PWA) | `.github/workflows/electron-release.yml` (desktop + APK + release) · manifest/PWA en `vite.config.ts` (`VitePWA`) |
 | Agregar una vista/nueva pantalla | Nuevo componente + switch en `App.tsx` |
 | Cambiar ventana Electron / autoupdater | `electron/main.js` |
 | Agregar/modificar lógica sujeta a pruebas | Colocar/actualizar el `.test.ts(x)` COLOCADO junto al módulo (regla y niveles en §9 "Red de pruebas"); `npm run lint && npm run test` en verde antes de commitear |

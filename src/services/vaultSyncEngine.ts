@@ -182,6 +182,8 @@ export class VaultSyncEngine {
   private temporizadorSondeo: ReturnType<typeof setInterval> | null = null;
   private temporizadorLatido: ReturnType<typeof setInterval> | null = null;
   private temporizadorReconexion: ReturnType<typeof setTimeout> | null = null;
+  /** Publicación en vuelo: `publicarAhora` la espera en vez de rendirse (K-5). */
+  private promesaEnVuelo: Promise<boolean> | null = null;
 
   private listeners = new Set<(e: EventoMotor) => void>();
 
@@ -318,32 +320,67 @@ export class VaultSyncEngine {
     }, DEBOUNCE_PUBLICACION_MS);
   }
 
-  /** Publica el snapshot YA (Flush forzado/Botón del modal). Ignora el gap. */
+  /**
+   * Publica el snapshot YA (Flush forzado/Botón del modal).
+   * BUG corregido: el docstring decía "Ignora el gap" pero la implementación
+   * caía en el coalescing de 120 s y regresaba `false` — el modal lo leía como
+   * "El relay no respondió" cuando en realidad la publicación anterior acababa
+   * de triunfar (o la de en vuelo). Ahora SÍ ignora el gap y, si hay una
+   * publicación en vuelo, espera su resultado en lugar de rendirse.
+   */
   async publicarAhora(): Promise<boolean> {
     if (this.temporizadorDebounce) {
       clearTimeout(this.temporizadorDebounce);
       this.temporizadorDebounce = null;
     }
-    return this.publicar();
+    if (this.temporizadorGap) {
+      clearTimeout(this.temporizadorGap);
+      this.temporizadorGap = null;
+    }
+    return this.publicar({ forzar: true });
   }
 
-  private async publicar(): Promise<boolean> {
+  /**
+   * Cuerpo de publicación. `forzar` (flush del modal) salta el coalescing K-5:
+   * el gap existe para limitar auto-publicaciones en ráfaga, no para censurar
+   * la orden explícita del usuario.
+   */
+  private async publicar(opciones?: { forzar?: boolean }): Promise<boolean> {
     const credencial = this.credencial;
     if (!credencial || !this.activo) return false;
     if (this.estado === 'aplicando') return false; // conflicto en curso (K-7: decide la UI)
-    if (this.estado === 'publicando') return false; // anti-reingreso (void async)
+    if (this.estado === 'publicando') {
+      // Anti-reingreso honesto: NO mentir — esperar el desenlace del vuelo.
+      return this.promesaEnVuelo ?? false;
+    }
 
     // Coalescing: si publicamos recientemente, posponer (K-5) salvo flush forzado.
-    const trasDebounce = Date.now() - this.ultimaPublicacion;
-    const restante = GAP_ESCRITURA_MS - trasDebounce;
-    if (restante > 0 && this.ultimaPublicacion > 0) {
-      if (this.temporizadorGap) clearTimeout(this.temporizadorGap);
-      this.temporizadorGap = setTimeout(() => {
-        this.temporizadorGap = null;
-        void this.publicar();
-      }, restante);
-      return false;
+    if (!opciones?.forzar) {
+      const trasDebounce = Date.now() - this.ultimaPublicacion;
+      const restante = GAP_ESCRITURA_MS - trasDebounce;
+      if (restante > 0 && this.ultimaPublicacion > 0) {
+        if (this.temporizadorGap) clearTimeout(this.temporizadorGap);
+        this.temporizadorGap = setTimeout(() => {
+          this.temporizadorGap = null;
+          void this.publicar();
+        }, restante);
+        return false;
+      }
     }
+
+    const vuelo = this.publicacionReal();
+    this.promesaEnVuelo = vuelo;
+    try {
+      return await vuelo;
+    } finally {
+      if (this.promesaEnVuelo === vuelo) this.promesaEnVuelo = null;
+    }
+  }
+
+  /** Cuerpo efectivo de una publicación (PUT al relay). Llamar vía publicar(). */
+  private async publicacionReal(): Promise<boolean> {
+    const credencial = this.credencial;
+    if (!credencial || !this.activo) return false;
 
     const relayUrl = this.puente.relayUrl();
     if (!relayUrl) {
@@ -419,7 +456,13 @@ export class VaultSyncEngine {
   private async sondeoPasivo(): Promise<void> {
     if (!this.activo || !this.credencial) return;
     if (document.hidden) return;
-    if (this.socketActivo()) return; // WebSocket vivo: actualizaciones en vivo ya cubren
+    // BUG corregido: antes `if (this.socketActivo()) return` apagaba el sondeo
+    // cuando el WS parecía vivo — pero el broadcast del relay solo retransmite
+    // dentro del MISMO runtime/isolate (Map en memoria). Dispositivos servidos
+    // por runtimes distintos quedaban sordos: nunca recibían remote_state NI
+    // sondeaban. El sondeo barato (1 GET con ?version=N) es la red de
+    // coherencia entre runtimes (ver index.ts del worker) y corre SIEMPRE;
+    // el WS solo aporta la latencia ~0 dentro del mismo runtime.
     if (this.pendiente) {
       this.aplicarPendiente();
       return;
@@ -448,6 +491,7 @@ export class VaultSyncEngine {
 
   // --- Socket en vivo (K-6) ---------------------------------------------------
 
+  /** Será útil para telemetría/UI; hoy el sondeo corre siempre (ver sondeoPasivo). */
   private socketActivo(): boolean {
     return this.socket !== null;
   }
@@ -588,7 +632,9 @@ export class VaultSyncEngine {
     if (mantenerLocal) {
       // Se publica el estado local TOMANDO en cuenta la versión del remoto:
       // quien elige local "gana" y ambos lados terminan con la misma versión nueva.
-      const ok = await this.publicar();
+      // Forzado como publicarAhora: la resolución es acción explícita del usuario
+      // y no debe morderse el coalescing de 120 s.
+      const ok = await this.publicar({ forzar: true });
       if (ok) {
         this.conflicto = null;
         this.setEstado('al dia');

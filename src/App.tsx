@@ -222,6 +222,8 @@ export default function App() {
   // Única puerta con el dominio (K-11): el motor solo consume el snapshot v3 y
   // pide restauración por el applier compartido; NUNCA toca claves de dominio.
   const [indicadorBoveda, setIndicadorBoveda] = useState<'sin' | 'ok' | 'pendiente' | 'conflicto' | 'error'>('sin');
+  /** Último error del motor (evento 'error'): lo muestra el SyncModal en bruto. */
+  const [falloBoveda, setFalloBoveda] = useState<string | null>(null);
   const [conflictoBoveda, setConflictoBoveda] = useState<ConflictoBovedaVista | null>(null);
   const hasLoadedRef = useRef(false);
   hasLoadedRef.current = hasLoaded; // fresco por render (recarga C-4)
@@ -257,6 +259,18 @@ export default function App() {
         setConflictoBoveda({ version: evento.version, deviceLabel: evento.deviceLabel, updatedAt: evento.updatedAt });
         setIndicadorBoveda('conflicto');
         return;
+      }
+      if (evento.tipo === 'error') {
+        // El detalle real (HTTP status, snapshot inválido…) sobrevive hasta el
+        // modal de sincronización: el genérico "El relay no respondió" escondía
+        // la causa. console.error para trazabilidad en consola.
+        console.error('[bóveda] fallo del motor:', evento.detalle);
+        setFalloBoveda(evento.detalle);
+        setIndicadorBoveda('error');
+        return;
+      }
+      if (evento.tipo === 'publicado') {
+        setFalloBoveda(null);
       }
       if (evento.tipo === 'cambio') {
         const detalle = evento.detalle ?? '';
@@ -599,6 +613,7 @@ export default function App() {
         isDesktop={isDesktopRuntime}
         onNotify={(type, title, message) => setModalInfo({ type, title, message })}
         onPublicar={async () => (motorRef.current ? motorRef.current.publicarAhora() : false)}
+        detalleFallo={falloBoveda}
       />
 
       <ConflictoBovedaModal

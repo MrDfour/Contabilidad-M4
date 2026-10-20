@@ -11,6 +11,7 @@ import {
   parseDocumentoRemoto,
   DEBOUNCE_PUBLICACION_MS,
   GAP_ESCRITURA_MS,
+  SONDEO_MS,
   type DocumentoRemoto,
   type EventoMotor,
   type PuenteBoveda,
@@ -197,6 +198,68 @@ describe('vaultSyncEngine: push con debounce y coalescing', () => {
 
     await vi.advanceTimersByTimeAsync(GAP_ESCRITURA_MS);
     await vi.waitFor(() => expect(puestas).toBe(trasPrimero + 1));
+
+    motor.parar();
+  });
+
+  it('publicarAhora DENTRO del gap publica ya (el coalescing no censura el flush)', async () => {
+    // BUG hallado en producción 0.9.6: el botón "Publicar ahora" caía en el
+    // coalescing de 120 s y regresaba false — el modal lo mostraba como
+    // "El relay no respondió" cuando la publicación previa había triunfado.
+    const puente = fabricarPuente();
+    let puestas = 0;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') puestas += 1;
+      return new Response('{"success":true}', { status: 200 });
+    }) as unknown as typeof fetch;
+    const motor = new VaultSyncEngine(puente, { fetchImpl });
+    await motor.activar();
+
+    motor.schedulePublicacion();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
+    await vi.waitFor(() => expect(puestas).toBe(1));
+
+    // Edición dentro del gap: el flujo automático queda retenido…
+    motor.schedulePublicacion();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
+    expect(puestas).toBe(1);
+
+    // …pero el flush explícito del usuario atraviesa el coalescing.
+    const ok = await motor.publicarAhora();
+    expect(ok).toBe(true);
+    await vi.waitFor(() => expect(puestas).toBe(2));
+
+    motor.parar();
+  });
+
+  it('publicarAhora mientras vuela una publicación espera su desenlace, no se rinde', async () => {
+    const puente = fabricarPuente();
+    let resolver: ((respuesta: Response) => void) | null = null;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        // El PRIMER PUT queda en vuelo a mano (deferred); los siguientes
+        // responden al instante (el anti-eco vale para ediciones, no aquí).
+        if (!resolver) {
+          return new Promise<Response>((res) => {
+            resolver = res;
+          });
+        }
+        return new Response('{"success":true}', { status: 200 });
+      }
+      return new Response(JSON.stringify({ success: true, noChanges: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const motor = new VaultSyncEngine(puente, { fetchImpl });
+    await motor.activar();
+
+    motor.schedulePublicacion();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
+    await vi.waitFor(() => expect(resolver).not.toBeNull()); // PUT en vuelo
+
+    // Pulsar el botón con el PUT en vuelo: la llamada se acopla a la promesa
+    // del vuelo (antes regresaba false de pura gana — "relay no respondió").
+    const manual = motor.publicarAhora();
+    resolver?.(new Response('{"success":true}', { status: 200 }));
+    expect(await manual).toBe(true);
 
     motor.parar();
   });
@@ -425,6 +488,38 @@ describe('vaultSyncEngine: WebSocket en vivo', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(puente.registro.aplicados).toHaveLength(0);
+    motor.parar();
+  });
+
+  it('el sondeo corre AUNQUE el WebSocket esté abierto (coherencia entre runtimes)', async () => {
+    // BUG hallado para el symptom "no se ven entre sí": sondeoPasivo se
+    // apagaba con socketActivo() — pero el broadcast del relay solo retransmite
+    // dentro del MISMO runtime/isolate. Dispositivos servidos por runtimes
+    // distintos quedaban sordos para siempre.
+    const puente = fabricarPuente();
+    const doc = await docRemoto(7);
+    const socket = fabricarSocket();
+    let gets = 0;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') return new Response('{"success":true}', { status: 200 });
+      gets += 1;
+      return new Response(
+        JSON.stringify({ success: true, noChanges: false, payload: doc }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    const motor = new VaultSyncEngine(puente, { fetchImpl, socketFactory: () => socket });
+    await motor.activar();
+
+    // El sondeo inicial barre el documento remoto aunque el socket se abra luego.
+    await vi.waitFor(() => expect(puente.registro.aplicados).toHaveLength(1));
+    expect(motor.getVersionLocal()).toBe(7);
+
+    // El intervalo sigue tirando GETs con el WS vivo (antes estaba dormido).
+    const trasPrimero = gets;
+    await vi.advanceTimersByTimeAsync(SONDEO_MS);
+    await vi.waitFor(() => expect(gets).toBeGreaterThan(trasPrimero));
+
     motor.parar();
   });
 });
