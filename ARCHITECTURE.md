@@ -66,21 +66,20 @@ Contabilidad-M4/
     │   │   ├── AppHeader.tsx           #   sticky header + toggle Básico/Fiscal (layoutId="app-mode-indicator",
     │   │   │                          #   riesgo R4: existe en móvil y desktop; verifica en ambos)
     │   │   └── AppFooter.tsx           #   botones de respaldo/restaurar/acerca de/feedback
-    │   ├── journal/                  # Deconstrucción de JournalView (Fase 4): JournalView queda como
-    │   │   │                         #   COMPOSITOR (~240 lín): toolbar de export/import, flujo de edición
-    │   │   │                         #   (nuevo vs editar) y wrappers de animación del formulario.
-    │   │   │                         #   Ruta de RETIRO (Fase 4 PLAN_POLIZAS): su captura pasa a polizas/
-    │   │   ├── JournalTabs.tsx         #   pestañas de diarios + renombrado inline (estado local propio)
-    │   │   ├── EntryList.tsx           #   tabla del diario agrupada por período mensual (Intl es-ES);
-    │   │   │                          #   dueña del estado de asientos expandidos/períodos colapsados
-    │   │   ├── EntryCard.tsx           #   filas de UN asiento (colapsado "N Mov.") + filas de movimientos
-    │   │   ├── EntryForm.tsx           #   formulario de asiento: partida doble en vivo, partidas por lote,
-    │   │   │                          #   y lectura de CFDI XML (UUID/RFC/Total + modal de discrepancia)
-    │   │   └── AccountPicker.tsx       #   SearchableAccountSelect (búsqueda por nombre/código);
-    │   │                              #   también lo consumen FixedAssetsView y polizas/PolizaForm
+    │   ├── journal/                  # ⚠️ LEGACY retirado de la ruta viva (Fase 4 PLAN_POLIZAS).
+    │   │   │                         #   JournalView.tsx ya NO compone estos elementos; HOJA DE RETIRO
+    │   │   │                         #   en Fase 5 (borrar archivos). SOLO AccountPicker sigue vivo.
+    │   │   ├── JournalTabs.tsx         #   [RETIRO Fase 5] pestañas de diarios + renombrado inline
+    │   │   ├── EntryList.tsx           #   [RETIRO Fase 5] tabla del diario agrupada por período
+    │   │   ├── EntryCard.tsx           #   [RETIRO Fase 5] filas de UN asiento + movimientos
+    │   │   ├── EntryForm.tsx           #   [RETIRO Fase 5] formulario de asiento (su batería de tests
+    │   │   │                          #   migró a polizas/PolizaForm.test.tsx en Fase 3)
+    │   │   └── AccountPicker.tsx       #   SearchableAccountSelect — ÚNICO superviviente del folder:
+    │   │                              #   lo consumen FixedAssetsView y polizas/PolizaForm
     │   ├── polizas/                  # ⭐ MÓDULO DE PÓLIZAS (Fase 3 PLAN_POLIZAS): captura principal.
     │   │   │                         #   Vistas puras; los datos viven en hooks/usePolizas (anti-R1)
-    │   │   ├── PolizaView.tsx          #   contenedor: toolbar (Nueva Póliza), filtro+búsqueda y modales
+    │   │   ├── PolizaView.tsx          #   contenedor: toolbar (Nueva Póliza + Plantilla + Importar
+    │   │   │                          #   Excel D-11), filtro+búsqueda, modales de captura/impresión
     │   │   ├── PolizaFilter.tsx        #   chips Todas/Ingresos/Egresos/Diario + buscador folio/concepto
     │   │   ├── PolizaList.tsx          #   listado con estados vacíos diferenciados (filtro vs sin datos)
     │   │   ├── PolizaCard.tsx          #   tarjeta: folio ING/EGR/DIA, distintivo de tipo, desglose de
@@ -118,13 +117,18 @@ Contabilidad-M4/
     │   ├── accounting.ts        # ⭐ Funciones PURAS de derivación contable (sin React/storage):
     │   │                        #   buildTAccountsData, computeAccountBalances (saldo por naturaleza
     │   │                        #   deudora/acreedora), calculateMonthlyDepreciation,
-    │   │                        #   calculateFiscalDeduction (INPC truncado a 4 dec, Art. 31 LISR)
+    │   │                        #   calculateFiscalDeduction (INPC truncado a 4 dec, Art. 31 LISR),
+    │   │                        #   + pólizas: validatePolizaBalance, flattenPolizasToJournalEntries
+    │   │                        #   (D-6), nextPolizaFolio/formatPolizaFolio, entryToPolizaInput
+    │   │                        #   (D-10) y entriesToPolizasDiarias (D-11)
     │   ├── navigation.ts        # Tipos de navegación compartidos: AppMode, AppTab, NavigationTab,
-    │   │                        #   FISCAL_NAV_TABS (pestañas del modo fiscal). Consumido por App y layout/
-    │   ├── importEntriesFromExcel.ts  # Parser PURO del libro Excel del Libro Diario (valida encabezados
-    │   │                        #   de la plantilla, carry-forward de celdas, groupKey por ASIENTO_ID,
+    │   │                        #   DEFAULT_TAB ('polizas'), BASIC_NAV_TABS y FISCAL_NAV_TABS.
+    │   │                        #   Consumido por App y layout/
+    │   ├── importEntriesFromExcel.ts  # Parser PURO de la plantilla Excel (valida encabezados,
+    │   │                        #   carry-forward de celdas, groupKey por ASIENTO_ID,
     │   │                        #   cuentas por nombre normalizado/código y serial de Excel para fechas);
-    │   │                        #   devuelve { entries, unmatchedAccounts } — el UI (JournalView) arma modales
+    │   │                        #   devuelve { entries, unmatchedAccounts } — el UI (polizas/PolizaView
+    │   │                        #   desde Fase 4) arma los modales y convierte vía entriesToPolizasDiarias
     │   ├── migrateJournalsToPolizas.ts # Migración ONE-SHOT diarios legacy → pólizas (PURA, sin storage;
     │   │                        #   folios por tipo, ids reaprovechados, CFDI/RFC preservados).
     │   │                        #   Se invoca solo desde useAppData; ver PLAN_POLIZAS.md D-2/D-3/D-4
@@ -138,10 +142,10 @@ Contabilidad-M4/
     │   # ⭐ Red de pruebas (Fase 5): cada .test.ts(x) COLOCADO junto a lo que prueba,
     │   #    descubierto por src/**/*.test.{ts,tsx} (ver sección 9, "Red de pruebas"):
     │   ├── lib/accounting.test.ts · lib/format.test.ts · lib/export.test.ts
-    │   ├── lib/migrateJournalsToPolizas.test.ts
+    │   ├── lib/migrateJournalsToPolizas.test.ts · lib/navigation.test.ts
     │   ├── hooks/useJournals.test.ts · useCatalog.test.ts · useAppData.test.ts
     │   │     · useBackup.test.ts · useInventories.test.ts · usePolizas.test.ts
-    │   ├── components/journal/EntryForm.test.tsx
+    │   ├── components/polizas/PolizaForm.test.tsx · components/JournalView.test.tsx
     │   └── test/setup.ts        # Setup global: limpieza entre tests + polyfills jsdom
     │
     ├── services/
@@ -178,16 +182,17 @@ Regla general: **el estado vive en hooks de dominio (uno por clave de storage, v
 ## 3. Flujo de datos principal
 
 ```
-Usuario → PolizasView (captura principal, Fase 3 PLAN_POLIZAS) → usePolizas (estado `contasis_polizas`)
-        → JournalView (captura legacy en coexistencia hasta Fase 4) → App.tsx (estado journals)
-        → TAccountsView / BalanceSheetView / ProfitLossView (derivaciones puras de lib/accounting.ts sobre journals + accounts)
-        → FixedAssetsView → genera asiento automático → journals
+Usuario → PolizasView (captura PRINCIPAL: manual + importación Excel D-11) → usePolizas (estado `contasis_polizas`)
+        → App.tsx: proyección = flattenPolizasToJournalEntries(pólizas ordenadas fecha+folio)
+        → TAccountsView / BalanceSheetView / ProfitLossView / CatalogView / Cont. Electrónica (consumen la proyección, NO los diarios)
+        → JournalView (REPORT de solo lectura sobre las mismas pólizas cronológicas)
+        → ProfitLossView/FixedAssetsView (capturas programáticas) → createProgrammaticPoliza (D-10) → usePolizas
 ```
 
 - `App.tsx` es el orquestador: retiene navegación (`appMode`, `activeTab`), modales, activos fijos (`contasis_fixed_assets`, único dominio pendiente de migrar a hook) y compone los hooks de dominio.
-- **Ventana de coexistencia (Fase 3 de `PLAN_POLIZAS.md`):** el tab inicial es `polizas` (`DEFAULT_TAB` en `lib/navigation.ts`), pero los reportes (Cuentas T, Balance, Estado de Resultados, Cont. Electrónica) se siguen derivando EXCLUSIVAMENTE de los diarios. Las pólizas nuevas NO aparecen en el Libro Diario ni en los reportes hasta la Fase 4 (flatten + reconstrucción de JournalView como reporte).
-- Los saldos de Cuentas T, Balance y Estado de Resultados **no se almacenan**: se recalculan en cada render a partir de `journals` (vía `lib/accounting.ts`).
-- `useAppData` carga/migra pólizas (Fase 2 de `PLAN_POLIZAS.md`): lee `contasis_polizas` o ejecuta la migración ONE-SHOT desde los diarios + catálogo. Desde la Fase 3 el módulo de Pólizas tiene UI de captura propia.
+- **Cutover de reportes (Fase 4 de `PLAN_POLIZAS.md`):** Cuentas T, Balance, Estado de Resultados, Catálogo (guard de cuentas en uso) y Cont. Electrónica se derivan de la PROYECCIÓN de pólizas (Orden cronológico: fecha + folio). El Libro Diario es un reporte de solo lectura con las MISMAS pólizas. Las capturas programáticas pasan por `createProgrammaticPoliza` (adaptación `entryToPolizaInput` en App).
+- Los saldos de Cuentas T, Balance y Estado de Resultados **no se almacenan**: se recalculan en cada render a partir de la proyección de pólizas (vía `lib/accounting.ts`).
+- `useAppData` carga/migra pólizas (Fase 2 de `PLAN_POLIZAS.md`): lee `contasis_polizas` o ejecuta la migración ONE-SHOT desde los diarios + catálogo.
 
 ### Propiedad de claves de storage (anti-R1)
 
@@ -312,7 +317,7 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
   1. Unitarias puras: `lib/accounting.test.ts` (Cuentas T, saldos por naturaleza, depreciación, INPC truncado + validación/flatten/folios de pólizas) y `lib/format.test.ts` (normalización, parseo de importaciones, sanitización de input y contrato de `parseJournalImport`).
   2. Funcional: `lib/export.test.ts` — el workbook Excel se RELEE con ExcelJS (solo `file-saver` mockeado) y el PDF se valida por firma `%PDF-` real.
   3. Hooks: `hooks/useJournals` (CRUD + extremos de `moveEntry` + `hydrate` que persiste SIEMPRE, incluso `[]`), `hooks/usePolizas` (CRUD de pólizas, folios por tipo, tipo congelado en edición, hydrate persistente, puerta `canSave`), `useCatalog` (recuperación de globales, dedup por `code`, debounce gated por `canSave`), `useAppData` (hidratación, migración de pólizas y fallback corrupto), `useBackup` (vigía 7 días, export con inspección del JSON, import corrupto NO restaura), `useInventories` (sin auto-guardado por diseño, `hydrateFromRemote` persiste), `lib/migrateJournalsToPolizas.test.ts` (migración determinista de diarios → pólizas), `lib/navigation.test.ts` (DEFAULT_TAB = polizas, composición de pestañas básicas/fiscales).
-  4. Render: `components/journal/EntryForm.test.tsx` y `components/polizas/PolizaForm.test.tsx` (partida doble en vivo: 0/0 bloqueado, diferencia visible en un solo nodo, cuadre habilita, campos CFDI solo en fiscal, mín. 2 partidas, tipo congelado al editar D-8, elaboro/autorizo al input).
+  4. Render: `components/polizas/PolizaForm.test.tsx` (partida doble en vivo: 0/0 bloqueado, diferencia visible en un solo nodo, cuadre habilita, campos CFDI solo en fiscal, mín. 2 partidas, tipo congelado al editar D-8, elaboro/autorizo al input) y `components/JournalView.test.tsx` (contrato de solo lectura: sin captura, fila por partida con folio/tipo, 0/0 no genera fila).
 - **Regla de oro:** cualquier cambio en `lib/accounting.ts`, `lib/format.ts`, `lib/importEntriesFromExcel.ts` o los hooks de dominio DEBE dejar `npm run lint && npm run test` en verde antes de commitear; si el cambio es intencional de comportamiento, se actualiza el test en el MISMO commit.
 - *Quirk de entorno documentado:* Node 22+ trae un `localStorage` global nativo que en Windows puede instalarse sin ruta válida; `setup.ts` rebindea al de jsdom (o memoria) si hace falta. No afecta navegador/Electron.
 - Cobertura deliberadamente FUERA de alcance: render completo de `App` (requiere mock de sync/Upstash; `isDesktopRuntime` impide probar el rol escritorio en browser — mejora futura documentada en §6) y el rechazo de duplicados de `CatalogView` en render (mismo aserto ya cubierto a nivel de hook en `handleCombinedAccountsUpdate`).
@@ -328,8 +333,9 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 | Cambiar presentación de Balance / P&L / Cuentas T | `src/components/BalanceSheetView.tsx` / `ProfitLossView.tsx` / `TAccountsView.tsx` |
 | Cambiar formato de montos/moneda o formateo de inputs | `src/lib/format.ts` |
 | Cambiar formato de reportes Excel/PDF | `src/lib/utils.ts` |
-| Cambiar parseo/formato del Excel de IMPORTACIÓN del Diario | `src/lib/importEntriesFromExcel.ts` (lógica) · `JournalView.tsx` (modales) |
+| Cambiar parseo/formato del Excel de IMPORTACIÓN | `src/lib/importEntriesFromExcel.ts` (lógica) · `polizas/PolizaView.tsx` (modales, D-11) · `lib/accounting.ts` (`entriesToPolizasDiarias`) |
 | Capturar/editar/imprimir pólizas contables | `src/components/polizas/` (UI) · `src/hooks/usePolizas.ts` (reglas: folios, validación, tipo congelado) · `src/lib/accounting.ts` (validación partida doble, folio formateado) |
+| Ajustar el reporte del Libro Diario (solo lectura y sus exports) | `src/components/JournalView.tsx` (fecha/folio/tipo/cuenta/concepto/debe/haber) |
 | Cambiar navegación de pestañas / tab inicial | `src/lib/navigation.ts` (BASIC_NAV_TABS, FISCAL_NAV_TABS, DEFAULT_TAB) |
 | Cambiar XML/TXT SAT o DIOT | `src/lib/satExport.ts` |
 | Cambiar reglas de persistencia | `src/services/storageService.ts` (+ IPC en `electron/main.js`) |

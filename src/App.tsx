@@ -10,7 +10,7 @@ import { useUpdateProgress } from './hooks/useUpdateProgress';
 import {
   FixedAsset
 } from './types';
-import { buildTAccountsData, computeAccountBalances, formatPolizaFolio } from './lib/accounting';
+import { buildTAccountsData, computeAccountBalances, formatPolizaFolio, flattenPolizasToJournalEntries, entryToPolizaInput } from './lib/accounting';
 import FeedbackModal from './components/FeedbackModal';
 import SyncModal from './components/SyncModal';
 import { GlobalInfoModal, type ModalInfo } from './components/modals/GlobalInfoModal';
@@ -79,10 +79,9 @@ export default function App() {
   const journalsState = useJournals();
   const { journals, activeJournalId, setActiveJournalId, activeJournal } = journalsState;
 
-  // Pólizas (Fases 2-3 de PLAN_POLIZAS.md): canal de carga/migración vía useAppData;
-  // desde Fase 3 la captura vive en el módulo de Pólizas (PolizaView).
+  // Pólizas (Fases 2-4 de PLAN_POLIZAS.md): fuente de TODAS las derivaciones.
   const polizasState = usePolizas({ canSave: hasLoaded });
-  const { polizas, createPoliza, updatePoliza, deletePoliza, setPolizas, markMigrated } = polizasState;
+  const { polizas, createPoliza, updatePoliza, deletePoliza, createProgrammaticPoliza, importPolizas, setPolizas, markMigrated } = polizasState;
 
   const inventoriesState = useInventories({ activeJournalId });
   const { finalInventories, setFinalInventories, finalInventory, handleSetFinalInventory } = inventoriesState;
@@ -146,25 +145,27 @@ export default function App() {
   }, [appMode, activeTab]);
 
   const hasActiveJournal = Boolean(activeJournal);
-  const entries = activeJournal?.entries || [];
+
+  /**
+   * CUTOVER (Fase 4 de PLAN_POLIZAS.md): TODAS las derivaciones se alimentan
+   * de las pólizas, NO del diario activo. Proyección aplanada de las pólizas
+   * ordenadas cronológicamente (fecha + folio, desempate determinista).
+   */
+  const polizasCronologicas = useMemo(
+    () => [...polizas].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.folio - b.folio),
+    [polizas]
+  );
+  const proyeccion = useMemo(
+    () => flattenPolizasToJournalEntries(polizasCronologicas),
+    [polizasCronologicas]
+  );
 
   // Derived Data: T-Accounts + Balances (funciones puras en lib/accounting.ts)
-  const tAccountsData = useMemo(() => buildTAccountsData(entries), [entries]);
+  const tAccountsData = useMemo(() => buildTAccountsData(proyeccion), [proyeccion]);
   const accountBalances = useMemo(
     () => computeAccountBalances(tAccountsData, combinedAccounts),
     [tAccountsData, combinedAccounts]
   );
-
-  const {
-    addEntry,
-    updateEntry,
-    moveEntry,
-    deleteEntry,
-    importEntries,
-    createJournal,
-    renameJournal,
-    deleteJournal
-  } = journalsState;
 
   const handleConfirmDelete = () => {
     if (!confirmDelete) return;
@@ -251,6 +252,7 @@ export default function App() {
                       appMode={appMode}
                       onCreate={createPoliza}
                       onUpdate={updatePoliza}
+                      onImportPolizas={importPolizas}
                       onDeleteRequest={(p) => {
                         setConfirmDelete({
                           type: 'poliza',
@@ -272,36 +274,7 @@ export default function App() {
                     exit={{ opacity: 0, y: -10 }}
                   >
                     <JournalView
-                      journals={journals}
-                      activeJournalId={activeJournalId}
-                      appMode={appMode}
-                      onSelectJournal={setActiveJournalId}
-                      onCreateJournal={createJournal}
-                      onRenameJournal={renameJournal}
-                      onDeleteJournal={(id) => {
-                        const j = journals.find(journal => journal.id === id);
-                        setConfirmDelete({
-                          type: 'journal',
-                          id,
-                          title: 'Eliminar Libro de Diario',
-                          message: `¿Estás seguro de que deseas eliminar "${j?.name}"? Esta acción no se puede deshacer.`
-                        });
-                      }}
-                      entries={entries}
-                      accounts={combinedAccounts}
-                      onAdd={addEntry}
-                      onUpdate={updateEntry}
-                      onMove={moveEntry}
-                      onDelete={(id) => {
-                        const e = entries.find(entry => entry.id === id);
-                        setConfirmDelete({
-                          type: 'entry',
-                          id,
-                          title: 'Eliminar Asiento',
-                          message: `¿Estás seguro de que deseas eliminar el asiento "${e?.description}"?`
-                        });
-                      }}
-                      onImport={importEntries}
+                      polizas={polizasCronologicas}
                       onSetModal={setModalInfo}
                     />
                   </motion.div>
@@ -352,8 +325,7 @@ export default function App() {
                       journalName={activeJournal?.name || ''}
                       finalInventory={finalInventory}
                       setFinalInventory={handleSetFinalInventory}
-                      activeJournalId={activeJournalId}
-                      onAdd={addEntry}
+                      onAdd={(e) => createProgrammaticPoliza(entryToPolizaInput(e, combinedAccounts))}
                       onSetModal={setModalInfo}
                     />
                   </motion.div>
@@ -369,7 +341,7 @@ export default function App() {
                     <CatalogView
                       accounts={combinedAccounts}
                       setAccounts={handleCombinedAccountsUpdate}
-                      entries={entries}
+                      entries={proyeccion}
                       appMode={appMode}
                       onSetModal={setModalInfo}
                     />
@@ -387,8 +359,7 @@ export default function App() {
                       accounts={combinedAccounts}
                       fixedAssets={fixedAssets}
                       onSetFixedAssets={setFixedAssets}
-                      activeJournalId={activeJournalId}
-                      onAdd={addEntry}
+                      onAdd={(e) => createProgrammaticPoliza(entryToPolizaInput(e, combinedAccounts))}
                       onSetModal={setModalInfo}
                     />
                   </motion.div>
@@ -403,7 +374,7 @@ export default function App() {
                   >
                     <ContabilidadElectronicaView
                       accounts={combinedAccounts}
-                      entries={entries}
+                      entries={proyeccion}
                       tAccountsData={tAccountsData}
                       onSetModal={setModalInfo}
                     />

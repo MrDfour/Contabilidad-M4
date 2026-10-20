@@ -131,3 +131,62 @@ export const formatPolizaFolio = (poliza: Poliza): string => {
   const prefix = { ingreso: 'ING', egreso: 'EGR', diario: 'DIA' }[poliza.tipo];
   return `${prefix}-${String(poliza.folio).padStart(4, '0')}`;
 };
+
+/**
+ * Proyección de CAPTURA (D-10): un asiento emitido por las rutas programáticas
+ * (depreciación de activos fijos, cierre de resultados) → PolizaInput que
+ * consume usePolizas.createProgrammaticPoliza. Las capturas programáticas son
+ * SIEMPRE tipo 'diario' y el concepto de partida queda vacío (los pointers
+ * emiten la glosa general en description).
+ */
+export const entryToPolizaInput = (
+  entry: Omit<JournalEntry, 'id'>,
+  accounts: Account[]
+): { tipo: TipoPoliza; fecha: string; concepto: string; partidas: PartidaPoliza[] } => ({
+  tipo: 'diario',
+  fecha: entry.date,
+  concepto: entry.description,
+  partidas: entry.movements
+    .filter(m => m.amount > 0)
+    .map(m => {
+      const cuenta = accounts.find(a => a.id === m.accountId);
+      return {
+        id: crypto.randomUUID(),
+        accountId: m.accountId,
+        accountCode: cuenta?.code || '',
+        accountName: cuenta?.name || '',
+        debit: m.type === 'debit' ? normalizeAmount(m.amount) : 0,
+        credit: m.type === 'credit' ? normalizeAmount(m.amount) : 0,
+        concept: undefined,
+        uuidCFDI: m.uuidCFDI,
+        rfcTercero: m.rfcTercero
+      };
+    })
+});
+
+/**
+ * Proyección de IMPORTACIÓN (D-11): los asientos de `parseJournalImport`
+ * (reutilizado sin cambios — conserva el quirk de CONCEPTO/GLOSA) se convierten
+ * a Pólizas tipo 'diario' para `usePolizas.importPolizas`, que asigna el folio
+ * por tipo a las que llegan sin él (folio: 0 = "sin folio" → reasigna).
+ * `validatePolizaBalance` alimenta totalDebe/totalHaber (D-7).
+ */
+export const entriesToPolizasDiarias = (entries: JournalEntry[], accounts: Account[]): Poliza[] => {
+  return entries.map(entry => {
+    const partidas = entryToPolizaInput(
+      { date: entry.date, description: entry.description, movements: entry.movements },
+      accounts
+    ).partidas;
+    const balance = validatePolizaBalance(partidas);
+    return {
+      id: entry.id, // el parser ya genera ids estables con crypto.randomUUID
+      folio: 0,     // "sin folio": importPolizas reasigna por tipo (skip colisiones)
+      tipo: 'diario' as const,
+      fecha: entry.date,
+      concepto: entry.description,
+      partidas,
+      totalDebe: balance.totalDebe,
+      totalHaber: balance.totalHaber
+    };
+  });
+};

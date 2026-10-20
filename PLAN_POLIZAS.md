@@ -124,19 +124,18 @@ export interface Journal {
 }
 ```
 
-### 4.3 Dónde nacen y dónde se leen los asientos (mapa de captura/lectura)
+### 4.3 Rutas de captura y lectura (Fase 4 ejecutada — cutover)
 
-**Rutas de CAPTURA (`onAdd`/`addEntry` — todas deben pasar a `usePolizas` en Fase 4):**
-1. `components/journal/EntryForm.tsx` (alta manual en Libro Diario).
-2. `components/ProfitLossView.tsx` — crea asientos de ajuste/cierre (recibe `onAdd`).
-3. `components/FixedAssetsView.tsx` — genera póliza de depreciación mensual (recibe `onAdd`).
-4. `components/JournalView.tsx` — importación Excel → `parseJournalImport` (`lib/importEntriesFromExcel.ts`) → `importEntries`.
+**Rutas de CAPTURA (todas ya viven en `usePolizas` desde Fase 4):**
+1. `components/polizas/PolizaForm.tsx` (alta/edición manual en el módulo de Pólizas).
+2. `components/ProfitLossView.tsx` — cierre de ejercicio: `onAdd` → `entryToPolizaInput` (App) → `createProgrammaticPoliza` (D-10).
+3. `components/FixedAssetsView.tsx` — depreciación mensual: mismo cable (D-10).
+4. `components/polizas/PolizaView.tsx` — importación Excel: `parseJournalImport` SIN cambios → `entriesToPolizasDiarias` (D-11) → `importPolizas`.
 
-**Rutas de LECTURA de `entries` del diario activo (todas se re-alimentan con la proyección aplanada en Fase 4):**
-- Derivaciones centrales de `App.tsx`: `buildTAccountsData(entries)` y `computeAccountBalances(...)` → alimentan Cuentas T, Balance y Resultados.
-- `JournalView.tsx` (exports Excel/PDF + listado), `EntryList.tsx`, `EntryCard.tsx`.
-- `CatalogView.tsx` (recibe `entries` para bloquear el borrado de cuentas en uso).
-- `ContabilidadElectronicaView.tsx` (`entries` + `tAccountsData` para Catalogo/Balanza/Pólizas/DIOT XML; `generatePolizasXML` en `lib/satExport.ts` **ya existe** y filtra por periodo `${anio}-${mes}`).
+**Rutas de LECTURA (todas alimentadas por la PROYECCIÓN de las pólizas):**
+- Derivaciones centrales de `App.tsx`: `polizasCronologicas` (sort fecha+folio) → `flattenPolizasToJournalEntries` → `buildTAccountsData` / `computeAccountBalances` → Cuentas T, Balance, Resultados.
+- `CatalogView` (bloqueo de cuentas en uso), `ContabilidadElectronicaView` (DIOT/XML) y `JournalView` (reporte de solo lectura, quien además toma las pólizas cronológicas directas).
+- ~~`EntryList.tsx`, `EntryCard.tsx`~~ — LEGACY sin usos (retiro en Fase 5).
 
 **Acoplados al concepto "diario activo" (la especificación no los menciona — tratados en Fase 5):**
 - `useCatalog`: catálogo híbrido global + `subAccounts` del diario activo (`commitSubAccounts` → `useJournals.setSubAccounts`).
@@ -425,28 +424,20 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 ### Fase 4 — Cutover de reportes y Libro Diario de solo lectura
 
 **Artefactos:**
-- [ ] `src/App.tsx`: derivaciones centrales cambian de fuente:
-  ```ts
-  const proyeccion = useMemo(
-    () => flattenPolizasToJournalEntries(
-      [...polizas].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.folio - b.folio)
-    ),
-    [polizas]
-  );
-  const tAccountsData = useMemo(() => buildTAccountsData(proyeccion), [proyeccion]);
-  ```
-  El desempate por folio es determinista; verificar que la `ref` de las Cuentas T sea el índice 1-based de la proyección (comportamiento equivalente al previo).
-- [ ] Vistas que recibían `entries` del diario activo ahora reciben `proyeccion`: `CatalogView` (guard de cuentas en uso), `ContabilidadElectronicaView` (DIOT/XML), `TAccountsView` (indirecto), Balance/Resultados (vía `accountBalances`).
-- [ ] `src/components/JournalView.tsx` → **reporte de solo lectura**: ELIMINA `EntryForm`, su botón "Nuevo Asiento" y los tabs de diarios. Tabla cronológica consolidada: FECHA / FOLIO / TIPO / CUENTA / CONCEPTO / DEBE / HABER (proyección complementada con folio/tipo; opción: pasar `polizas` en paralelo para enriquecer cada fila). Exporta Excel/PDF sobre la misma proyección, SIN importador ni plantilla (se trasladan en el punto siguiente).
-- [ ] Rutas de captura re-cableadas:
-  - `ProfitLossView` (`onAdd` → `createProgrammaticPoliza` D-10).
-  - `FixedAssetsView` (`onAdd` → `createProgrammaticPoliza`, tipo diario, concepto "Depreciación mensual").
-  - Importación Excel: botón se traslada a `PolizaView`; genera pólizas diario vía `importPolizas` a partir de `parseJournalImport` (reusar el resultado, que ya resuelve `accountCode`/`accountName`). Quirk CONCEPTO preservado y anotado (§4.5).
-- [ ] Tests:
-  - Actualizar `EntryForm.test.tsx` — si `EntryForm` se retira aquí, su batería migra a `PolizaForm.test.tsx` (que ya existe) y este test se elimina.
-  - `useAppData`/`usePolizas` sin cambios estructurales (deben seguir en verde).
-  - Comprobación de integridad: test liviano en `lib/accounting.test.ts` — el flatten de una póliza migrada de ejemplo produce los mismos totales que espera `buildTAccountsData`.
-- [ ] `ARCHITECTURE.md`: §3 flujo de datos (fuente = pólizas), §2, §10.
+- [x] `src/App.tsx`: derivaciones centrales cambian de fuente: `polizasCronologicas` (sort fecha + folio) → `proyeccion = flattenPolizasToJournalEntries(polizasCronologicas)` → `buildTAccountsData(proyeccion)` + `computeAccountBalances`. El `ref` de las Cuentas T sigue siendo el índice 1-based de la proyección (comportamiento equivalente al previo, ahora sobre el consolidado de pólizas).
+- [x] Vistas que recibían `entries` del diario activo ahora reciben `proyeccion`: `CatalogView` (guard de cuentas en uso), `ContabilidadElectronicaView` (DIOT/XML), Balance/Resultados (vía `accountBalances`). `TAccountsView` indirecto (tAccountsData).
+- [x] `src/components/JournalView.tsx` → **reporte de solo lectura**: sin `EntryForm`, sin "Nuevo Asiento", sin tabs de diarios ni importador. Tabla consolidada (fila por partida): FECHA / FOLIO / TIPO / CUENTA / CONCEPTO / DEBE / HABER con línea "Sumas iguales" y estado vacío instructivo. Exports Excel/PDF sobre las mismas pólizas (`Libro_Diario_Consolidado`), brinde antes/común del cutover; mantiene los avisos de exportación vía `onSetModal`.
+- [x] Rutas de captura re-cableadas:
+  - `ProfitLossView` (`onAdd` → `createProgrammaticPoliza` D-10): guard "Sin diario activo" retirado (la captura ya no depende del diario).
+  - `FixedAssetsView` (`onAdd` → `createProgrammaticPoliza`, tipo diario): idem, guard retirado.
+  - Adaptación pura en `lib/accounting.ts`: `entryToPolizaInput` (movimientos → partidas con snapshot de cuenta).
+  - Importación Excel: botón (con Plantilla) se traslada a `PolizaView`; `parseJournalImport` sin cambios (quirk CONCEPTO preservado y anotado) → `entriesToPolizasDiarias` → `importPolizas` (folios por tipo automáticos).
+- [x] Tests:
+  - `components/journal/EntryForm.test.tsx` ELIMINADO en Fase 4 (su batería migró completa desde la Fase 3 a `PolizaForm.test.tsx`, que añade los casos de elaboro/autorizo y columnas).
+  - `useAppData`/`usePolizas` sin cambios estructurales (en verde).
+  - Comprobación de integridad en `lib/accounting.test.ts`: el flatten de una póliza alimenta `buildTAccountsData` con los MISMOS totales Debe/Haber; + tests de `entryToPolizaInput` y `entriesToPolizasDiarias`.
+  - Nuevo `components/JournalView.test.tsx`: contrato de solo lectura (sin botones de captura), fila por partida con folio, 0/0 sin fila.
+- [x] `ARCHITECTURE.md`: §3 flujo de datos (fuente = pólizas), §2 (árbol: journal/ marcado LEGACY para retiro en Fase 5), §9, §10.
 
 **Criterio clave de la fase:** los reportes y XML reflejan TODO lo capturado en Pólizas; el Diario ya no captura nada.
 
@@ -548,7 +539,7 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 | 1 — Tipos + lógica pura | Completada | 2026-10-19 | 99 tests en verde (85 + 14 nuevos); lint y build limpios. Sin cambios de UI. Sugerencia de commit: `feat: tipos y lógica pura de pólizas contables` |
 | 2 — Hook + migración | Completada | 2026-10-19 | 121 tests en verde (99 + 22 nuevos: migración, hook, hidratación); lint/build limpios. Migración ONE-SHOT activa al primer arranque. Sugerencia de commit: `feat: usePolizas con migración one-shot de diarios legacy` |
 | 3 — Módulo Pólizas + navegación | Completada | 2026-10-19 | 134 tests en verde (121 + 13 nuevos: PolizaForm 9, navigation 4); lint/build limpios; escaneo anti-CJK limpio. Tab inicial = `polizas` (DEFAULT_TAB); coexistencia: reportes aún derivan de diarios. `ConfirmDeleteData` gana tipo `'poliza'`. Sugerencia de commit: `feat: módulo de Pólizas contables con UI de captura e impresión` |
-| 4 — Cutover reportes + Diario read-only | Pendiente | — | |
+| 4 — Cutover reportes + Diario read-only | Completada | 2026-10-19 | 134 tests en verde (EntryForm.test eliminado, +5 accounting: D-10/D-11/integridad, +3 JournalView read-only); lint/build limpios; escaneo anti-CJK limpio. Reportes derivan de la proyección de pólizas; Diario = reporte consolidado solo lectura; importación Excel pasó a PolizaView. journal/ queda LEGACY (hoja de retiro Fase 5). Sugerencia de commit: `feat: cutover de reportes a pólizas y Libro Diario de solo lectura` |
 | 5 — Compatibilidad + limpieza legacy | Pendiente | — | |
 | 6 — SAT por pólizas | Pendiente | — | |
 | 7 — Documentación y cierre | Pendiente | — | |

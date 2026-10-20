@@ -12,7 +12,9 @@ import {
   validatePolizaBalance,
   flattenPolizasToJournalEntries,
   nextPolizaFolio,
-  formatPolizaFolio
+  formatPolizaFolio,
+  entryToPolizaInput,
+  entriesToPolizasDiarias
 } from './accounting';
 import type { Account, FixedAsset, JournalEntry, Movement, Poliza, PartidaPoliza } from '../types';
 
@@ -275,5 +277,106 @@ describe('formatPolizaFolio', () => {
 
   it('folio de 5 dígitos no se trunca', () => {
     expect(formatPolizaFolio(poliza({ tipo: 'diario', folio: 10000 }))).toBe('DIA-10000');
+  });
+});
+
+describe('entryToPolizaInput (D-10 captura programática)', () => {
+  it('convierte movimientos a partidas con snapshot de cuenta y tipo diario forzado', () => {
+    const accounts: Account[] = [
+      acc('a1', 'asset', '1101'),
+      acc('a2', 'equity', '3101')
+    ];
+    const salida = entryToPolizaInput(
+      {
+        date: '2024-06-30',
+        description: 'Depreciación del mes de junio',
+        movements: [
+          { accountId: 'a1', type: 'debit', amount: 350 },
+          { accountId: 'a2', type: 'credit', amount: 350 }
+        ]
+      },
+      accounts
+    );
+    expect(salida.tipo).toBe('diario');
+    expect(salida.fecha).toBe('2024-06-30');
+    expect(salida.concepto).toBe('Depreciación del mes de junio');
+    expect(salida.partidas).toMatchObject([
+      { accountId: 'a1', accountCode: '1101', accountName: 'Cuenta a1', debit: 350, credit: 0 },
+      { accountId: 'a2', accountCode: '3101', accountName: 'Cuenta a2', debit: 0, credit: 350 }
+    ]);
+  });
+
+  it('movimientos con monto 0 no se convierten a partida (defensa pasiva)', () => {
+    const salida = entryToPolizaInput(
+      {
+        date: '2024-06-30',
+        description: 'Prueba',
+        movements: [{ accountId: 'a1', type: 'debit', amount: 0 }]
+      },
+      [acc('a1', 'asset')]
+    );
+    expect(salida.partidas).toHaveLength(0);
+  });
+});
+
+describe('entriesToPolizasDiarias (D-11 importación Excel)', () => {
+  it('folio 0: importPolizas lo reasigna; estructura diaria y totales calculados', () => {
+    const accounts: Account[] = [
+      acc('a1', 'asset', '1101'),
+      acc('a2', 'equity', '3101')
+    ];
+    const entradas: JournalEntry[] = [
+      entry('x1', [
+        { accountId: 'a1', type: 'debit', amount: 1000 },
+        { accountId: 'a2', type: 'credit', amount: 1000 }
+      ])
+    ];
+    const salida = entriesToPolizasDiarias(entradas, accounts);
+    expect(salida).toHaveLength(1);
+    expect(salida[0]).toMatchObject({
+      id: 'x1',
+      folio: 0,
+      tipo: 'diario',
+      totalDebe: 1000,
+      totalHaber: 1000
+    });
+    expect(salida[0].partidas[0]).toMatchObject({ accountId: 'a1', accountCode: '1101' });
+  });
+
+  it('preserva uuidCFDI/rfcTercero de los movimientos (DIOT)', () => {
+    const salida = entriesToPolizasDiarias(
+      [
+        entry('x1', [
+          { accountId: 'a1', type: 'debit', amount: 100, uuidCFDI: 'uuid-1', rfcTercero: 'ABC010101AAA' },
+          { accountId: 'a2', type: 'credit', amount: 100 }
+        ])
+      ],
+      [acc('a1', 'asset'), acc('a2', 'equity')]
+    );
+    expect(salida[0].partidas[0].uuidCFDI).toBe('uuid-1');
+    expect(salida[0].partidas[0].rfcTercero).toBe('ABC010101AAA');
+  });
+
+  it('INTEGRIDAD: el aplanado alimenta buildTAccountsData con los MISMOS totales Debe/Haber', () => {
+    const entrada = poliza({
+      partidas: [
+        partida({ accountId: 'a1', debit: 800 }),
+        partida({ accountId: 'a2', credit: 800 })
+      ],
+      totalDebe: 800,
+      totalHaber: 800
+    });
+    const balance = validatePolizaBalance(entrada.partidas);
+    const cuentasT = buildTAccountsData(flattenPolizasToJournalEntries([entrada]));
+
+    const debeGenerado = Object.values(cuentasT)
+      .flatMap(col => col.debits)
+      .reduce((sum, d) => sum + d.amount, 0);
+    const haberGenerado = Object.values(cuentasT)
+      .flatMap(col => col.credits)
+      .reduce((sum, c) => sum + c.amount, 0);
+
+    expect(debeGenerado).toBe(balance.totalDebe);
+    expect(haberGenerado).toBe(balance.totalHaber);
   });
 });

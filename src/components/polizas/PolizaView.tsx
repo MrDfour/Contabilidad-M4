@@ -3,15 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, type ChangeEvent } from 'react';
 import { motion } from 'motion/react';
-import { Plus } from 'lucide-react';
+import { Plus, Upload, FileUp } from 'lucide-react';
 import type { Account, Poliza } from '../../types';
 import type { PolizaInput } from '../../hooks/usePolizas';
 import type { AppMode } from '../../lib/navigation';
 import type { ModalInfo } from '../modals/GlobalInfoModal';
 import { normalizeString } from '../../lib/format';
-import { formatPolizaFolio } from '../../lib/accounting';
+import { formatPolizaFolio, entriesToPolizasDiarias } from '../../lib/accounting';
+import { readExcel, exportToExcel } from '../../lib/utils';
+import { parseJournalImport } from '../../lib/importEntriesFromExcel';
 import { PolizaFilter, type FiltroTipo } from './PolizaFilter';
 import { PolizaList } from './PolizaList';
 import { PolizaForm } from './PolizaForm';
@@ -36,6 +38,7 @@ export function PolizaView({
   appMode,
   onCreate,
   onUpdate,
+  onImportPolizas,
   onDeleteRequest,
   onSetModal
 }: {
@@ -45,6 +48,8 @@ export function PolizaView({
   onCreate: (data: PolizaInput) => void,
   /** Recibe (id, datos) — el folio y tipo los preserva el hook (D-8). */
   onUpdate: (id: string, data: PolizaInput) => void,
+  /** Importación Excel (D-11): el hook asigna folios ausentes/colisionantes. */
+  onImportPolizas: (nuevas: Poliza[]) => void,
   /** Pide confirmación a App (ConfirmDeleteModal); no elimina directo. */
   onDeleteRequest: (p: Poliza) => void,
   onSetModal: (m: ModalInfo) => void
@@ -102,6 +107,53 @@ export function PolizaView({
     setEditingPoliza(null);
   };
 
+  /** Plantilla de importación (mismo formato que usaba el Diario — D-11). */
+  const handleDescargarPlantilla = async () => {
+    const templateData = [
+      { 'ASIENTO_ID': '1', 'FECHA': '2024-05-01', 'GLOSA': 'Apertura de caja', 'CUENTA': 'Caja', 'DEBE': 1000, 'HABER': 0 },
+      { 'ASIENTO_ID': '1', 'FECHA': '2024-05-01', 'GLOSA': 'Apertura de caja', 'CUENTA': 'Capital Social', 'DEBE': 0, 'HABER': 1000 },
+      { 'ASIENTO_ID': '2', 'FECHA': '2024-05-02', 'GLOSA': 'Compra de mercadería', 'CUENTA': 'Caja', 'DEBE': 0, 'HABER': 500 },
+      { 'ASIENTO_ID': '2', 'FECHA': '2024-05-02', 'GLOSA': 'Compra de mercadería', 'CUENTA': 'Mercaderías', 'DEBE': 500, 'HABER': 0 }
+    ];
+    await exportToExcel(templateData, 'Plantilla_Importacion_M4', 'Guia_Carga');
+  };
+
+  /** Importación Excel (D-11): parseJournalImport sin cambios → pólizas diario. */
+  const handleImportExcel = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = await readExcel(file);
+      const { entries: parsedEntries, unmatchedAccounts } = parseJournalImport(data, accounts);
+
+      if (parsedEntries.length === 0) {
+        let msg = 'No encontramos pólizas válidas para importar. Revisa que el archivo contenga cuentas y montos correctos (la suma de debe y haber debe coincidir).';
+        if (unmatchedAccounts.length > 0) {
+          msg = `Las siguientes cuentas no están en tu catálogo de cuentas: ${unmatchedAccounts.slice(0, 5).join(', ')}. Verifica que los nombres sean idénticos en ambos lados.`;
+        }
+        onSetModal({ type: 'error', title: 'Error de Importación', message: msg });
+        return;
+      }
+
+      onImportPolizas(entriesToPolizasDiarias(parsedEntries, accounts));
+      onSetModal({
+        type: 'success',
+        title: '¡Importación Lista!',
+        message: `Hemos cargado con éxito ${parsedEntries.length} pólizas diarias desde el archivo Excel. Los folios se asignaron automáticamente.`
+      });
+      e.target.value = '';
+    } catch {
+      // Quirk congelado (§4.5): el catch siempre muestra el mensaje genérico,
+      // aunque el parser tenga mensajes específicos.
+      onSetModal({
+        type: 'error',
+        title: 'Formato no soportado',
+        message: 'No pudimos leer el archivo correctamente. Asegúrate de que sea un archivo Excel válido (.xlsx) y utiliza la plantilla proporcionada.'
+      });
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -111,13 +163,37 @@ export function PolizaView({
             Captura principal: ingresos, egresos y diarios con partida doble validada.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openNueva}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all active:scale-95"
-        >
-          <Plus className="w-4 h-4" /> Nueva Póliza
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handleDescargarPlantilla}
+            title="Descargar plantilla de Excel para importación"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-600/20 transition-colors text-sm font-medium"
+          >
+            <FileUp className="w-4 h-4" /> Plantilla
+          </button>
+          <div className="relative">
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              className="absolute inset-0 opacity-0 cursor-pointer"
+              onChange={handleImportExcel}
+            />
+            <button
+              type="button"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-600/20 transition-colors text-sm font-medium"
+            >
+              <Upload className="w-4 h-4" /> Importar Excel
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={openNueva}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all active:scale-95"
+          >
+            <Plus className="w-4 h-4" /> Nueva Póliza
+          </button>
+        </div>
       </div>
 
       <PolizaFilter

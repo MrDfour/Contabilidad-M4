@@ -4,7 +4,7 @@ import type { Account, JournalEntry, Movement } from '../types';
 import { cn, exportToExcel, exportToPDF } from '../lib/utils';
 import { formatCurrency, normalizeAmount } from '../lib/format';
 
-export function ProfitLossView({ accountBalances, accounts, journalName, finalInventory, setFinalInventory, activeJournalId, onAdd, onSetModal }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number, setFinalInventory: (v: number) => void, activeJournalId: string | null, onAdd: (e: Omit<JournalEntry, 'id'>) => void, onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void }) {
+export function ProfitLossView({ accountBalances, accounts, journalName, finalInventory, setFinalInventory, onAdd, onSetModal }: { accountBalances: Record<string, number>, accounts: Account[], journalName: string, finalInventory: number, setFinalInventory: (v: number) => void, onAdd: (e: Omit<JournalEntry, 'id'>) => void, onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void }) {
 
   // Helper to get balance by code or name using absolute value
   const getBal = (name: string) => {
@@ -78,14 +78,8 @@ export function ProfitLossView({ accountBalances, accounts, journalName, finalIn
   };
 
   const handleCierreEjercicio = () => {
-    if (!activeJournalId) {
-      onSetModal({
-        type: 'error',
-        title: 'Sin diario activo',
-        message: 'Selecciona un libro diario antes de ejecutar el cierre de ejercicio.'
-      });
-      return;
-    }
+    // Fase 4 (PLAN_POLIZAS): la captura programática ya no depende del diario
+    // activo — genera una póliza diaria vía usePolizas (D-10, adaptación en App).
 
     // Collect all revenue accounts with a non-zero balance
     const revenueAccounts = accounts.filter(a => a.type === 'revenue' && (accountBalances[a.id] || 0) !== 0);

@@ -11,14 +11,12 @@ export function FixedAssetsView({
   accounts,
   fixedAssets,
   onSetFixedAssets,
-  activeJournalId,
   onAdd,
   onSetModal
 }: {
   accounts: Account[],
   fixedAssets: FixedAsset[],
   onSetFixedAssets: React.Dispatch<React.SetStateAction<FixedAsset[]>>,
-  activeJournalId: string | null,
   onAdd: (e: Omit<JournalEntry, 'id'>) => void,
   onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void
 }) {
@@ -103,14 +101,8 @@ export function FixedAssetsView({
   };
 
   const handleRunMonthlyDepreciation = () => {
-    if (!activeJournalId) {
-      onSetModal({
-        type: 'error',
-        title: 'Sin diario activo',
-        message: 'Selecciona un libro diario antes de ejecutar la depreciación.'
-      });
-      return;
-    }
+    // Fase 4 (PLAN_POLIZAS): la captura programática ya no depende del diario
+    // activo — genera una póliza diaria vía usePolizas (D-10, adaptación en App).
 
     const activeAssets = fixedAssets.filter(a => !a.isDisposed);
     if (activeAssets.length === 0) {
