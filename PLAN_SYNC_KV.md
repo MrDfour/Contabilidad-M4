@@ -1,9 +1,9 @@
 # PLAN_SYNC_KV.md — Sincronización Cloudflare KV (bóveda E2EE)
 
-> **ESTADO: EN CURSO** — reemplaza la capa de sincronización Upstash Redis + PeerJS por un
-> relay propio en Cloudflare Workers + Workers KV (presupuesto $0), con el modelo de bóveda
-> persistente y E2EE de Teacher-Buddy. Documentado para el asistente; el usuario hace commit
-> y push con GitHub Desktop después de cada fase con pruebas de humo.
+> **ESTADO: CERRADO (2026-10-20)** — las seis fases quedaron ejecutadas y registradas en §7
+> (gate completo en verde en todas). Lo que sigue es operativa manual del USUARIO: crear el
+> namespace KV y pegar su id en `worker/wrangler.toml`, configurar Secrets y disparar
+> `deploy-relay.yml`, luego probar el humo de la bóveda y hacer commit/push con GitHub Desktop.
 
 > **CONVENIO DE EJECUCIÓN (octubre 2026):** este plan corre **de corrido, validado
 > únicamente con la red de tests automatizados** (`npm run lint && npm run test && npm
@@ -385,3 +385,27 @@ son piezas existentes o envolturas.
   huella, reiniciando además la marca del gap (nada se escribió). Ediciones
   reales difieren de la huella y publican con normalidad. Cubierto con test
   (eco sin PUT + edición real con PUT v6).
+- **Fase 6 — Limpieza, documentación y versionado: EJECUTADA (2026-10-20).**
+  `src/services/syncService.ts` ELIMINADO (era huérfano desde la Fase 3; nada
+  más lo importaba). De `App.tsx` salió el import de `SyncState` y el
+  orquestador muerto C-6 `applyRemoteSyncState` (el remoto de la bóveda aplica
+  vía el mismo camino v3; comentario de retiro en el lugar). `peerjs`
+  desinstalado de `package.json` (ninguna pieza de UI lo usaba; verificado con
+  barrido repo-wide). `vite-env.d.ts` perdió `VITE_UPSTASH_*` (K-12 completo;
+  el único env var de sync es `VITE_RELAY_URL`). README: sección "10.
+  Sincronización Escritorio ↔ Móvil (bóveda E2EE)" reescrita + tabla de
+  tecnologías actualizada (Web Crypto / Workers+KV / QRCode+MLKit). Nuevo
+  `worker/README.md`: claves KV, endpoints, despliegue manual y por GitHub
+  Actions (Secrets), desarrollo local y nota de mejor esfuerzo del WebSocket.
+  ARCHITECTURE: árbol de services actualizado (vaultService + vaultSyncEngine),
+  §6 reescrita con el modelo de bóveda y §7 con `VITE_RELAY_URL`. Bump de
+  versión 0.8.0 → 0.9.0. Gate: lint ✓ / test ✓ (249, 22 archivos) / build ✓ /
+  escaneo CJK ✓ sobre todos los archivos tocados.
+- **Cierre del plan:** todas las fases (1–6) están EJECUTADAS con su gate en
+  verde. Pendientes del USUARIO (convenio inicial): (a) crear el namespace KV y
+  pegar el id en `worker/wrangler.toml` (hoy `REEMPLAZAR_ID`), (b) configurar
+  Secrets `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` y disparar
+  `workflow_dispatch` de `deploy-relay.yml`, (c) con el URL del worker en
+  `VITE_RELAY_URL`, compilar y ejecutar la prueba de humo completa (creación
+  de bóveda, QR a móvil, edición cruzada, conflicto), (d) commit/push con
+  GitHub Desktop.

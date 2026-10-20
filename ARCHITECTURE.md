@@ -165,8 +165,13 @@ Contabilidad-M4/
     ├── services/
     │   ├── storageService.ts    # ⭐ Abstracción de persistencia multiplataforma (ver sección 5):
     │   │                        #   saveToStorage / loadFromStorage / migrateFromLocalStorage
-    │   └── syncService.ts       # Motor de sincronización: PeerController (initializeHostPeer /
-    │   │                        #   connectToSessionPeer), payloads, respaldo Upstash Redis REST
+    │   ├── vaultService.ts      # ⭐ Ciclo de vida de la bóveda E2EE (PLAN_SYNC_KV.md): credenciales
+    │   │                        #   en `contasis_vault_creds`, alistamiento por QR/frase, desalistado,
+    │   │                        #   verificación de relay /health y construcción del payload QR
+    │   └── vaultSyncEngine.ts   # ⭐ Motor de auto-sync (Fase 4): push con debounce 1.5 s + coalescing
+    │                            #   120 s (K-5), sondeo pasivo 60 s + WebSocket vivo (K-6), regla de
+    │                            #   conflicto "manos sucias" (K-7), cola hasta canSave y anti-echo por
+    │                            #   huella SHA-256 (K-11/DV-K-7) — cipher en src/lib/crypto.ts
     │
     └── hooks/
         ├── useCheckForUpdates.ts    # Consulta GitHub Releases vs versión actual
@@ -301,14 +306,18 @@ La composición de las claves por cliente se hace SIEMPRE con el helper puro `cl
 
 ---
 
-## 6. Sincronización Escritorio ↔ Móvil
+## 6. Sincronización Escritorio ↔ Móvil (bóveda E2EE en Cloudflare KV)
 
-- Central en `src/services/syncService.ts` (lógica) + `SyncModal.tsx` (UI).
-- **WebRTC con PeerJS**: escritorio actúa de host con un ID de sesión; móvil escanea QR (MLKit) o entra un PIN de 6 dígitos (el PIN deriva el sessionId con aritmética módulo CSRNG).
-- **Upstash Redis REST es parte integral del protocolo de emparejamiento, no un simple respaldo**: registra la sesión activa y compone el payload desktop ↔ móvil (`sync_desktop_*` / `sync_mobile_*`); el flujo de PIN usa Redis para el registro de sesiones, contadores de intentos fallidos y bloqueo temporal. Si faltan las credenciales, el escritorio lanza "Upstash Redis env vars are missing" y el companion "Failed to fetch". El rol "escritorio" solo se activa en Electron (`window.electronAPI`); un navegador puro siempre toma el flujo móvil (limitación preexistente, ver Mejoras futuras).
-- Conflictos: el móvil ofrece "mantener local" vs "sobrescribir con datos remotos" (payload completo, no merge por asiento). El `SyncState` compartido (C-6 de `PLAN_MULTI_CLIENTE.md`) viaja marcado con `empresaId`/`empresaNombre` (cliente ACTIVO): si el remoto apunta a un cliente existente sobrescribe ESE cliente, si es nuevo lo agrega con su nombre; remotos viejos (sin marcado) se aplican al cliente activo como antes. `polizas` sigue siendo opcional para parsear estados de clientes viejos (solo `journals`), que se migran al vuelo con `migrateJournalsToPolizas` antes de hidratar.
-- Medidas de seguridad: límite de intentos de PIN, bloqueo temporal y regeneración de sesión.
-- **Mejora futura identificada (no en refactor):** el sistema Upstash está planificado a reemplazarse por **Cloudflare KV Workers**; candidato a considerar entonces: emparejamiento por QR vía PeerJS puro sin Redis (degradación elegante cuando no haya credenciales).
+> Reemplazo integral de la capa anterior (PeerJS + Upstash Redis + PIN), ejecutado en `PLAN_SYNC_KV.md` (v0.9.0). Detalle de decisiones en ese plan (K-1 … K-14).
+
+- **Transporte único**: Worker propio en Cloudflare (`worker/src/index.ts`) + KV namespace (`CONTABILIDAD_VAULT`). Nada de PeerJS ni de credenciales de tercero; deploy por GitHub Actions (`workflow_dispatch`) con Tokens `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID`.
+- **Ciclo de vida** (`src/services/vaultService.ts`): credenciales por dispositivo en `contasis_vault_creds` vía `storageService`; alistamiento por **QR** (`{v,url,vaultId,secretKey}`) o **frase mnemónica determinista** de 6 palabras (la frase GENERA la misma credencial en cualquier dispositivo: `vaultId = vlt_<sha256(frase)[0..12]>`, `secretKey = SHA-256(vaultId:frase)`).
+- **Cifrado** (`src/lib/crypto.ts`): AES-GCM 256 con IV de 96 bits por blob; el relay SOLO ve blobs ilegibles. El sobre es `{ciphertext, iv, algoritmo, version}` sin salt.
+- **Motor** (`src/services/vaultSyncEngine.ts`, Fase 4): push con debounce 1.5 s + coalescing 120 s (K-5), sondeo pasivo de 60 s con consulta barata `?version=` + WebSocket en vivo (`/ws`) con degradación natural (K-6). Carga útil = snapshot v3 completo de TODAS las empresas (K-4); la restauración remota reusa el camino `restore` v3 (DV-C-3).
+- **Conflicto "manos sucias"** (K-7): remoto ≤ versión local → ignorar; remoto mayor y local limpio → auto-aplicar; ambos lados cambiaron → `ConflictoBovedaModal` ("Conservar datos locales" publica con `max+1` / "Sobrescribir con datos remotos"). El que gana deja una sola versión para todos.
+- **Historial** (K-8): `vlt:<id>:hist:<n>` máx 5, TTL 30 d; consultable en el modal (solo metadatos).
+- **Cuota** (K-5, DV-K-1): por push − 1 `put()` + hasta 5 `put()` de historial; sondeo = 1 `get()`, y con WebSocket conectado sondeo suspendido. Presupuesto ajustado al free tier de KV (1 000 escrituras/día, 100 000 lecturas/día).
+- **Indicador**: punto en el botón Sync del `AppHeader` (gris sin bóveda / verde al día / naranja pendiente / rojo conflicto o error).
 
 ---
 
@@ -317,13 +326,12 @@ La composición de las claves por cliente se hace SIEMPRE con el helper puro `cl
 ```env
 GEMINI_API_KEY=     # funciones de IA (Google @google/genai existe en package.json)
 APP_URL=            # referencia a sí mismo en despliegue
-VITE_UPSTASH_REDIS_REST_URL=     # NO viene en .env.example (ver nota abajo)
-VITE_UPSTASH_REDIS_REST_TOKEN=
+VITE_RELAY_URL=     # URL base del relay propio (ej. https://…workers.dev) — PLAN_SYNC_KV.md K-12
 ```
 
 > Ojo: esta app se originó como AI Studio applet; `GEMINI_API_KEY`/`APP_URL` son herencia de esa plantilla. Las variables usadas por Vite **deben** llevar el prefijo `VITE_`.
 >
-> **Credenciales de sync (Upstash):** no están en `.env.example`; en producción/despliegue se inyectan vía **GitHub Secrets**, y para desarrollo local se crea un `.env` manual (gitignoreado). Los tokens tienen vigencia (caducan) — un "Failed to fetch" del companion o el mensaje "Upstash Redis env vars are missing" en escritorio casi siempre significa token expirado o ausente. Sincronización local requiere: regenerar tokens en Upstash → `.env` local → `npm run build` + `npx electron .` (escritorio carga `dist/`, no el dev server) y reiniciar `npm run dev` (Vite solo lee `.env` al arrancar).
+> **Relay de la bóveda:** `VITE_RELAY_URL` es opcional; sin ella el botón Sync avisa "Relay no configurado" y la app funciona igual. Para desarrollo local se incluye en un `.env` manual (gitignoreado). El despliegue del worker y su namespace KV está documentado en `worker/README.md`; las credenciales de deploy van como **GitHub Secrets** por el convenio del plan.
 
 ---
 

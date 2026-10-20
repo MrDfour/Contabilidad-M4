@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useState, useMemo, useEffect, useRef } from 'react';import { motion, AnimatePresence } from 'motion/react';
 import { useCheckForUpdates } from './hooks/useCheckForUpdates';
 import { useUpdateProgress } from './hooks/useUpdateProgress';
 import type { Account, FixedAsset, Poliza } from './types';
@@ -29,7 +28,6 @@ import { BalanceSheetView } from './components/BalanceSheetView';
 import { FixedAssetsView } from './components/FixedAssetsView';
 import { ContabilidadElectronicaView } from './components/ContabilidadElectronicaView';
 import { CatalogView } from './components/CatalogView';
-import type { SyncState } from './services/syncService';
 import { saveToStorage, loadFromStorage } from './services/storageService';
 import { useAppData } from './hooks/useAppData';
 import { usePolizas } from './hooks/usePolizas';
@@ -319,46 +317,9 @@ export default function App() {
     setConfirmDelete(null);
   };
 
-  /**
-   * Orquestador de sync remoto (C-6 de PLAN_MULTI_CLIENTE.md). Asignación
-   * por empresa:
-   * - remoto con `empresaId` existente → sobrescribe ESE cliente;
-   * - remoto con `empresaId` nuevo → registra un cliente nuevo con ese nombre;
-   * - remoto viejo (sin `empresaId`) → sobrescribe el cliente ACTIVO (semántica previa).
-   * `hydrate`/`hydrateEmpresa` de cada hook dueño persiste explícitamente.
-   */
-  const applyRemoteSyncState = (state: SyncState) => {
-    const nextInventories = state.finalInventories ?? {};
-    const nextPolizas = Array.isArray(state.polizas)
-      ? state.polizas
-      : migrateJournalsToPolizas(Array.isArray(state.journals) ? state.journals : [], accounts);
-
-    const remotoId = typeof state.empresaId === 'string' ? state.empresaId : '';
-    if (!remotoId) {
-      // Remoto viejo: se aplica al cliente activo como siempre.
-      hydrate(nextPolizas);
-      inventoriesState.hydrateFromRemote(nextInventories);
-      return;
-    }
-
-    const existente = empresasState.empresas.find(e => e.id === remotoId);
-    if (!existente) {
-      // Cliente nuevo (id remoto se respeta para que los próximos pases emparejen).
-      empresasState.setEmpresas(prev => [
-        ...prev,
-        { id: remotoId, nombre: state.empresaNombre ?? 'Sincronizado' }
-      ]);
-    }
-
-    if (remotoId === activaId) {
-      hydrate(nextPolizas);
-      inventoriesState.hydrateFromRemote(nextInventories);
-    } else {
-      polizasState.hydrateEmpresa(remotoId, nextPolizas);
-      inventoriesState.hydrateEmpresa(remotoId, inventoriesToGeneral(nextInventories));
-    }
-  };
-
+  // El orquestador C-6 de sync remoto (vía Redis/PeerJS) se retiró con la
+  // limpieza de PLAN_SYNC_KV.md: el remoto de la bóveda se aplica por el
+  // mismo camino de restauración v3 de los respaldos (App/restore).
   /**
    * CUTOVER (Fase 4 de PLAN_POLIZAS.md): TODAS las derivaciones se alimentan
    * de las pólizas, NO del diario activo. Proyección aplanada de las pólizas

@@ -20,7 +20,7 @@ Contabilidad M4 Pro es una app de gestión contable para escritorio y móvil. Su
    - [Catálogo de Cuentas](#7-catálogo-de-cuentas)
    - [Activos Fijos (Modo Fiscal)](#8-activos-fijos-modo-fiscal)
    - [Contabilidad Electrónica SAT (Modo Fiscal)](#9-contabilidad-electrónica-sat-modo-fiscal)
-   - [Sincronización Escritorio ↔ Móvil](#10-sincronización-escritorio--móvil)
+   - [Bóveda E2EE (Escritorio ↔ Móvil)](#10-sincronización-escritorio--móvil)
    - [Mejoras de productividad](#11-mejoras-de-productividad)
 4. [Configuración del entorno local (desde cero)](#configuración-del-entorno-local-desde-cero)
 5. [Scripts disponibles](#scripts-disponibles)
@@ -289,15 +289,20 @@ El módulo de **Contabilidad Electrónica** facilita entregables fiscales del An
 
 ---
 
-### 10. Sincronización Escritorio ↔ Móvil
+### 10. Sincronización Escritorio ↔ Móvil (bóveda E2EE)
 
-La app incluye sincronización de datos entre dispositivos para continuar el trabajo sin duplicar captura:
+La app sincroniza datos entre dispositivos con una **bóveda personal end-to-end** sobre relay propio en Cloudflare (PLAN_SYNC_KV.md):
 
-- Conexión principal por **WebRTC (PeerJS)**.
-- Respaldo automático por **Redis** cuando WebRTC no está disponible.
-- Emparejamiento con **QR** o **PIN de 6 dígitos**.
-- Manejo de conflictos para decidir si conservar datos locales o sobrescribir con datos remotos. La sincronización trabaja sobre el **cliente activo**: si el celular envía un cliente que aún no existe en el escritorio, se agrega a la lista.
-- Controles de seguridad ante intentos inválidos de PIN.
+- **Relay propio en Cloudflare Workers + KV** (sin costo en el plan gratuito) con WebSocket en vivo y degradación a sondeo.
+- **Cifrado extremo a extremo (AES-GCM 256)**: el relay solo ve blobs ilegibles; las claves nacen en tu dispositivo.
+- **Alistamiento**: el escritorio crea la bóveda y comparte la credencial con la app móvil mediante **QR** (data GET) o **frase mnemónica determinista de 6 palabras** (la frase genera la misma bóveda en cualquier dispositivo; guárdala EN PAPEL).
+- **Auto-sync completo multi-cliente**: la bóveda transporta un respaldo v3 de TODAS las empresas; restaurar remoto reusa exactamente el camino de "Restaurar respaldo".
+- **Debounce de publicación (1.5 s) + coalescing (120 s)** para respetar la cuota gratuita de KV; "Publicar ahora" fuerza el envío.
+- **Regla de conflicto** ("manos sucias"): si solo un lado cambió, se aplica automáticamente; si ambos cambiaron, eliges **Conservar datos locales** o **Sobrescribir con datos remotos**; la versión ganadora queda vigente para todos los dispositivos.
+- **Historial** (máximo 5 estados) con TTL de 30 días, consultable desde el modal como metadatos de versión, fecha y dispositivo.
+- Indicador de estado en el encabezado (gris / verde / naranja / rojo).
+
+**Despliegue del relay** (una sola vez): ver [worker/README.md](worker/README.md).
 
 ---
 
@@ -450,8 +455,9 @@ Para limpiar todos los datos, abre las herramientas de desarrollo (F12) → Appl
 | Tailwind CSS v4          | Estilos utilitarios                              |
 | Electron                 | Aplicación de escritorio multiplataforma         |
 | Capacitor                | Empaquetado para Android                         |
-| PeerJS + QRCode.react    | Sincronización y emparejamiento por QR           |
-| Upstash Redis REST       | Respaldo de sincronización                       |
+| QRCode.react + @capacitor-mlkit | Emparejamiento y escaneo de QR (bóveda) |
+| Web Crypto (AES-GCM)     | Cifrado E2EE de la bóveda                        |
+| Cloudflare Workers + KV  | Relay de sincronización (worker/)                |
 | Capacitor MLKit Barcode  | Escaneo de QR en móvil                           |
 | ExcelJS                  | Generación de archivos Excel con estilos         |
 | jsPDF + jspdf-autotable  | Generación de documentos PDF                     |

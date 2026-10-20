@@ -15,4 +15,4 @@ compatibility_date = "2024-11-01"
 # con rotación de historial, PLAN_SYNC_KV.md K-5/K-8).
 [[kv_namespaces]]
 binding = "CONTABILIDAD_VAULT"
-id = "REEMPLAZAR_ID"
+id = "eb990a472060412dbc862d0d870cd569"
