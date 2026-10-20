@@ -32,14 +32,19 @@
 
 ## BL-6 · Fusión de bóveda por hora de captura (tercer botón del conflicto)
 
-- **Contexto:** v0.9.8 ya estampa `capturadoEn`/`editadoEn` en cada póliza (silencio total de UI/SAT) y la UI hace "conservar una" con aviso de historial. Falta el tercer camino: **"Fusionar ambos"** en `ConflictoBovedaModal` para conservar las entradas de los DOS lados con su orden de captura.
-- **Decisiones pendientes ANTES de codear** (definidas en sesión de diseño):
-  1. **Folios**: ¿re-foliar en orden de captura (como la importación Excel asigna por `nextPolizaFolio`) o los folios ya impresos/reportados son sagrados y el merge los conserva (posibles huecos)?
-  2. **Ediciones cruzadas** del mismo `id` en ambos dispositivos: gana el `editadoEn` más reciente; ¿se muestra un listado de revisión o se aplica silencio?
-  3. **Borrados**: el snapshot no guarda eliminaciones — hacer tumbstones (lista de IDs borrados) implica un snapshot v4 con lectura tolerante v3. ¿Vale la pena, o el merge solo cubre ALTAS (el caso típico: capturas paralelas)?
-  4. **Dominios no foliables**: cuentas y activos fijos se pueden unir por `id`; los inventarios finales son saldos numéricos no mergeables → se mantienen del lado que decida el usuario (elección explícita en el modal).
-  5. **Fallback**: si el merge produce duplicados de concepto/total sospechosos (misma captura real desde dos dispositivos), ¿bloquear con listado de revisión o aplicar igual?
-- **Alcance tentativo:** nueva API `fusionar(remoto)` en el puente (App orquesta hooks), opción tercera del modal, tests del motor con snapshots divergentes, snapshot v4 si se aprueban tumbstones.
+- **Contexto:** v0.9.8 ya estampa `capturadoEn`/`editadoEn` en cada póliza (silencio total de UI/SAT), la UI hace "conservar una" con aviso de historial y existe restauración desde historial. Falta el tercer camino: **"Fusionar ambos"** en `ConflictoBovedaModal`.
+- **REGLAS DECIDIDAS (sesión 2026-10-20):**
+  1. **Folios** — revisión explícita: los folios colisionantes (MISMO tipo) van a una pantalla de decisión por elemento con tres opciones:
+     a. **Re-foliar por hora de captura** (los del conflicto se re-ordenan con `nextPolizaFolio`),
+     b. **Folio pendiente** (póliza entrante queda sin folio asignado, mostrada como "pendiente" y asignable después),
+     c. **Al final consecutivo** (el entrante toma el siguiente folio disponible del tipo y se va al final).
+     Los entrantes SIN colisión conservan su folio tal cual; los locales nunca se re-folian los gana la elección.
+  2. **Mismo `id` editado en ambos dispositivos**: gana el `editadoEn` más reciente, con reporte posterior del merge.
+  3. **Borrados NO en v1**: el merge solo une ALTAS (el caso típico: capturas paralelas); snapshot queda v3 (sin tumbstones). Borrar mientras el otro captura sigue siendo conflicto del modal actual.
+  4. **Dominios no foliables**: inventarios finales y catálogo de empresas quedan del dispositivo que dispara el merge; cuentas y activos fijos se pueden unir por `id` (si el `id` ya existe, gana el local).
+  5. **Duplicados sospechosos** (mismo tipo+fecha+concepto): van al **listado de revisión ANTES de aplicar**; el usuario incluye/excluye cada uno. Nada se aplica sin pasar por ahí.
+- **Flujo previsto:** conflicto → botón "Fusionar ambos" → previsualización (pólizas a sumar · ediciones que ganan · colisiones de folio con sus 3 opciones · duplicados sospechosos) → decisiones → aplicar snapshot fusionado → publicar como versión nueva para TODA la bóveda (los otros dispositivos lo absorben por vía normal an K-7).
+- **Alcance tentativo:** nueva API `fusionar(snapshotRemoto)` en el puente (App orquesta los hooks), componente de revisión/decisión de folios, tests del motor con snapshots divergentes (incluido el caso "misma póliza capturada por accidente en dos dispositivos").
 
 ## BL-5 · Respaldos cifrados remotos con la misma lib AES-GCM
 
