@@ -189,6 +189,9 @@ jobs:
 
       - name: Build signed release APK
         run: |
+          # El checkout en Linux no sabe de bits de ejecucion de Windows:
+          # gradlew llega sin +x y moriria con "Permission denied".
+          chmod +x android/gradlew
           mkdir -p "$GITHUB_WORKSPACE/build-failure-reports"
           cd android
           set -o pipefail
