@@ -35,8 +35,10 @@ describe('exportToExcel', () => {
     expect(blob).toBeInstanceOf(Blob);
 
     // Relectura del Excel generado (inspección de workbook real)
+    // El arbol de tipos de exceljs (@types/node 14 via fast-csv) colisiona con
+    // el Buffer moderno global: cast agresivo acotado al punto de lectura.
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(Buffer.from(await blob.arrayBuffer()));
+    await workbook.xlsx.load(Buffer.from(await blob.arrayBuffer()) as never);
 
     expect(workbook.worksheets).toHaveLength(1);
     const sheet = workbook.worksheets[0];
@@ -62,7 +64,7 @@ describe('exportToExcel', () => {
     expect(fileName).toBe('Vacio_M4.xlsx');
 
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(Buffer.from(await blob.arrayBuffer()));
+    await workbook.xlsx.load(Buffer.from(await blob.arrayBuffer()) as never);
     expect(workbook.worksheets).toHaveLength(1);
     expect(workbook.worksheets[0].name).toBe('Movimientos');
     expect(workbook.worksheets[0].rowCount).toBe(0);

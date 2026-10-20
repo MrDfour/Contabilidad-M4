@@ -71,7 +71,10 @@ export function useCheckForUpdates(): UpdateInfo {
   const [isBackgroundUpdate, setIsBackgroundUpdate] = useState(false);
 
   useEffect(() => {
-    if (isElectron) return;
+    // Electron: updater propio dentro del proceso main. Web/PWA: el service
+    // worker de vite-plugin-pwa (autoUpdate) refresca el cache al reabrir.
+    // Solo el APK Android necesita este chequeo + descarga in-app.
+    if (isElectron || !esAndroidNativo) return;
     let cancelled = false;
     async function checkForUpdates(isBackground: boolean) {
       try {
