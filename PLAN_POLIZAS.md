@@ -446,16 +446,16 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 ### Fase 5 — Compatibilidad (respaldo/sync) y desmantelamiento del modelo Journal
 
 **Artefactos:**
-- [ ] `src/hooks/useBackup.ts`: `BackupSnapshot` gana `polizas: Poliza[]` (mantener `journals` para poder restaurar respaldos viejos → D-14). Restauración: si `backup.polizas` existe → `polizasState.hydrate`; si solo trae `journals` → migrar al vuelo con `migrateJournalsToPolizas` y `hydrate`.
-- [ ] `App.tsx` orquestador `restore` actualizado (anti-R1 intacto).
-- [ ] `SyncModal`/`syncService` (sin tocar el servicio remoto — los tokens están caducados y la migración a KV sigue estacionada): el estado LOCAL que se comparte ya incluye `polizas`; al aplicar estado remoto de formato viejo (con `journals`), mapear a pólizas antes de `hydrate`. Mínimo requerido: no romper la pantalla de sync.
-- [ ] Catálogo (D-12): migración one-shot de todas las `subAccounts` de diarios → `contasis_accounts` (dedup por código, `isReadOnly` false para nuevas); `useCatalog` simplificado: SIN hibridación con diario (solo `accounts` global + auto-recuperación quirúrgica existente). CatalogView sin cambios profundos de UI.
-- [ ] Inventario (D-13): migración de `Record<journalId, number>` → clave `'general'`; `useInventories` ya no depende de `activeJournalId`; `BalanceSheetView`/`ProfitLossView` sin cambios de comportamiento visibles.
-- [ ] `AppHeader`: retirar props `hasActiveJournal`/`activeJournalName` (o sustituir por contador de pólizas del periodo — decisión mínima: retirar y dejar el título neutro).
-- [ ] **Retirar legacy** (D-15): `useJournals.ts` + su test; `EntryForm.tsx`, `EntryList.tsx`, `EntryCard.tsx`, `JournalTabs.tsx` y sus tests si quedan; `lib/importEntriesFromExcel.ts` SE CONSERVA (lo usa la importación de pólizas). La clave `contasis_journals` NO se toca en storage (archivo histórico).
-- [ ] `useAppData` simplificado: sin diario inicial; carga pólizas/catálogo/inventario/activos.
-- [ ] Tests: `useBackup.test.ts` (restauración v2 y legacy migrado), `useCatalog.test.ts` (sin híbrido), `useInventories.test.ts` (clave 'general'), retirar `useJournals.test.ts`.
-- [ ] `ARCHITECTURE.md` completo (árbol, clave, flujo, modelo): estado final del modelo de pólizas.
+- [x] `src/hooks/useBackup.ts`: `BackupSnapshot` gana `polizas: Poliza[]` (mantener `journals` para poder restaurar respaldos viejos → D-14). Restauración: si `backup.polizas` existe → `polizasState.hydrate`; si solo trae `journals` → migrar al vuelo con `migrateJournalsToPolizas` y `hydrate`.
+- [x] `App.tsx` orquestador `restore` actualizado (anti-R1 intacto). El restore también consolida el catálogo cuando viene de v1 (`migrateCatalogToGlobal`) y normaliza inventarios (`inventoriesToGeneral`).
+- [x] `SyncModal`/`syncService` (sin tocar el servicio remoto — los tokens están caducados y la migración a KV sigue estacionada): el estado LOCAL que se comparte ya incluye `polizas`; al aplicar estado remoto de formato viejo (con `journals`), mapear a pólizas antes de `hydrate`. Mínimo requerido: no romper la pantalla de sync.
+- [x] Catálogo (D-12): migración one-shot de todas las `subAccounts` de diarios → `contasis_accounts` (dedup por código, `isReadOnly` false para nuevas); `useCatalog` simplificado: SIN hibridación con diario (solo `accounts` global + auto-recuperación quirúrgica existente). CatalogView sin cambios profundos de UI.
+- [x] Inventario (D-13): migración de `Record<journalId, number>` → clave `'general'`; `useInventories` ya no depende de `activeJournalId`; `BalanceSheetView`/`ProfitLossView` sin cambios de comportamiento visibles.
+- [x] `AppHeader`: retirar props `hasActiveJournal`/`activeJournalName` (decisión mínima aplicada: retirada de la píldora "Libro Diario" — header neutro).
+- [x] **Retirar legacy** (D-15): `useJournals.ts` + su test; `EntryForm.tsx`, `EntryList.tsx`, `EntryCard.tsx`, `JournalTabs.tsx` y sus tests si quedan; `lib/importEntriesFromExcel.ts` SE CONSERVA (lo usa la importación de pólizas). La clave `contasis_journals` NO se toca en storage (archivo histórico).
+- [x] `useAppData` simplificado: sin diario inicial; carga pólizas/catálogo/inventario/activos.
+- [x] Tests: `useBackup.test.ts` (restauración v2 y legacy migrado), `useCatalog.test.ts` (sin híbrido), `useInventories.test.ts` (clave 'general'), retirar `useJournals.test.ts`.
+- [x] `ARCHITECTURE.md` completo (árbol, clave, flujo, modelo): estado final del modelo de pólizas.
 
 **Helper de la migración del catálogo:** función pura con pruebas `lib/migrateCatalogToGlobal.ts` (dedup por código, no duplica los globales readonly, conserva las creadas por el usuario, idempotente).
 
@@ -529,6 +529,18 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 - Navegador como rol de sync de escritorio.
 - Eliminar `xlsx@0.18.5` (ExcelJS ya instalado) — candidato de limpieza aparte.
 - Multimoneda y tipo de cambio dinámico (el formato SAT vigente asume MXN / TipoCambio=1).
+- **Multi-libro / multi-cliente (decisión del usuario, post-Fase 7):** el modelo `Poliza`
+  es la captura única consolidada y NO existe segmentación por libro contable. Caso de uso
+  aclarado por el usuario: **contador externo que atiende varios clientes** (cada cliente =
+  un libro/empresa distinto), más que un contador exclusivo de UNA empresa. Ojo: el modelo
+  Journal viejo tampoco satisfacía este caso — era "libros paralelos" con catálogo base
+  global, activos fijos globales, un solo RFC para el SAT y un solo respaldo. La migración
+  one-shot fusionó todos los diarios legacy en una sola corriente de pólizas. La futura
+  D-17 debe diseñarse como concepto de "cliente/empresa" (workspace): RFC propio por
+  cliente (XML SAT CT/BN/Pólizas/DIOT), catálogo por cliente, activos fijos por cliente y
+  pólizas por cliente (p. ej. `empresaId` opcional en `Poliza`). `contasis_journals` queda
+  intacto (D-2) para permitir una re-migración segmentada si se decide. Se retoma tras el
+  cierre del plan.
 
 ---
 
@@ -540,7 +552,7 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 | 2 — Hook + migración | Completada | 2026-10-19 | 121 tests en verde (99 + 22 nuevos: migración, hook, hidratación); lint/build limpios. Migración ONE-SHOT activa al primer arranque. Sugerencia de commit: `feat: usePolizas con migración one-shot de diarios legacy` |
 | 3 — Módulo Pólizas + navegación | Completada | 2026-10-19 | 134 tests en verde (121 + 13 nuevos: PolizaForm 9, navigation 4); lint/build limpios; escaneo anti-CJK limpio. Tab inicial = `polizas` (DEFAULT_TAB); coexistencia: reportes aún derivan de diarios. `ConfirmDeleteData` gana tipo `'poliza'`. Sugerencia de commit: `feat: módulo de Pólizas contables con UI de captura e impresión` |
 | 4 — Cutover reportes + Diario read-only | Completada | 2026-10-19 | 134 tests en verde (EntryForm.test eliminado, +5 accounting: D-10/D-11/integridad, +3 JournalView read-only); lint/build limpios; escaneo anti-CJK limpio. Reportes derivan de la proyección de pólizas; Diario = reporte consolidado solo lectura; importación Excel pasó a PolizaView. journal/ queda LEGACY (hoja de retiro Fase 5). Sugerencia de commit: `feat: cutover de reportes a pólizas y Libro Diario de solo lectura` |
-| 5 — Compatibilidad + limpieza legacy | Pendiente | — | |
+| 5 — Compatibilidad + limpieza legacy | Completada | 2026-10-19 | 133 tests en verde (13 archivos; DV-8 y DV-9 justifican el retiro/rebalanceo); lint/build limpios; escaneo anti-CJK limpio. Respaldo v2 (`polizas` + `journals: []`), import v1 migrado al vuelo D-14; sync local comparte `polizas`; catálogo consolidado D-12 con flag `contasis_catalog_migrated` (DV-9); inventarios a clave `'general'` D-13; retirados useJournals + EntryForm/EntryList/EntryCard/JournalTabs (contasis_journals intacto); header neutro. Sugerencia de commit: `feat: respaldo/sync compatibles con pólizas y retiro del modelo Journal` |
 | 6 — SAT por pólizas | Pendiente | — | |
 | 7 — Documentación y cierre | Pendiente | — | |
 
@@ -558,8 +570,11 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 | DV-4 | def. | Firma de `exportPolizasXML` sin RFC es inviable (header + filename del XML) | RFC se mantiene como parámetro. |
 | DV-5 | def. | Reconstrucción del Diario requiere Pólizas ya existente | Separación Fase 3 / Fase 4. |
 | DV-6 | 2 | El efecto de persistencia sin puerta escribía `[]` al montar y mataba la migración (condición de carrera con la hidratación async) | `usePolizas` recibe `canSave` (patrón de useCatalog): persiste solo pos-carga, SIEMPRE incluido `[]`; el App pasa `hasLoaded`. Contrato §6.4 ya corregido. |
-| — | — | _nuevo hallazgo aquí_ | |
+| DV-7 | ≥4 | El usuario detectó que el cutover elimina en la práctica los "libros paralelos" del modelo Journal (captura única consolidada sobre pólizas). **Aclaración posterior del usuario:** el caso de uso es un CONTADOR EXTERNO con varios clientes (cada cliente = libro/empresa con RFC propio), no un contador exclusivo de una empresa | **No es falta de una fase planificada ni bug; es alcance.** Documentado en §10 (multi-libro/multi-cliente): decisión acordada — primero se cierra el plan (Fases 5-7) con el modelo de pólizas estable; después se diseña D-17 como concepto de cliente/workspace (RFC, catálogo, activos y pólizas por cliente + re-migración segmentada desde `contasis_journals`, que está intacto). |
+| DV-8 | 5 | El total de tests bajó de 134 a 133: se retiró `useJournals.test.ts` (10 tests) junto con su hook (D-15) y se agregaron `migrateCatalogToGlobal.test.ts` (5) + 4 pruebas nuevas en useInventories/useCatalog | **Retiro justificado en registro.** La batería del dominio retirado ya no puede existir: los contratos que cubría hoy viven en PolizaForm/usePolizas/migraciones (Regla §8.1.2 permite retiros justificados). |
+| DV-9 | 5 | La consolidación one-shot del catálogo (D-12) necesita gobernanza para NO resucitar subcuentas que el usuario borró del catálogo (mismo principio que D-2) — el plan no contemplaba una clave adicional | Se crea el flag `contasis_catalog_migrated`, propiedad EXCLUSIVA de `useCatalog` (anti-R1), comandado desde `useAppData` vía applier. Documentado en ARCHITECTURE.md §3/§5. |
+| DV-10 | 5 | Al actualizar el catálogo desde CatalogView, las cuentas base readonly deben SOBREVIVIR aunque no traigan `isReadOnly` mapeado (INITIAL_ACCOUNTS crudo no lleva la bandera) | `handleCombinedAccountsUpdate` comitea `[...finalGlobals, ...nextLocals]`: las globales (incluidas las recuperadas quirúrgicamente) SIEMPRE se conservan; el updater solo decide sobre locales. Congelado por tests. |
 
 ---
 
-*Fin de la guía central. Última revisión de este documento: 2026-10-19 (creación, pre-Fase 1).*
+*Fin de la guía central. Última revisión de este documento: 2026-10-19 (Fases 1-5 completadas; DV-7 multi-libro/multi-cliente, DV-8..DV-10 con decisiones de la Fase 5 — ver §10 y §12).*

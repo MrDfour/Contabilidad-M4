@@ -4,24 +4,21 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useCatalog } from './useCatalog';
 import { INITIAL_ACCOUNTS } from '../types';
 import type { Account } from '../types';
 
 /* Helpers ------------------------------------------------------------- */
 
-const local = (id: string, code: string, name = `Sub ${id}`): Account => ({
-  id, code, name, type: 'expense'
+const local = (id: string, code: string, name = `Cuenta ${code}`): Account => ({
+  id, code, name, type: 'expense', isReadOnly: false
 });
 
 const setup = (overrides: Partial<Parameters<typeof useCatalog>[0]> = {}) => {
   const props = Object.assign({
-    journalId: 'j1',
-    journalSubAccounts: [] as Account[],
     canSave: true,
-    onSaveError: vi.fn(),
-    commitSubAccounts: vi.fn()
+    onSaveError: vi.fn()
   }, overrides) as Parameters<typeof useCatalog>[0];
 
   const rendered = renderHook(() => useCatalog(props));
@@ -30,7 +27,7 @@ const setup = (overrides: Partial<Parameters<typeof useCatalog>[0]> = {}) => {
 
 /* Tests ---------------------------------------------------------------- */
 
-describe('useCatalog (catálogo híbrido — R2, más frágil)', () => {
+describe('useCatalog (catálogo global consolidado — sin híbrido, D-12)', () => {
   beforeEach(() => { localStorage.clear(); });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -49,29 +46,25 @@ describe('useCatalog (catálogo híbrido — R2, más frágil)', () => {
     );
   });
 
-  it('combinedAccounts = globales (recuperadas) + subcuentas del diario, en ese orden', () => {
-    const sub = local('sub-1', '9999');
-    const { result } = setup({
-      journalId: 'j1',
-      journalSubAccounts: [sub],
-      canSave: false
+  it('combinedAccounts = globales (recuperadas) + locales del propio hook, en ese orden', () => {
+    const { result } = setup({ canSave: false });
+    act(() => {
+      result.current.setAccounts([
+        { ...INITIAL_ACCOUNTS[0], isReadOnly: true },
+        local('c1', '9101'),
+        local('c2', '9102')
+      ]);
     });
-    act(() => { result.current.setAccounts([INITIAL_ACCOUNTS[0]]); });
 
     const combined = result.current.combinedAccounts;
-    expect(combined).toHaveLength(INITIAL_ACCOUNTS.length + 1);
-    expect(combined[combined.length - 1]).toEqual(sub); // locales SIEMPRE al final
+    expect(combined).toHaveLength(INITIAL_ACCOUNTS.length + 2);
+    expect(combined.slice(0, INITIAL_ACCOUNTS.length).every(a => a.isReadOnly)).toBe(true);
+    expect(combined.filter(a => !a.isReadOnly).map(a => a.code)).toEqual(['9101', '9102']);
   });
 
-  it('handleCombinedAccountsUpdate comitea SOLO locales, con dedup por code y sin globales', () => {
-    const commitSubAccounts = vi.fn();
-    const existingSub = local('sub-0', '9500');
-    const { result } = setup({
-      journalId: 'j1',
-      journalSubAccounts: [existingSub],
-      commitSubAccounts
-    });
-    act(() => { result.current.setAccounts([INITIAL_ACCOUNTS[0]]); });
+  it('handleCombinedAccountsUpdate comitea SOLO locales al estado completo (dedup por code, sin globales)', () => {
+    const { result } = setup();
+    act(() => { result.current.setAccounts([INITIAL_ACCOUNTS[0], local('previa', '9500')]); });
 
     // Updater estilo CatalogView: agrega una NT nueva y un duplicado de una global
     act(() => {
@@ -82,26 +75,37 @@ describe('useCatalog (catálogo híbrido — R2, más frágil)', () => {
       ]);
     });
 
-    const [calledJournalId, locals] = commitSubAccounts.mock.calls.at(-1);
-    expect(calledJournalId).toBe('j1');
-    // Locales: la subprevia + la nueva; el duplicado 1101 se descarta por code global
-    expect(locals.map((a: Account) => a.code)).toEqual(['9500', '9600']);
+    // El estado guarda globales recuperadas SIEMPRE + locales resultantes (dup descartado)
+    expect(result.current.accounts.filter(a => !a.isReadOnly).map(a => a.code)).toEqual(['9500', '9600']);
+    expect(result.current.accounts.filter(a => a.isReadOnly)).toHaveLength(INITIAL_ACCOUNTS.length);
+    expect(result.current.combinedAccounts.at(-1)).toEqual(expect.objectContaining({ code: '9600' }));
   });
 
-  it('handleCombinedAccountsUpdate sin diario activo: no comitea (warning defensivo)', () => {
-    const commitSubAccounts = vi.fn();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { result } = setup({ journalId: null, commitSubAccounts });
+  it('handleCombinedAccountsUpdate elimina locales que el updater retira (persisten en accounts, sin híbrido)', () => {
+    const { result } = setup();
+    act(() => {
+      result.current.setAccounts([INITIAL_ACCOUNTS[0], local('a', '9101'), local('b', '9102')]);
+    });
 
-    act(() => { result.current.handleCombinedAccountsUpdate([]); });
+    act(() => { result.current.handleCombinedAccountsUpdate(prev => prev.filter(a => a.code !== '9101')); });
 
-    expect(commitSubAccounts).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalled();
+    expect(result.current.accounts.filter(a => !a.isReadOnly).map(a => a.code)).toEqual(['9102']);
+    expect(result.current.accounts.filter(a => a.isReadOnly)).toHaveLength(INITIAL_ACCOUNTS.length);
+  });
+
+  it('markMigrated escribe el flag one-shot `contasis_catalog_migrated`', async () => {
+    const { result } = setup();
+
+    act(() => { result.current.markMigrated(); });
+
+    await waitFor(() => {
+      expect(localStorage.getItem('contasis_catalog_migrated')).not.toBeNull();
+    });
   });
 
   it('persistencia debounced con canSave=true: escribe contasis_accounts tras 300ms', () => {
     vi.useFakeTimers();
-    const { result } = setup({ canSave: true });
+    const { result } = setup();
 
     const custom = [local('l1', '8888')];
     act(() => { result.current.setAccounts(custom); }); // dispara efecto + timeout 300ms

@@ -61,20 +61,21 @@ export function PolizaView({
   const [printPoliza, setPrintPoliza] = useState<Poliza | null>(null);
 
   const termino = normalizeString(busqueda);
-  const filtradas = polizas.filter(p => {
-    if (filtro !== 'todas' && p.tipo !== filtro) return false;
+  // Los conteos de los chips salen de la lista filtrada SOLO por búsqueda
+  // (sin filtro de tipo): los chips deben mostrar siempre el total por tipo.
+  const conBusqueda = polizas.filter(p => {
     if (!termino) return true;
-    return (
-      normalizeString(p.concepto).includes(termino) ||
-      esFolioBuscado(busqueda, p)
-    );
+    return normalizeString(p.concepto).includes(termino) || esFolioBuscado(busqueda, p);
   });
+  const filtradas = filtro === 'todas'
+    ? conBusqueda
+    : conBusqueda.filter(p => p.tipo === filtro);
 
   const contarPorTipo: Record<FiltroTipo, number> = {
-    todas: filtradas.length,
-    ingreso: filtradas.filter(p => p.tipo === 'ingreso').length,
-    egreso: filtradas.filter(p => p.tipo === 'egreso').length,
-    diario: filtradas.filter(p => p.tipo === 'diario').length
+    todas: conBusqueda.length,
+    ingreso: conBusqueda.filter(p => p.tipo === 'ingreso').length,
+    egreso: conBusqueda.filter(p => p.tipo === 'egreso').length,
+    diario: conBusqueda.filter(p => p.tipo === 'diario').length
   };
 
   const handleSavePoliza = (data: PolizaInput) => {

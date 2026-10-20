@@ -5,63 +5,68 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useInventories } from './useInventories';
+import { useInventories, inventoriesToGeneral, GENERAL_INVENTORY_KEY } from './useInventories';
 
 const KEY = 'contasis_final_inventories';
 
-describe('useInventories (dominio `contasis_final_inventories` — sin auto-guardado, por diseño)', () => {
+describe('inventoriesToGeneral (helper puro de migración D-13)', () => {
+  it('conserva el valor cuando la clave general ya existe (ignora claves legacy)', () => {
+    expect(inventoriesToGeneral({ general: 800, 'j-viejo': 5 })).toEqual({ general: 800 });
+  });
+
+  it('migra el PRIMER valor en orden de inserción cuando falta la clave general', () => {
+    const raw = { 'j-1': 111, 'j-2': 222 };
+    expect(inventoriesToGeneral(raw)).toEqual({ general: 111 });
+  });
+
+  it('mapa vacío → vacío; input inválido → vacío (defensivo)', () => {
+    expect(inventoriesToGeneral({})).toEqual({});
+    expect(inventoriesToGeneral(null as unknown as Record<string, number>)).toEqual({});
+  });
+});
+
+describe('useInventories (dominio `contasis_final_inventories` — clave general D-13)', () => {
   beforeEach(() => { localStorage.clear(); });
   afterEach(() => { vi.useRealTimers(); });
 
   it('NO auto-guarda: setFinalInventories crudo no escribe storage nunca (fiel al original)', async () => {
-    const { result } = renderHook(() => useInventories({ activeJournalId: 'j1' }));
-    act(() => { result.current.setFinalInventories({ j1: 1000 }); });
+    const { result } = renderHook(() => useInventories());
+    act(() => { result.current.setFinalInventories({ [GENERAL_INVENTORY_KEY]: 1000 }); });
     await act(async () => {});
     expect(localStorage.getItem(KEY)).toBeNull(); // solo RAM (vía del orquestador de respaldo)
   });
 
-  it('hydrateFromRemote persiste EXPLÍCITAMENTE lo recibido (sync remoto — R1)', async () => {
-    const { result } = renderHook(() => useInventories({ activeJournalId: null }));
-    const remotos = { 'j-otro': 250, 'j-otro2': 0 };
+  it('hydrateFromRemote NORMALIZA al formato legacy y persiste EXPLÍCITAMENTE (sync remoto — R1)', async () => {
+    const { result } = renderHook(() => useInventories());
 
-    await act(async () => { result.current.hydrateFromRemote(remotos); });
+    await act(async () => { result.current.hydrateFromRemote({ 'j-otro': 250, 'j-otro2': 0 }); });
 
-    expect(result.current.finalInventories).toEqual(remotos);
+    expect(result.current.finalInventories).toEqual({ general: 250 });
+    expect(result.current.finalInventory).toBe(250); // sincronizado con la clave general
     await waitFor(() => {
-      expect(JSON.parse(localStorage.getItem(KEY) as string)).toEqual(remotos);
+      expect(JSON.parse(localStorage.getItem(KEY) as string)).toEqual({ general: 250 });
     });
   });
 
-  it('handleSetFinalInventory normaliza y persiste por diario activo', async () => {
-    const { result } = renderHook(() => useInventories({ activeJournalId: 'j1' }));
+  it('handleSetFinalInventory normaliza y persiste bajo la clave general', async () => {
+    const { result } = renderHook(() => useInventories());
 
     act(() => { result.current.handleSetFinalInventory(500.455); });
 
     expect(result.current.finalInventory).toBe(500.46); // normalizeAmount (centavos)
     await waitFor(() => {
       const saved = JSON.parse(localStorage.getItem(KEY) as string);
-      expect(saved).toEqual({ j1: 500.46 });
+      expect(saved).toEqual({ general: 500.46 });
     });
   });
 
-  it('finalInventory se sincroniza al cambiar el diario activo (0 si no hay entrada)', () => {
-    const { result, rerender } = renderHook(
-      ({ activeJournalId }) => useInventories({ activeJournalId }),
-      { initialProps: { activeJournalId: 'j1' as string | null } }
-    );
-    act(() => { result.current.setFinalInventories({ j1: 700, j2: 900 }); });
-    act(() => { result.current.handleSetFinalInventory(700); });
+  it('finalInventory se sincroniza con la clave general al cambiar el mapa (escritura cruda)', () => {
+    const { result } = renderHook(() => useInventories());
 
-    rerender({ activeJournalId: 'j2' });
-    expect(result.current.finalInventory).toBe(900);
+    act(() => { result.current.setFinalInventories({ [GENERAL_INVENTORY_KEY]: 700 }); });
+    expect(result.current.finalInventory).toBe(700);
 
-    rerender({ activeJournalId: 'j-inexistente' });
-    expect(result.current.finalInventory).toBe(0);
-
-    // Sin diario activo: edita no persiste ni toca el mapa
-    rerender({ activeJournalId: undefined as unknown as string });
-    act(() => { result.current.handleSetFinalInventory(1); });
-    expect(result.current.finalInventory).toBe(1);
-    expect(result.current.finalInventories['j1']).toBe(700);
+    act(() => { result.current.setFinalInventories({}); });
+    expect(result.current.finalInventory).toBe(0); // sin clave general → 0
   });
 });

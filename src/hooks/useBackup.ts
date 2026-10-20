@@ -5,10 +5,10 @@
 
 import React, { useEffect, useRef } from 'react';
 import type { ModalInfo } from '../components/modals/GlobalInfoModal';
-import { Account, FixedAsset, Journal } from '../types';
+import { Account, FixedAsset, Journal, Poliza } from '../types';
 
 /**
- * Hook del RESPALDO LOCAL (Fase 2 del plan de modularización).
+ * Hook del RESPALDO LOCAL (Fase 2 del plan de modularización; Fase 5 → v2, D-14).
  *
  * Dueño EXCLUSIVO de la clave: `contasis_last_backup` (localStorage simple,
  * timestamp del último respaldo). Las claves de datos JAMÁS se escriben aquí:
@@ -18,12 +18,27 @@ import { Account, FixedAsset, Journal } from '../types';
 const LAST_BACKUP_STORAGE_KEY = 'contasis_last_backup';
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** Formato v2.0.0 (post-Fase 5): la captura vive en pólizas. */
 export interface BackupSnapshot {
-  journals: Journal[];
+  polizas: Poliza[];
   accounts: Account[];
   fixedAssets: FixedAsset[];
   finalInventories: Record<string, number>;
+  /** Vacío en v2; se conserva por compatibilidad de formato (D-14). */
+  journals: Journal[];
 }
+
+/** Respaldos v1.0.0 (pre-Fase 5): la captura vivía en journals. */
+export interface BackupSnapshotV1 {
+  journals: Journal[];
+  accounts: Account[];
+  fixedAssets?: FixedAsset[];
+  finalInventories?: Record<string, number>;
+}
+
+/** Formatos aceptados por la restauración: v2 (polizas) o v1 (journals). */
+export type RestorableBackup = BackupSnapshot | BackupSnapshotV1;
+
 
 export function useBackup({
   getSnapshot,
@@ -35,8 +50,8 @@ export function useBackup({
   getSnapshot: () => BackupSnapshot,
   /** Muestra modales de éxito/error en UI. */
   notify: (info: ModalInfo) => void,
-  /** Restauración de una estructura válida (orquestador multi-hook en App). */
-  restore: (backup: { journals: Journal[], accounts: Account[], fixedAssets?: FixedAsset[], finalInventories?: Record<string, number> }) => void,
+  /** Restauración de una estructura válida v1 o v2 (orquestador multi-hook en App). */
+  restore: (backup: RestorableBackup) => void,
   /** false mientras haya un modal abierto: el vigilante no interrumpe. */
   canSuggest: () => boolean
 }) {
@@ -79,7 +94,7 @@ export function useBackup({
 
   const handleExportBackup = () => {
     const backupData = {
-      version: '1.0.0',
+      version: '2.0.0',
       timestamp: new Date().toISOString(),
       data: depsRef.current.getSnapshot()
     };
@@ -100,9 +115,13 @@ export function useBackup({
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
-      const backup = parsed.data || parsed; // Soporte para formato nuevo o legacy
+      const backup = parsed.data || parsed; // Soporte para respaldo v2 o v1 (con envoltorio)
 
-      if (Array.isArray(backup.journals) && Array.isArray(backup.accounts)) {
+      // D-14: se aceptan AMBOS formatos — v2 trae `polizas`; v1 trae `journals`
+      // (la migración al vuelo ocurre en el orquestador `restore` de App).
+      const esV2 = Array.isArray(backup.polizas);
+      const esV1 = Array.isArray(backup.journals) && Array.isArray(backup.accounts);
+      if (esV2 || esV1) {
         depsRef.current.restore(backup);
       } else {
         throw new Error('Formato inválido');

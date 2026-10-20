@@ -6,200 +6,154 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useAppData, type AppDataAppliers } from './useAppData';
-import { INITIAL_ACCOUNTS, type Journal } from '../types';
+import { INITIAL_ACCOUNTS } from '../types';
 
 /**
  * Appliers espiados: useAppData no posee estado, delega cada dominio.
  * Se mantienen las firmas reales de AppDataAppliers para que el test falle
- * si el contrato cambia.
+ * si el contrato cambia. Desde Fase 5 NO existen appliers de Journal:
+ * el dominio se retiró de RAM (contasis_journals solo se lee para migrar).
  */
 function makeAppliers() {
   const mocks = {
-    setJournals: vi.fn(),
-    setActiveJournalId: vi.fn(),
     setPolizas: vi.fn(),
     markPolizasMigrated: vi.fn(),
     setFinalInventories: vi.fn(),
     setFixedAssets: vi.fn(),
-    setAccounts: vi.fn()
+    setAccounts: vi.fn(),
+    markCatalogMigrated: vi.fn()
   };
   return mocks as unknown as AppDataAppliers & typeof mocks;
 }
 
-describe('useAppData (orquestador de hidratación, protege R2)', () => {
+const render = () => {
+  const appliers = makeAppliers();
+  const onLoaded = vi.fn();
+  renderHook(() => useAppData(appliers, onLoaded));
+  return { appliers, onLoaded };
+};
+
+const INITIAL_READONLY = () => INITIAL_ACCOUNTS.map(a => ({ ...a, isReadOnly: true }));
+
+describe('useAppData (orquestador de hidratación, protege R2 — Fase 5 sin Journal)', () => {
   beforeEach(() => { localStorage.clear(); });
 
-  it('hidrata TODOS los dominios desde storage y marca onLoaded(true) al final', async () => {
-    const journals = [{ id: 'j-seed', name: 'Histórico', entries: [] }];
-    const accounts = [{ id: 'a-local', code: '8888', name: 'Sub', type: 'expense' as const }];
-    const inventories = { 'j-seed': 500 };
-    const assets = [{
-      id: 'asset-1',
-      name: 'Equipo',
-      acquisitionDate: '2024-01-01',
-      originalAmount: 1000,
-      assetAccountId: 'a',
-      accumulatedDeprAccountId: 'b',
-      expenseAccountId: 'c',
-      fiscalRate: 0.3,
-      isDisposed: false
-    }];
-
+  it('hidrata TODOS los dominios activos y marca onLoaded(true) al final', async () => {
+    const journals = [{ id: 'j1', name: 'Viejo', entries: [] }];
     localStorage.setItem('contasis_journals', JSON.stringify(journals));
-    localStorage.setItem('contasis_final_inventories', JSON.stringify(inventories));
-    localStorage.setItem('contasis_fixed_assets', JSON.stringify(assets));
+    localStorage.setItem('contasis_final_inventories', JSON.stringify({ j1: 500 }));
+    localStorage.setItem('contasis_fixed_assets', JSON.stringify([{ id: 'fa1' }]));
+    localStorage.setItem('contasis_accounts', JSON.stringify(INITIAL_READONLY()));
+    localStorage.setItem('contasis_polizas', JSON.stringify([{ id: 'p1', folio: 1 }]));
+
+    const { appliers, onLoaded } = render();
+    await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
+
+    expect(appliers.setFixedAssets).toHaveBeenCalledWith([{ id: 'fa1' }]);
+    expect(appliers.setAccounts).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ code: '1101', isReadOnly: true })
+    ]));
+    expect(appliers.setPolizas).toHaveBeenCalledWith([{ id: 'p1', folio: 1 }]);
+  });
+
+  it('D-13: inventarios legacy (claves por journalId) se normalizan a la clave general', async () => {
+    localStorage.setItem('contasis_final_inventories', JSON.stringify({ 'j-1': 111, 'j-2': 222 }));
+
+    const { appliers, onLoaded } = render();
+    await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
+
+    expect(appliers.setFinalInventories).toHaveBeenCalledWith({ general: 111 });
+  });
+
+  it('sin storage previo: catálogo base readonly + pólizas vacías + ambos flags one-shot', async () => {
+    const { appliers, onLoaded } = render();
+    await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
+
+    expect(appliers.setAccounts).toHaveBeenCalledWith(INITIAL_READONLY());
+    expect(appliers.setPolizas).toHaveBeenCalledWith([]);
+    expect(appliers.markPolizasMigrated).toHaveBeenCalledTimes(1);
+    expect(appliers.markCatalogMigrated).toHaveBeenCalledTimes(1);
+  });
+
+  it('D-12: sin flag de catálogo, consolida las subcuentas de los diarios en contasis_accounts', async () => {
+    const globalito = { id: 'a1', code: '1101', name: 'Caja', type: 'asset', isReadOnly: true };
+    const journals = [{
+      id: 'j1', name: 'Viejo', entries: [],
+      subAccounts: [{ id: 's1', code: '9101', name: 'Sub Local', type: 'expense' }]
+    }];
+    localStorage.setItem('contasis_journals', JSON.stringify(journals));
+    localStorage.setItem('contasis_accounts', JSON.stringify([globalito]));
+    localStorage.setItem('contasis_polizas_migrated', 'true');
+
+    const { appliers, onLoaded } = render();
+    await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
+
+    expect(appliers.setAccounts).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ code: '1101', isReadOnly: true }),
+        expect.objectContaining({ code: '9101', isReadOnly: false })
+      ])
+    );
+    expect(appliers.markCatalogMigrated).toHaveBeenCalledTimes(1);
+  });
+
+  it('D-12: con flag de catálogo presente NO re-consolida (respeta eliminaciones del usuario)', async () => {
+    localStorage.setItem('contasis_catalog_migrated', 'true');
+    localStorage.setItem('contasis_polizas_migrated', 'true');
+    const hardcodeadas = [{ id: 'a1', code: '1101', name: 'Caja', type: 'asset', isReadOnly: true }];
+    localStorage.setItem('contasis_accounts', JSON.stringify(hardcodeadas));
+    localStorage.setItem('contasis_journals', JSON.stringify([
+      { id: 'j1', name: 'Viejo', entries: [], subAccounts: [{ id: 's1', code: '9101', name: 'X', type: 'expense' }] }
+    ]));
+
+    const { appliers, onLoaded } = render();
+    await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
+
+    expect(appliers.setAccounts).toHaveBeenCalledWith(hardcodeadas);
+    expect(appliers.markCatalogMigrated).not.toHaveBeenCalled();
+  });
+
+  it('migración one-shot de pólizas: sin storage ni flag → migra los diarios y comanda el flag', async () => {
+    const accounts = INITIAL_READONLY();
+    const journals = [{
+      id: 'j1', name: 'Viejo', entries: [{
+        id: 'e1', date: '2025-01-01', description: 'Glosa de prueba',
+        policyType: 'ingreso',
+        movements: [{ accountId: 'a1', type: 'debit', amount: 100 }]
+      }]
+    }];
+    localStorage.setItem('contasis_journals', JSON.stringify(journals));
     localStorage.setItem('contasis_accounts', JSON.stringify(accounts));
 
-    const appliers = makeAppliers();
-    const onLoaded = vi.fn();
-    renderHook(() => useAppData(appliers, onLoaded));
-
+    const { appliers, onLoaded } = render();
     await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
 
-    expect(appliers.setJournals).toHaveBeenCalledWith(journals);
-    expect(appliers.setActiveJournalId).toHaveBeenCalledWith('j-seed'); // primer diario
-    expect(appliers.setFinalInventories).toHaveBeenCalledWith(inventories);
-    expect(appliers.setFixedAssets).toHaveBeenCalledWith(assets);
-    expect(appliers.setAccounts).toHaveBeenCalledWith(accounts);
+    expect(appliers.setPolizas).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: 'e1' })])
+    );
+    expect(appliers.markPolizasMigrated).toHaveBeenCalledTimes(1);
   });
 
-  it('sin storage: crea Diario Inicial y catálogo base completo como readonly (copias)', async () => {
-    const appliers = makeAppliers();
-    const onLoaded = vi.fn();
-    renderHook(() => useAppData(appliers, onLoaded));
+  it('flag de pólizas presente + clave ausente: NO re-migra (D-2 — borrado total respetado)', async () => {
+    localStorage.setItem('contasis_polizas_migrated', 'true');
+    localStorage.setItem('contasis_journals', JSON.stringify([{ id: 'j1', name: 'Viejo', entries: [] }]));
 
+    const { appliers, onLoaded } = render();
     await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
 
-    const journalsCall = appliers.setJournals.mock.calls[0][0];
-    expect(journalsCall).toHaveLength(1);
-    expect(journalsCall[0].name).toBe('Diario Inicial');
-    expect(journalsCall[0].entries).toEqual([]);
-    expect(appliers.setActiveJournalId).toHaveBeenCalledWith(journalsCall[0].id);
-
-    const accountsCall = appliers.setAccounts.mock.calls[0][0];
-    expect(accountsCall).toHaveLength(INITIAL_ACCOUNTS.length);
-    expect(accountsCall).not.toBe(INITIAL_ACCOUNTS); // .map crea copias
-    expect(accountsCall.every((a: { isReadOnly?: boolean }) => a.isReadOnly === true)).toBe(true);
-  });
-
-  it('contasis_accounts vacío ([]): fallback también a catálogo base readonly', async () => {
-    localStorage.setItem('contasis_journals', JSON.stringify([{ id: 'j1', name: 'J', entries: [] }]));
-    localStorage.setItem('contasis_accounts', '[]');
-
-    const appliers = makeAppliers();
-    const onLoaded = vi.fn();
-    renderHook(() => useAppData(appliers, onLoaded));
-
-    await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
-    const accountsCall = appliers.setAccounts.mock.calls[0][0];
-    expect(accountsCall).toHaveLength(INITIAL_ACCOUNTS.length);
-    expect(accountsCall.every((a: { isReadOnly?: boolean }) => a.isReadOnly === true)).toBe(true);
-  });
-
-  it('storage críticamente corrupto: fallback seguro (Diario Inicial + catálogo base SIN readonly)', async () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    // String NO-JSON en contasis_journals: loadFromStorage hace JSON.parse y lanza
-    // → cae en el catch del hook (comportamiento y mensaje idénticos al original).
-    localStorage.setItem('contasis_journals', 'esto-no-es-json{{{{');
-
-    const appliers = makeAppliers();
-    const onLoaded = vi.fn();
-    renderHook(() => useAppData(appliers, onLoaded));
-
-    await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
-    expect(error).toHaveBeenCalled();
-
-    const journalsCall = appliers.setJournals.mock.calls[0][0];
-    expect(journalsCall[0].name).toBe('Diario Inicial');
-    // En el fallback el catálogo base viaja SIN mapear isReadOnly (idéntico al original)
-    expect(appliers.setAccounts.mock.calls[0][0]).toBe(INITIAL_ACCOUNTS);
-    // Fallback de pólizas: vacías + flag de migración (evita re-migrar con datos corrompidos)
     expect(appliers.setPolizas).toHaveBeenCalledWith([]);
-    expect(appliers.markPolizasMigrated).toHaveBeenCalled();
+    expect(appliers.markPolizasMigrated).not.toHaveBeenCalled();
   });
 
-  // --- Fase 2 módulo Pólizas: carga, migración ONE-SHOT y guard del flag (D-2) ---
+  it('storage corrupto: fallback seguro (catálogo inicial sin readonly + pólizas vacías con flag) y onLoaded(true)', async () => {
+    // Forzar error: JSON.parse sobre un objeto no-array (asArray falla)
+    localStorage.setItem('contasis_polizas', JSON.stringify({ mal: true }));
 
-  describe('dominio pólizas', () => {
-    it('con contasis_polizas en storage: hidrata y NUNCA marca migración', async () => {
-      const polizas = [{ id: 'p1', folio: 1, tipo: 'diario', fecha: '2024-01-01', concepto: 'C', partidas: [], totalDebe: 0, totalHaber: 0 }];
-      localStorage.setItem('contasis_polizas', JSON.stringify(polizas));
+    const { appliers, onLoaded } = render();
+    await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
 
-      const appliers = makeAppliers();
-      const onLoaded = vi.fn();
-      renderHook(() => useAppData(appliers, onLoaded));
-
-      await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
-      expect(appliers.setPolizas).toHaveBeenCalledWith(polizas);
-      expect(appliers.markPolizasMigrated).not.toHaveBeenCalled();
-    });
-
-    it('sin contasis_polizas Y sin flag: migración ONE-SHOT de los diarios cargados + flag', async () => {
-      const journals: Journal[] = [{
-        id: 'j1',
-        name: 'Histórico',
-        entries: [{
-          id: 'e1',
-          date: '2024-01-05',
-          description: 'Venta',
-          movements: [
-            { accountId: 'a1', type: 'debit', amount: 120, uuidCFDI: 'uuid-36', rfcTercero: 'XAXX010101000' },
-            { accountId: 'a2', type: 'credit', amount: 120 }
-          ]
-        }]
-      }];
-      const accounts = [{ id: 'a1', code: '1101', name: 'Caja', type: 'asset' as const }];
-      localStorage.setItem('contasis_journals', JSON.stringify(journals));
-      localStorage.setItem('contasis_accounts', JSON.stringify(accounts));
-
-      const appliers = makeAppliers();
-      const onLoaded = vi.fn();
-      renderHook(() => useAppData(appliers, onLoaded));
-
-      await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
-
-      expect(appliers.setPolizas).toHaveBeenCalledTimes(1);
-      const migradas = appliers.setPolizas.mock.calls[0][0];
-      expect(migradas).toHaveLength(1);
-      expect(migradas[0]).toMatchObject({
-        id: 'e1', folio: 1, tipo: 'diario', fecha: '2024-01-05',
-        concepto: 'Venta', totalDebe: 120, totalHaber: 120
-      });
-      expect(migradas[0].partidas[0]).toMatchObject({
-        accountId: 'a1', accountCode: '1101', accountName: 'Caja',
-        debit: 120, credit: 0, uuidCFDI: 'uuid-36', rfcTercero: 'XAXX010101000'
-      });
-      expect(appliers.markPolizasMigrated).toHaveBeenCalledTimes(1);
-      // Los journals del histórico NO se agregan a las migraciones (archivo intacto)
-      expect(appliers.setJournals).toHaveBeenCalledWith(journals);
-    });
-
-    it('sin contasis_polizas PERO con flag: NO re-migra (D-2: respeta el borrado total) → []', async () => {
-      localStorage.setItem('contasis_polizas_migrated', 'true');
-      localStorage.setItem('contasis_journals', JSON.stringify([{
-        id: 'j1', name: 'Histórico', entries: []
-      }]));
-
-      const appliers = makeAppliers();
-      const onLoaded = vi.fn();
-      renderHook(() => useAppData(appliers, onLoaded));
-
-      await waitFor(() => expect(onLoaded).toHaveBeenCalledWith(true));
-      expect(appliers.setPolizas).toHaveBeenCalledWith([]);
-      expect(appliers.markPolizasMigrated).not.toHaveBeenCalled();
-    });
-
-    it('journal corrupto: fallback seguro con pólizas [] + flag de migración', async () => {
-      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-      localStorage.setItem('contasis_journals', 'esto-no-es-json{{{{');
-
-      const appliers = makeAppliers();
-      renderHook(() => useAppData(appliers, vi.fn()));
-
-      await waitFor(() => expect(appliers.setPolizas).toHaveBeenCalled());
-      expect(appliers.setPolizas).toHaveBeenCalledWith([]);
-      expect(appliers.markPolizasMigrated).toHaveBeenCalled();
-      error.mockRestore();
-    });
+    expect(appliers.setAccounts).toHaveBeenCalledWith(INITIAL_ACCOUNTS);
+    expect(appliers.setPolizas).toHaveBeenCalledWith([]);
+    expect(appliers.markPolizasMigrated).toHaveBeenCalledTimes(1);
   });
 });

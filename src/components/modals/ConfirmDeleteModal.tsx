@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle } from 'lucide-react';
 
 export interface ConfirmDeleteData {
-  type: 'entry' | 'journal' | 'poliza',
+  type: 'poliza',
   id: string,
   title: string,
   message: string

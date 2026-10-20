@@ -21,10 +21,11 @@ const renderUseBackup = () => {
   const notify = vi.fn();
   const restore = vi.fn();
   const snapshot = {
-    journals: [{ id: 'j1', name: 'Diario', entries: [] }] as any[],
+    polizas: [{ id: 'p1', folio: 1, tipo: 'diario' as const, fecha: '2025-01-01', concepto: 'X', partidas: [], totalDebe: 0, totalHaber: 0 }],
     accounts: [{ id: 'a1', code: '1101', name: 'Caja', type: 'asset' as const }],
     fixedAssets: [],
-    finalInventories: { j1: 100 }
+    finalInventories: { general: 100 },
+    journals: [] as any[]
   };
   const rendered = renderHook(() => useBackup({
     getSnapshot: () => snapshot,
@@ -35,13 +36,15 @@ const renderUseBackup = () => {
   return { ...rendered, notify, restore, snapshot };
 };
 
+const v2EmptySnapshot = () => ({ polizas: [], journals: [], accounts: [], fixedAssets: [], finalInventories: {} });
+
 describe('useBackup (dominio `contasis_last_backup` — vigilante + respaldo/restauración)', () => {
   beforeEach(() => { localStorage.clear(); });
 
   it('primer arranque sin respaldo previo: estampa timestamp y NO sugiere', () => {
     const notify = vi.fn();
     renderHook(() => useBackup({
-      getSnapshot: () => ({ journals: [], accounts: [], fixedAssets: [], finalInventories: {} }),
+      getSnapshot: v2EmptySnapshot as never,
       notify,
       restore: vi.fn(),
       canSuggest: () => true
@@ -56,7 +59,7 @@ describe('useBackup (dominio `contasis_last_backup` — vigilante + respaldo/res
     const notify = vi.fn();
 
     renderHook(() => useBackup({
-      getSnapshot: () => ({ journals: [], accounts: [], fixedAssets: [], finalInventories: {} }),
+      getSnapshot: v2EmptySnapshot as never,
       notify,
       restore: vi.fn(),
       canSuggest: () => true
@@ -72,7 +75,7 @@ describe('useBackup (dominio `contasis_last_backup` — vigilante + respaldo/res
     const notify = vi.fn();
 
     renderHook(() => useBackup({
-      getSnapshot: () => ({ journals: [], accounts: [], fixedAssets: [], finalInventories: {} }),
+      getSnapshot: v2EmptySnapshot as never,
       notify,
       restore: vi.fn(),
       canSuggest: () => false
@@ -92,9 +95,11 @@ describe('useBackup (dominio `contasis_last_backup` — vigilante + respaldo/res
       const blobPayload = createObjectURLSpy.mock.calls[0][0] as Blob;
       const parsed = JSON.parse(await blobPayload.text());
 
-      expect(parsed.version).toBe('1.0.0');
+      expect(parsed.version).toBe('2.0.0');
       expect(parsed.timestamp).toBeTruthy();
       expect(parsed.data).toEqual(snapshot);
+      expect(parsed.data.polizas).toEqual(snapshot.polizas); // D-14: v2 captura en pólizas
+      expect(parsed.data.journals).toEqual([]); // compat: journals vacío en v2
       expect(revokeSpy).toHaveBeenCalled();
       expect(notify).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'success', title: 'Respaldo Exitoso' })
@@ -106,21 +111,21 @@ describe('useBackup (dominio `contasis_last_backup` — vigilante + respaldo/res
   });
 
   describe('handleImportBackup (restauración delegada al orquestador de App — R1)', () => {
-    it('archivo válido (formato nuevo {data:}): restaura el payload y no notifica error', async () => {
+    it('archivo válido v2 ({data:} con polizas): restaura el payload y no notifica error', async () => {
       const { result, restore, notify } = renderUseBackup();
 
       const payload = {
-        journals: [{ id: 'j1', name: 'D', entries: [] }],
-        accounts: [], fixedAssets: [], finalInventories: {}
+        polizas: [{ id: 'p1', folio: 1, tipo: 'diario', fecha: '2025-01-01', concepto: 'X', partidas: [], totalDebe: 0, totalHaber: 0 }],
+        accounts: [], fixedAssets: [], finalInventories: {}, journals: []
       };
-      const file = new File([JSON.stringify({ version: '1.0.0', data: payload })], 'b.json', { type: 'application/json' });
+      const file = new File([JSON.stringify({ version: '2.0.0', data: payload })], 'b.json', { type: 'application/json' });
       await act(async () => { await result.current.handleImportBackup(asChangeEvent(file)); });
 
       expect(restore).toHaveBeenCalledWith(payload);
       expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
     });
 
-    it('formato legacy (journals/accounts en raíz): también restaura', async () => {
+    it('archivo v1.0.0 (solo journals/accounts): sigue aceptado para restauración (D-14)', async () => {
       const { result, restore } = renderUseBackup();
 
       const legacy = { journals: [{ id: 'j1', name: 'D', entries: [] }], accounts: [] };

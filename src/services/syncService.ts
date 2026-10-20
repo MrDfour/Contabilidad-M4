@@ -1,11 +1,18 @@
 import Peer, { DataConnection } from 'peerjs';
-import type { Journal } from '../types';
+import type { Journal, Poliza } from '../types';
 
 export type SyncOrigin = 'desktop' | 'mobile';
 export type SyncTransport = 'peerjs' | 'redis';
 
+/**
+ * Estado compartido por sync (Fase 5/D-14): `polizas` es opcional para que los
+ * clientes viejos (solo `journals`) sigan parseando; el desktop ya comparte
+ * pólizas y `journals: []`. La migración de un estado remoto viejo ocurre en
+ * App (`applyRemoteSyncState`), nunca aquí.
+ */
 export interface SyncState {
   journals: Journal[];
+  polizas?: Poliza[];
   finalInventories: Record<string, number>;
 }
 

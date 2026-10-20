@@ -29,11 +29,12 @@ import { CatalogView } from './components/CatalogView';
 import type { SyncState } from './services/syncService';
 import { saveToStorage } from './services/storageService';
 import { useAppData } from './hooks/useAppData';
-import { useJournals } from './hooks/useJournals';
 import { usePolizas } from './hooks/usePolizas';
 import { useCatalog } from './hooks/useCatalog';
-import { useInventories } from './hooks/useInventories';
+import { useInventories, inventoriesToGeneral } from './hooks/useInventories';
 import { useBackup } from './hooks/useBackup';
+import { migrateJournalsToPolizas } from './lib/migrateJournalsToPolizas';
+import { migrateCatalogToGlobal } from './lib/migrateCatalogToGlobal';
 import { BASIC_NAV_TABS, DEFAULT_TAB, FISCAL_NAV_TABS, type AppMode, type AppTab, type NavigationTab } from './lib/navigation';
 import { MobileMenu } from './components/layout/MobileMenu';
 import { Sidebar } from './components/layout/Sidebar';
@@ -75,60 +76,65 @@ export default function App() {
     modalInfoRef.current = modalInfo;
   }, [modalInfo]);
 
-  // --- Dominios como hooks (Fase 2) ---
-  const journalsState = useJournals();
-  const { journals, activeJournalId, setActiveJournalId, activeJournal } = journalsState;
-
+  // --- Dominios como hooks (Fase 2; Fase 5 retira el dominio Journal de RAM) ---
   // Pólizas (Fases 2-4 de PLAN_POLIZAS.md): fuente de TODAS las derivaciones.
   const polizasState = usePolizas({ canSave: hasLoaded });
-  const { polizas, createPoliza, updatePoliza, deletePoliza, createProgrammaticPoliza, importPolizas, setPolizas, markMigrated } = polizasState;
+  const { polizas, createPoliza, updatePoliza, deletePoliza, createProgrammaticPoliza, importPolizas, setPolizas, markMigrated, hydrate } = polizasState;
 
-  const inventoriesState = useInventories({ activeJournalId });
-  const { finalInventories, setFinalInventories, finalInventory, handleSetFinalInventory } = inventoriesState;
+  const inventoriesState = useInventories();
+  const { finalInventories, setFinalInventories, finalInventory, handleSetFinalInventory, hydrateFromRemote } = inventoriesState;
 
   // activos fijos permanecen en App (Fase 3+): persistencia propia idéntica a la original
   useEffect(() => {
     saveToStorage('contasis_fixed_assets', fixedAssets).catch(console.error);
   }, [fixedAssets]);
 
-  // Catálogo híbrido
+  // Catálogo global consolidado (D-12: sin catálogo híbrido por diario)
   const catalogState = useCatalog({
-    journalId: activeJournalId,
-    journalSubAccounts: activeJournal?.subAccounts,
     canSave: hasLoaded,
-    onSaveError: setModalInfo,
-    commitSubAccounts: journalsState.setSubAccounts
+    onSaveError: setModalInfo
   });
   const { accounts, combinedAccounts, handleCombinedAccountsUpdate, setAccounts } = catalogState;
 
   // Carga inicial (hidratación) — al final de la cadena: ve los setters ya creados
   useAppData({
-    setJournals: journalsState.setJournals,
-    setActiveJournalId: journalsState.setActiveJournalId,
     setPolizas: polizasState.setPolizas,
     markPolizasMigrated: polizasState.markMigrated,
     setFinalInventories: setFinalInventories,
     setFixedAssets: setFixedAssets,
-    setAccounts: setAccounts
+    setAccounts: setAccounts,
+    markCatalogMigrated: catalogState.markMigrated
   }, setHasLoaded);
 
   // Vigilante de Respaldo Semanal + lógica de respaldo (hook propio)
   const { handleExportBackup, handleImportBackup } = useBackup({
     getSnapshot: () => ({
-      journals,
+      polizas,
       accounts,
       fixedAssets,
-      finalInventories
+      finalInventories,
+      // D-14: journals vacío por compatibilidad de formato v2 (el archivo `contasis_journals` queda intacto)
+      journals: []
     }),
     notify: setModalInfo,
     canSuggest: () => !modalInfoRef.current,
     restore: (backup) => {
       // Orquestador anti-R1: cada hook dueño recibe SU parte; nadie más
       // escribe claves ajenas. Composición atómica en el mismo evento.
-      journalsState.hydrate(backup.journals, backup.journals.length > 0 ? backup.journals[0].id : null);
-      setAccounts(backup.accounts);
+      // D-14: respaldo v2 trae polizas; v1 (solo journals) MIGRA AL VUELO.
+      const esFormatoV2 = 'polizas' in backup && Array.isArray(backup.polizas);
+      const nextPolizas = esFormatoV2
+        ? backup.polizas
+        : migrateJournalsToPolizas(backup.journals, backup.accounts);
+      // Catálogo: v1 puede traer subcuentas por diario → consolidación (D-12).
+      const nextAccounts = esFormatoV2
+        ? backup.accounts
+        : migrateCatalogToGlobal(backup.accounts, backup.journals);
+
+      hydrate(nextPolizas);
+      setAccounts(nextAccounts);
       if (backup.fixedAssets) setFixedAssets(backup.fixedAssets);
-      if (backup.finalInventories) setFinalInventories(backup.finalInventories);
+      if (backup.finalInventories) setFinalInventories(inventoriesToGeneral(backup.finalInventories));
       setModalInfo({ type: 'success', title: 'Restauración Exitosa', message: 'Toda la información ha sido restaurada correctamente.' });
     }
   });
@@ -144,7 +150,29 @@ export default function App() {
     }
   }, [appMode, activeTab]);
 
-  const hasActiveJournal = Boolean(activeJournal);
+  const handleConfirmDelete = () => {
+    if (!confirmDelete) return;
+    if (confirmDelete.type === 'poliza') {
+      deletePoliza(confirmDelete.id);
+    }
+    setConfirmDelete(null);
+  };
+
+  /**
+   * Orquestador de sync remoto (anti-R1): una sola función compone ambos hooks.
+   * `hydrate` de pólizas persiste explícitamente (incluso vacío); 
+   * `hydrateFromRemote` persiste la clave de inventarios explícitamente.
+   * D-14: estado remoto de formato viejo (solo journals) MIGRA al vuelo.
+   */
+  const applyRemoteSyncState = (state: SyncState) => {
+    const nextInventories = state.finalInventories ?? {};
+    const nextPolizas = Array.isArray(state.polizas)
+      ? state.polizas
+      : migrateJournalsToPolizas(Array.isArray(state.journals) ? state.journals : [], accounts);
+
+    hydrate(nextPolizas);
+    inventoriesState.hydrateFromRemote(nextInventories);
+  };
 
   /**
    * CUTOVER (Fase 4 de PLAN_POLIZAS.md): TODAS las derivaciones se alimentan
@@ -166,32 +194,6 @@ export default function App() {
     () => computeAccountBalances(tAccountsData, combinedAccounts),
     [tAccountsData, combinedAccounts]
   );
-
-  const handleConfirmDelete = () => {
-    if (!confirmDelete) return;
-    if (confirmDelete.type === 'entry') {
-      if (!activeJournalId) return;
-      journalsState.deleteEntry(confirmDelete.id);
-    } else if (confirmDelete.type === 'poliza') {
-      deletePoliza(confirmDelete.id);
-    } else {
-      journalsState.deleteJournal(confirmDelete.id);
-    }
-    setConfirmDelete(null);
-  };
-
-  /**
-   * Orquestador de sync remoto (anti-R1): una sola función compone ambos hooks.
-   * `hydrate` de diarios persiste explícitamente (incluso vacío, como el original);
-   * `hydrateFromRemote` persiste la clave de inventarios explícitamente.
-   */
-  const applyRemoteSyncState = (state: SyncState) => {
-    const nextJournals = Array.isArray(state.journals) ? state.journals : [];
-    const nextInventories = state.finalInventories ?? {};
-
-    journalsState.hydrate(nextJournals, nextJournals.length > 0 ? nextJournals[0].id : null);
-    inventoriesState.hydrateFromRemote(nextInventories);
-  };
 
   const navigationTabs: NavigationTab[] = [
     ...BASIC_NAV_TABS,
@@ -232,8 +234,6 @@ export default function App() {
             onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
             isMobile={isMobile}
             activeMobileTabLabel={activeMobileTabLabel}
-            hasActiveJournal={hasActiveJournal}
-            activeJournalName={activeJournal?.name || ''}
           />
 
           <main className="flex-1 overflow-y-auto pt-3">
@@ -290,7 +290,7 @@ export default function App() {
                     <TAccountsView
                       tAccountsData={tAccountsData}
                       accounts={combinedAccounts}
-                      journalName={activeJournal?.name || ''}
+                      journalName="Consolidado"
                     />
                   </motion.div>
                 )}
@@ -305,7 +305,7 @@ export default function App() {
                     <BalanceSheetView
                       accountBalances={accountBalances}
                       accounts={combinedAccounts}
-                      journalName={activeJournal?.name || ''}
+                      journalName="Consolidado"
                       finalInventory={finalInventory}
                       appMode={appMode}
                     />
@@ -322,7 +322,7 @@ export default function App() {
                     <ProfitLossView
                       accountBalances={accountBalances}
                       accounts={combinedAccounts}
-                      journalName={activeJournal?.name || ''}
+                      journalName="Consolidado"
                       finalInventory={finalInventory}
                       setFinalInventory={handleSetFinalInventory}
                       onAdd={(e) => createProgrammaticPoliza(entryToPolizaInput(e, combinedAccounts))}
@@ -441,7 +441,7 @@ export default function App() {
         isOpen={showSyncModal}
         onClose={() => setShowSyncModal(false)}
         isDesktop={isDesktopRuntime}
-        localState={{ journals, finalInventories }}
+        localState={{ journals: [], polizas, finalInventories }}
         onApplyRemoteState={applyRemoteSyncState}
         onNotify={(type, title, message) => setModalInfo({ type, title, message })}
       />

@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { motion } from 'motion/react';
-import { BarChart3, FileText, Menu, Shield, Smartphone } from 'lucide-react';
+import { BarChart3, Menu, Shield, Smartphone } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { APP_VERSION } from '../../lib/appMeta';
 import type { AppMode } from '../../lib/navigation';
@@ -18,9 +18,6 @@ interface AppHeaderProps {
   onOpenMobileMenu: () => void;
   isMobile: boolean;
   activeMobileTabLabel: string;
-  hasActiveJournal: boolean;
-  /** Nombre del diario activo (puede estar vacío). */
-  activeJournalName: string;
 }
 
 export function AppHeader({
@@ -29,23 +26,10 @@ export function AppHeader({
   onOpenSync,
   onOpenMobileMenu,
   isMobile,
-  activeMobileTabLabel,
-  hasActiveJournal,
-  activeJournalName
+  activeMobileTabLabel
 }: AppHeaderProps) {
   return (
     <header className="relative overflow-visible border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top))' }}>
-      <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-1/2 z-20">
-        <div className="inline-flex items-center gap-2 max-w-[min(90vw,30rem)] px-4 py-1.5 rounded-full border border-indigo-500/35 bg-[#111827]/90 text-indigo-100 shadow-lg shadow-indigo-500/20 backdrop-blur-md">
-          <FileText className="w-4 h-4 text-indigo-300 shrink-0" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-indigo-300/90">
-            Libro Diario:
-          </span>
-          <span className={cn("text-xs font-medium truncate", hasActiveJournal ? "text-slate-100" : "text-slate-300 italic")}>
-            {activeJournalName || 'Sin diario activo'}
-          </span>
-        </div>
-      </div>
       <div className="px-4 md:px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           {isMobile && (

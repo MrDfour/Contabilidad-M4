@@ -51,7 +51,7 @@ afterEach(() => {
 });
 
 // 2. jsdom no expone todo el DOM del navegador: puentes mínimos
-// 2a. crypto.randomUUID (lo usan useJournals, useBackup y parseJournalImport)
+// 2a. crypto.randomUUID (lo usa useBackup y parseJournalImport)
 const cryptoAny = globalThis.crypto as unknown as { randomUUID?: () => string };
 if (!cryptoAny.randomUUID) {
   cryptoAny.randomUUID = () =>

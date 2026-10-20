@@ -3,39 +3,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Account, INITIAL_ACCOUNTS } from '../types';
 import { saveToStorage } from '../services/storageService';
 import type { ModalInfo } from '../components/modals/GlobalInfoModal';
 
 /**
- * Hook del CATÁLOGO HÍBRIDO (Fase 2 del plan de modularización).
+ * Hook del CATÁLOGO GLOBAL (Fase 5 de PLAN_POLIZAS.md — D-12).
  *
- * Dueño EXCLUSIVO de la clave de storage: `contasis_accounts`.
+ * Dueño EXCLUSIVO de la clave de storage: `contasis_accounts`, y del flag
+ * one-shot `contasis_catalog_migrated`.
  *
- * La escritura de subcuentas del diario activo NO toca esta clave: pasa por el
- * callback `commitSubAccounts` → `useJournals.setSubAccounts` (regla anti-R1).
+ * Cambio D-12: se retiró el catálogo híbrido. El estado `accounts` ahora
+ * contiene TODAS las cuentas (globales readonly + las antes locales del
+ * diario, consolidadas por la migración one-shot). La auto-recuperación
+ * quirúrgica de cuentas base se conserva idéntica al original.
  */
 const ACCOUNTS_KEY = 'contasis_accounts';
+const ACCOUNTS_MIGRATED_KEY = 'contasis_catalog_migrated';
 const ACCOUNTS_SAVE_DEBOUNCE_MS = 300;
 
 export function useCatalog({
-  journalId,
-  journalSubAccounts,
   canSave,
-  onSaveError,
-  commitSubAccounts
+  onSaveError
 }: {
-  /** Id del diario activo (de useJournals). Solo lectura. */
-  journalId: string | null,
-  /** Subcuentas locales del diario activo (de useJournals). */
-  journalSubAccounts: Account[] | undefined,
   /** true cuando useAppData terminó de cargar (protege R2: no persistir vacíos). */
   canSave: boolean,
-  /** Callback para surfaced errores de persistencia en UI. */
-  onSaveError: (info: ModalInfo) => void,
-  /** Escribe las subcuentas locales filtradas en el diario (useJournals). */
-  commitSubAccounts: (journalId: string, localAccounts: Account[]) => void
+  /** Callback para surfear errores de persistencia en UI. */
+  onSaveError: (info: ModalInfo) => void
 }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
 
@@ -54,34 +49,35 @@ export function useCatalog({
     return currentGlobals;
   }, [accounts]);
 
-  // --- Catálogo combinado (CLIENTE: globals + subcuentas del diario activo) ---
+  // --- Catálogo combinado: globales (recuperadas) + locales propias del hook, en ese orden ---
   const combinedAccounts = useMemo(() => {
-    const locals = journalSubAccounts || [];
+    const locals = accounts.filter(a => !a.isReadOnly);
     return [...finalGlobals, ...locals];
-  }, [finalGlobals, journalSubAccounts]);
+  }, [finalGlobals, accounts]);
 
   /**
-   * Update estilo setState delegado por CatalogView: separa locales de globales
-   * (por `isReadOnly` y dedup por `code`) y commita SOLO las locales al diario.
+   * Update estilo setState delegado por CatalogView: filtra por `isReadOnly`
+   * y dedup por `code` contra las globales vigentes; el resultado completo se
+   * comitea a `contasis_accounts` (ya no hay subcuentas por diario).
    * Firma idéntica a la original para seguir satisfaciendo
    * `React.Dispatch<React.SetStateAction<Account[]>>` en CatalogView.
    */
   const handleCombinedAccountsUpdate = (action: React.SetStateAction<Account[]>) => {
-    if (!journalId) {
-      console.warn('Cannot update subaccounts: No active journal selected. Please select a journal first.');
-      return;
-    }
-
     const globalCodes = new Set(finalGlobals.map(a => a.code));
-    const effectiveCombinedAccounts = [...finalGlobals, ...(journalSubAccounts || [])];
-
-    const nextCombinedAccounts = typeof action === 'function' ? action(effectiveCombinedAccounts) : action;
+    const nextCombinedAccounts = typeof action === 'function' ? action(combinedAccounts) : action;
+    // Las globales (readonly, incluidas las recuperadas quirúrgicamente) SIEMPRE
+    // se conservan: el updater solo decide sobre las locales (dedup por code).
     const nextLocalAccounts = nextCombinedAccounts.filter(
       a => !a.isReadOnly && !globalCodes.has(a.code)
     );
 
-    commitSubAccounts(journalId, nextLocalAccounts);
+    setAccounts([...finalGlobals, ...nextLocalAccounts]);
   };
+
+  /** Marca la migración one-shot del catálogo como ejecutada (owner del flag). */
+  const markMigrated = useCallback(() => {
+    saveToStorage(ACCOUNTS_MIGRATED_KEY, true).catch(console.error);
+  }, []);
 
   // Persistencia con debounce (idéntico al original; puerta hasLoaded → canSave).
   useEffect(() => {
@@ -98,7 +94,7 @@ export function useCatalog({
     }, ACCOUNTS_SAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [accounts, canSave, onSaveError]);
+  }, [accounts, canSave, onSaveError, markMigrated]);
 
   return {
     accounts,
@@ -106,6 +102,8 @@ export function useCatalog({
     setAccounts,
     finalGlobals,
     combinedAccounts,
-    handleCombinedAccountsUpdate
+    handleCombinedAccountsUpdate,
+    /** Escritura del flag `contasis_catalog_migrated` (comandada por useAppData). */
+    markMigrated
   };
 }
