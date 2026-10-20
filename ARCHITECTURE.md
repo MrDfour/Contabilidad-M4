@@ -138,13 +138,15 @@ Contabilidad-M4/
     │   │                        #   exportToPDF (captura HTML→PDF), exportTableToPDF (autotable), readExcel,
     │   │                        #   cn (clases), calculateMonthlyDepreciation,
     │   │                        #   calculateFiscalDeduction (INPC)
-    │   └── satExport.ts         # Serializadores XML TXT del módulo SAT (CT/BN) y DIOT
+    │   └── satExport.ts         # Serializadores XML TXT del módulo SAT (CT/BN, PL) y DIOT.
+    │                            #   `buildPolizasXML` puro (Fase 6: folios reales, Concepto por
+    │                            #   partida) + wrapper `exportPolizasXML` (DV-4)
     │
     │   # ⭐ Red de pruebas (Fase 5): cada .test.ts(x) COLOCADO junto a lo que prueba,
     │   #    descubierto por src/**/*.test.{ts,tsx} (ver sección 9, "Red de pruebas"):
     │   ├── lib/accounting.test.ts · lib/format.test.ts · lib/export.test.ts
     │   ├── lib/migrateJournalsToPolizas.test.ts · lib/migrateCatalogToGlobal.test.ts
-    │   ├── lib/navigation.test.ts
+    │   ├── lib/navigation.test.ts · lib/satExport.test.ts
     │   ├── hooks/useCatalog.test.ts · useAppData.test.ts
     │   │     · useBackup.test.ts · useInventories.test.ts · usePolizas.test.ts
     │   ├── components/polizas/PolizaForm.test.tsx · components/JournalView.test.tsx
@@ -189,7 +191,8 @@ Regla general: **el estado vive en hooks de dominio (uno por clave de storage, v
 ```
 Usuario → PolizasView (captura PRINCIPAL: manual + importación Excel D-11) → usePolizas (estado `contasis_polizas`)
         → App.tsx: proyección = flattenPolizasToJournalEntries(pólizas ordenadas fecha+folio)
-        → TAccountsView / BalanceSheetView / ProfitLossView / CatalogView / Cont. Electrónica (consumen la proyección, NO los diarios)
+        → TAccountsView / BalanceSheetView / ProfitLossView / CatalogView (consumen la proyección, NO los diarios)
+        → Cont. Electrónica: CT/BN/DIOT consumen la proyección; el XML PL consume PÓLIZAS reales (Fase 6)
         → JournalView (REPORT de solo lectura sobre las mismas pólizas cronológicas)
         → ProfitLossView/FixedAssetsView (capturas programáticas) → createProgrammaticPoliza (D-10) → usePolizas
 ```
@@ -323,8 +326,8 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 
 - Stack: `vitest` + `@testing-library/react` + `jest-dom`, **solo devDependencies**. Config en `vitest.config.ts` (espeja el `define __APP_VERSION__` de Vite); setup global en `src/test/setup.ts` (limpieza de DOM/storage entre tests + polyfills de jsdom: `crypto.randomUUID`, `URL.createObjectURL`).
 - **Ubicación:** cada `.test.ts(x)` vive COLOCADO junto al código que prueba (`lib/`, `hooks/`, `components/`). Vitest descubre `src/**/*.test.{ts,tsx}`.
-- **Niveles cubiertos (13 archivos / 133 tests):**
-  1. Unitarias puras: `lib/accounting.test.ts` (Cuentas T, saldos por naturaleza, depreciación, INPC truncado + validación/flatten/folios/entrada-a-póliza) y `lib/format.test.ts` (normalización, parseo de importaciones, sanitización de input y contrato de `parseJournalImport`).
+- **Niveles cubiertos (14 archivos / 146 tests):**
+  1. Unitarias puras: `lib/accounting.test.ts` (Cuentas T, saldos por naturaleza, depreciación, INPC truncado + validación/flatten/folios/entrada-a-póliza), `lib/format.test.ts` (normalización, parseo de importaciones, sanitización de input y contrato de `parseJournalImport`) y `lib/satExport.test.ts` (XML PL re-parseado: folios reales, tipos 1/2/3, CompNal, escaping, filename).
   2. Funcional: `lib/export.test.ts` — el workbook Excel se RELEE con ExcelJS (solo `file-saver` mockeado) y el PDF se valida por firma `%PDF-` real.
   3. Migraciones: `lib/migrateJournalsToPolizas.test.ts` (determinismo congelado: folios por tipo, ids, CFDI/RFC) y `lib/migrateCatalogToGlobal.test.ts` (D-12: dedup por código, idempotencia, orden).
   4. Hooks: `hooks/usePolizas` (CRUD de pólizas, folios por tipo, tipo congelado en edición, hydrate persistente, puerta `canSave`), `useCatalog` (catálogo global sin híbrido: recuperación de base, dedup por `code`, flag own `contasis_catalog_migrated`, debounce gated por `canSave`), `useAppData` (hidratación sin Journal, migraciones D-12/D-13, migración de pólizas y fallback corrupto), `useBackup` (respaldo v2 con polizas+journals vacío, import v1/v2, vigía 7 días, import corrupto NO restaura), `useInventories` (clave 'general' D-13, helper `inventoriesToGeneral`, sin auto-guardado), `lib/navigation.test.ts` (DEFAULT_TAB = polizas, composición de pestañas básicas/fiscales).
@@ -349,7 +352,7 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 | Modificar migraciones legacy (pólizas/catálogo/inventario) | `src/lib/migrateJournalsToPolizas.ts` · `src/lib/migrateCatalogToGlobal.ts` (D-12) · `inventoriesToGeneral` en `hooks/useInventories.ts` (D-13); flags en `hooks/usePolizas.ts` y `hooks/useCatalog.ts`, comando en `hooks/useAppData.ts` |
 | Ajustar el reporte del Libro Diario (solo lectura y sus exports) | `src/components/JournalView.tsx` (fecha/folio/tipo/cuenta/concepto/debe/haber) |
 | Cambiar navegación de pestañas / tab inicial | `src/lib/navigation.ts` (BASIC_NAV_TABS, FISCAL_NAV_TABS, DEFAULT_TAB) |
-| Cambiar XML/TXT SAT o DIOT | `src/lib/satExport.ts` |
+| Cambiar XML/TXT SAT o DIOT | `src/lib/satExport.ts` (el XML de Pólizas consume PÓLIZAS reales desde ContabilidadElectronicaView: folio real = NumUnIdenPol, Fase 6) |
 | Cambiar reglas de persistencia | `src/services/storageService.ts` (+ IPC en `electron/main.js`) |
 | Cambiar lógica de sync | `src/services/syncService.ts` (motor) y `SyncModal.tsx` (UI) |
 | Agregar una vista/nueva pantalla | Nuevo componente + switch en `App.tsx` |

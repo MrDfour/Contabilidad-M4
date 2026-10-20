@@ -375,6 +375,7 @@ export default function App() {
                     <ContabilidadElectronicaView
                       accounts={combinedAccounts}
                       entries={proyeccion}
+                      polizas={polizasCronologicas}
                       tAccountsData={tAccountsData}
                       onSetModal={setModalInfo}
                     />

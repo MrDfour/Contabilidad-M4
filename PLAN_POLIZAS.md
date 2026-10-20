@@ -464,16 +464,16 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 ### Fase 6 — Exportación SAT (Anexo 24) por pólizas
 
 **Artefactos:**
-- [ ] `src/lib/satExport.ts` según §6.6: `buildPolizasXML` puro + wrapper `exportPolizasXML` (DV-4). Reemplaza la llamada desde `ContabilidadElectronicaView`.
-- [ ] `lib/satExport.test.ts` (nuevo): el XML se genera, se re-parsea y se verifica:
-  - 1 póliza ingreso (TipoPoliza="1"), egreso ("2"), diario ("3"),
-  - `NumUnIdenPol` = folio real (NO índice),
-  - Transacciones con `Concepto` de partida si existe (fallback concepto general),
-  - `CompNal` preservado con uuidCFDI+RFC,
-  - escaping de `&<>"'` en conceptos/cuentas,
-  - nombre de archivo `RFCAÑOMESPL.xml` (verificar patrón vigente).
-- [ ] `ContabilidadElectronicaView`: cambia fuente de entrada a pólizas del periodo (o proyección — revisar consistencia con Catalogo/Balanza, que siguen derivando de la proyección).
-- [ ] `ARCHITECTURE.md`: sección SAT (si existe, actualizar menciones a folios).
+- [x] `src/lib/satExport.ts` según §6.6: `buildPolizasXML` puro + wrapper `exportPolizasXML` (DV-4). Reemplaza la llamada desde `ContabilidadElectronicaView`.
+- [x] `lib/satExport.test.ts` (nuevo): el XML se genera, se re-parsea y se verifica:
+  - [x] 1 póliza ingreso (TipoPoliza="1"), egreso ("2"), diario ("3"),
+  - [x] `NumUnIdenPol` = folio real (NO índice),
+  - [x] Transacciones con `Concepto` de partida si existe (fallback concepto general),
+  - [x] `CompNal` preservado con uuidCFDI+RFC,
+  - [x] escaping de `&<>"'` en conceptos/cuentas,
+  - [x] nombre de archivo `RFCAÑOMESPL.xml` (patrón vigente confirmado: `GACJ890101ABA202503PL.xml`).
+- [x] `ContabilidadElectronicaView`: solo el XML PL cambió de fuente a pólizas del periodo (nueva prop `polizas` = cronológicas); CT/BN/DIOT siguen en la proyección por consistencia con Catalogo/Balanza.
+- [x] `ARCHITECTURE.md`: sección SAT actualizada (folios reales, `buildPolizasXML`/`exportPolizasXML`).
 
 ---
 
@@ -553,7 +553,7 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 | 3 — Módulo Pólizas + navegación | Completada | 2026-10-19 | 134 tests en verde (121 + 13 nuevos: PolizaForm 9, navigation 4); lint/build limpios; escaneo anti-CJK limpio. Tab inicial = `polizas` (DEFAULT_TAB); coexistencia: reportes aún derivan de diarios. `ConfirmDeleteData` gana tipo `'poliza'`. Sugerencia de commit: `feat: módulo de Pólizas contables con UI de captura e impresión` |
 | 4 — Cutover reportes + Diario read-only | Completada | 2026-10-19 | 134 tests en verde (EntryForm.test eliminado, +5 accounting: D-10/D-11/integridad, +3 JournalView read-only); lint/build limpios; escaneo anti-CJK limpio. Reportes derivan de la proyección de pólizas; Diario = reporte consolidado solo lectura; importación Excel pasó a PolizaView. journal/ queda LEGACY (hoja de retiro Fase 5). Sugerencia de commit: `feat: cutover de reportes a pólizas y Libro Diario de solo lectura` |
 | 5 — Compatibilidad + limpieza legacy | Completada | 2026-10-19 | 133 tests en verde (13 archivos; DV-8 y DV-9 justifican el retiro/rebalanceo); lint/build limpios; escaneo anti-CJK limpio. Respaldo v2 (`polizas` + `journals: []`), import v1 migrado al vuelo D-14; sync local comparte `polizas`; catálogo consolidado D-12 con flag `contasis_catalog_migrated` (DV-9); inventarios a clave `'general'` D-13; retirados useJournals + EntryForm/EntryList/EntryCard/JournalTabs (contasis_journals intacto); header neutro. Sugerencia de commit: `feat: respaldo/sync compatibles con pólizas y retiro del modelo Journal` |
-| 6 — SAT por pólizas | Pendiente | — | |
+| 6 — SAT por pólizas | Completada | 2026-10-19 | 146 tests en verde (133 + 13 nuevos de `satExport.test.ts`, 14 archivos); lint/build limpios; escaneo anti-CJK limpio. `generatePolizasXML` retirado; `NumUnIdenPol` = folio real; Concepto partida↔general; nada cambia para CT/BN/DIOT (siguen en la proyección). Sugerencia de commit: `feat: XML SAT de pólizas con folios reales desde el modelo Poliza` |
 | 7 — Documentación y cierre | Pendiente | — | |
 
 **Estados válidos:** `Pendiente` → `En curso` → `Completada` / `Detenida (motivo)`.
@@ -577,4 +577,4 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 
 ---
 
-*Fin de la guía central. Última revisión de este documento: 2026-10-19 (Fases 1-5 completadas; DV-7 multi-libro/multi-cliente, DV-8..DV-10 con decisiones de la Fase 5 — ver §10 y §12).*
+*Fin de la guía central. Última revisión de este documento: 2026-10-19 (Fases 1-6 completadas; solo resta Fase 7 de cierre y documentación).*

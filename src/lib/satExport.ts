@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Account, JournalEntry, TAccountsData } from '../types';
+import { Account, JournalEntry, TAccountsData, Poliza, TipoPoliza } from '../types';
 
 export const downloadXML = (filename: string, content: string) => {
   const blob = new Blob([content], { type: 'application/xml;charset=utf-8;' });
@@ -145,32 +145,51 @@ export const generateDIOTTxt = (
   downloadTXT(filename, rows.join('\n'));
 };
 
-export const generatePolizasXML = (rfc: string, anio: string, mes: string, entries: JournalEntry[], accounts: Account[]) => {
+/**
+ * Constructor PURO del XML de Pólizas del Periodo (Anexo 24, schema 1.3).
+ * Fase 6 de PLAN_POLIZAS.md: la fuente son las PÓLIZAS (no asientos legacy):
+ * - `NumUnIdenPol` = folio REAL de la póliza (antes era índice+1).
+ * - `TipoPoliza` desde `poliza.tipo` (ingreso→1, egreso→2, diario→3).
+ * - `Concepto` de cada Transacción = partida.concept con fallback al concepto general.
+ * - `CompNal` desde partida.uuidCFDI + partida.rfcTercero (ambos presentes).
+ * Solo el PERIODO seleccionado (fecha inicia con `AAIO-MES`) se incluye.
+ */
+export const buildPolizasXML = (
+  rfc: string,
+  anio: string,
+  mes: string,
+  polizas: Poliza[],
+  accounts: Account[]
+): string => {
   const periodPrefix = `${anio}-${mes}`;
-  const periodEntries = entries.filter(entry => entry.date.startsWith(periodPrefix));
+  const polizasPeriodo = polizas.filter(poliza => poliza.fecha.startsWith(periodPrefix));
 
-  if (periodEntries.length === 0) {
+  if (polizasPeriodo.length === 0) {
     throw new Error('No hay pólizas registradas en el periodo seleccionado para generar el XML.');
   }
 
-  const polizasXML = periodEntries.map((entry, index) => {
-    const transacciones = entry.movements.map(mov => {
-      const acc = accounts.find(a => a.id === mov.accountId);
-      const tipoMov = mov.type === 'debit' ? 'DEBE' : 'HABER';
+  const TIPO_POLIZA_SAT: Record<TipoPoliza, string> = { diario: '3', ingreso: '1', egreso: '2' };
+
+  const polizasXML = polizasPeriodo.map(poliza => {
+    const transacciones = poliza.partidas.map(partida => {
+      const acc = accounts.find(a => a.id === partida.accountId);
+      const monto = partida.debit + partida.credit;
+      const tipoMov = partida.debit > 0 ? 'DEBE' : 'HABER';
 
       let compNalStr = '';
-      if (mov.uuidCFDI && mov.rfcTercero) {
-        compNalStr = `\n        <PLZ:CompNal UUID_CFDI="${mov.uuidCFDI}" RFC="${mov.rfcTercero}" MontoTotal="${mov.amount.toFixed(2)}" Moneda="MXN"/>`;
+      if (partida.uuidCFDI && partida.rfcTercero) {
+        compNalStr = `\n        <PLZ:CompNal UUID_CFDI="${partida.uuidCFDI}" RFC="${partida.rfcTercero}" MontoTotal="${monto.toFixed(2)}" Moneda="MXN"/>`;
       }
 
-      return `      <PLZ:Transaccion NumCta="${acc?.code || ''}" DesCta="${escapeXML(acc?.name || '')}" Concepto="${escapeXML(entry.description)}" TipoCambio="1" Monto="${mov.amount.toFixed(2)}" TipoMov="${tipoMov}">${compNalStr}
+      const conceptoPartida = partida.concept ?? poliza.concepto;
+
+      return `      <PLZ:Transaccion NumCta="${acc?.code || ''}" DesCta="${escapeXML(acc?.name || '')}" Concepto="${escapeXML(conceptoPartida)}" TipoCambio="1" Monto="${monto.toFixed(2)}" TipoMov="${tipoMov}">${compNalStr}
       </PLZ:Transaccion>`;
     }).join('\n');
 
-    const tipoPolizaMap: Record<string, string> = { diario: '3', ingreso: '1', egreso: '2' };
-    const tipoPoliza = tipoPolizaMap[entry.policyType || 'diario'] || '3';
+    const tipoPoliza = TIPO_POLIZA_SAT[poliza.tipo] || '3';
 
-    return `  <PLZ:Poliza NumUnIdenPol="${index + 1}" Fecha="${entry.date}" Concepto="${escapeXML(entry.description)}" TipoPoliza="${tipoPoliza}">
+    return `  <PLZ:Poliza NumUnIdenPol="${poliza.folio}" Fecha="${poliza.fecha}" Concepto="${escapeXML(poliza.concepto)}" TipoPoliza="${tipoPoliza}">
 ${transacciones}
   </PLZ:Poliza>`;
   }).join('\n');
@@ -178,10 +197,21 @@ ${transacciones}
   // Valor de referencia para entrega estándar AF (Acto de Fiscalización).
   const numOrden = 'AFO1234567/26';
 
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <PLZ:Polizas xmlns:PLZ="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo http://www.sat.gob.mx/esquemas/ContabilidadE/1_3/PolizasPeriodo/PolizasPeriodo_1_3.xsd" Version="1.3" RFC="${rfc.toUpperCase()}" Mes="${mes}" Anio="${anio}" TipoSolicitud="AF" NumOrden="${numOrden}">
 ${polizasXML}
 </PLZ:Polizas>`;
+};
 
+/** Wrapper de descarga (DV-4): filename RFCAÑOMESPL.xml, contenido tal cual el builder. */
+export const exportPolizasXML = (
+  rfc: string,
+  anio: string,
+  mes: string,
+  polizas: Poliza[],
+  accounts: Account[]
+): string => {
+  const xml = buildPolizasXML(rfc, anio, mes, polizas, accounts);
   downloadXML(`${rfc.toUpperCase()}${anio}${mes}PL.xml`, xml.trim());
+  return xml;
 };

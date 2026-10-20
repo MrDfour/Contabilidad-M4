@@ -1,17 +1,21 @@
 import React from 'react';
 import { Download, FileText, FileCode } from 'lucide-react';
-import type { Account, JournalEntry, TAccountsData } from '../types';
+import type { Account, JournalEntry, Poliza, TAccountsData } from '../types';
 import { cn } from '../lib/utils';
-import { generateCatalogoXML, generateBalanzaXML, generateDIOTTxt, generatePolizasXML } from '../lib/satExport';
+import { generateCatalogoXML, generateBalanzaXML, generateDIOTTxt, exportPolizasXML } from '../lib/satExport';
 
 export function ContabilidadElectronicaView({
   accounts,
   entries,
+  polizas,
   tAccountsData,
   onSetModal
 }: {
   accounts: Account[];
+  /** Proyección aplanada de las pólizas (fuente de CT/BN/DIOT — consistencia con Catalogo/Balanza). */
   entries: JournalEntry[];
+  /** Pólizas reales: fuente del XML de Pólizas del Periodo (Fase 6 — folios reales). */
+  polizas: Poliza[];
   tAccountsData: TAccountsData;
   onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void;
 }) {
@@ -72,7 +76,7 @@ export function ContabilidadElectronicaView({
   const handlePolizas = () => {
     if (!isValid) return;
     try {
-      generatePolizasXML(rfc.trim(), anio, mes, entries, accounts);
+      exportPolizasXML(rfc.trim(), anio, mes, polizas, accounts);
       onSetModal({ type: 'success', title: 'Pólizas Generadas', message: 'El archivo XML de Pólizas del Periodo se ha descargado correctamente.' });
     } catch (error: any) {
       onSetModal({ type: 'error', title: 'Error', message: error.message });
