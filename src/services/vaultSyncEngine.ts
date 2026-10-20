@@ -345,7 +345,7 @@ export class VaultSyncEngine {
    * el gap existe para limitar auto-publicaciones en ráfaga, no para censurar
    * la orden explícita del usuario.
    */
-  private async publicar(opciones?: { forzar?: boolean; saltarChequeoRemoto?: boolean }): Promise<boolean> {
+  private async publicar(opciones?: { forzar?: boolean; saltarChequeoRemoto?: boolean; ignorarHuella?: boolean }): Promise<boolean> {
     const credencial = this.credencial;
     if (!credencial || !this.activo) return false;
     if (this.estado === 'aplicando') return false; // conflicto en curso (K-7: decide la UI)
@@ -368,7 +368,10 @@ export class VaultSyncEngine {
       }
     }
 
-    const vuelo = this.publicacionReal({ saltarChequeoRemoto: opciones?.saltarChequeoRemoto });
+    const vuelo = this.publicacionReal({
+      saltarChequeoRemoto: opciones?.saltarChequeoRemoto,
+      ignorarHuella: opciones?.ignorarHuella,
+    });
     this.promesaEnVuelo = vuelo;
     try {
       return await vuelo;
@@ -378,7 +381,10 @@ export class VaultSyncEngine {
   }
 
   /** Cuerpo efectivo de una publicación (PUT al relay). Llamar vía publicar(). */
-  private async publicacionReal(opciones?: { saltarChequeoRemoto?: boolean }): Promise<boolean> {
+  private async publicacionReal(opciones?: {
+    saltarChequeoRemoto?: boolean;
+    ignorarHuella?: boolean;
+  }): Promise<boolean> {
     const credencial = this.credencial;
     if (!credencial || !this.activo) return false;
 
@@ -457,7 +463,13 @@ export class VaultSyncEngine {
       // Anti-eco (K-11): si el contenido es EXACTAMENTE el del último remoto
       // aplicado (el App lo volvió a persistir al hidratar), no se publica —
       // publicarlo trasladaría el bucle de versiones al otro dispositivo.
-      if (this.huellaUltimoRemoto === await huellaSnapshot(textoSnapshot)) {
+      // Excepción: `ignorarHuella` (el merge aplica contenido CIFRADO del
+      // conflicto; su huella podría coincidir — p. ej. local sin altas propias —
+      // y SIEMPRE debe salir como versión nueva para toda la bóveda, F-7).
+      if (
+        !opciones?.ignorarHuella &&
+        this.huellaUltimoRemoto === (await huellaSnapshot(textoSnapshot))
+      ) {
         this.ultimaPublicacion = 0; // nada se escribió: no consume gap
         this.sucio = false;
         await this.persistirSucio();
@@ -708,6 +720,124 @@ export class VaultSyncEngine {
   descartarConflicto(): void {
     this.conflicto = null;
     if (this.estado === 'conflicto') this.setEstado('al dia');
+  }
+
+  /**
+   * Contenido DESCIFRADO del documento en conflicto (botón "Fusionar ambos",
+   * Fase C de PLAN_FUSION_BOVEDA.md). Solo lectura: no toca versión, huella ni
+   * estado. Devuelve null si no hay conflicto, no hay credencial o el blob no
+   * descifra (en ese caso notifica el error).
+   */
+  async contenidoConflicto(): Promise<unknown | null> {
+    const conflicto = this.conflicto;
+    const credencial = this.credencial;
+    if (!conflicto || !credencial) return null;
+    try {
+      const sobre = JSON.parse(conflicto.blob) as unknown;
+      const texto = await decryptPayload(sobre, credencial.secretKey);
+      const snapshot = JSON.parse(texto) as unknown;
+      if (!esBackupV3(snapshot as RestorableBackup)) {
+        throw new Error('El conflicto no contiene un snapshot v3 válido.');
+      }
+      return snapshot;
+    } catch (error) {
+      this.notificar({
+        tipo: 'error',
+        detalle: error instanceof Error ? error.message : 'No se pudo descifrar el conflicto.',
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Aplicar el snapshot FUSIONADO y publicarlo como versión NUEVA para toda la
+   * bóveda (F-7 de PLAN_FUSION_BOVEDA.md): versión = max(vigente, conflicto)+1,
+   * conflicto despejado, publicación forzada SIN chequeo remoto (la decisión de
+   * fusión ya ocurrió en la pantalla de revisión) y SIN concesión al anti-eco:
+   * el contenido merged puede coincidir con el del conflicto (local sin altas
+   * propias) y aun así debe salir; el anti-eco NO puede silenciar al usuario.
+   *
+   * Devuelve true solo cuando la restauración Y la publicación triunfaron. Si
+   * la publicación falla, el estado fusionado queda en pantalla y `sucio` reintenta.
+   */
+  async aplicarSnapshotFusionado(snapshot: unknown): Promise<boolean> {
+    const credencial = this.credencial;
+    if (!credencial || !this.activo) {
+      this.notificar({ tipo: 'error', detalle: 'El motor de sync no está activo.' });
+      return false;
+    }
+    if (!this.conflicto) {
+      this.notificar({ tipo: 'error', detalle: 'No hay conflicto que fusionar.' });
+      return false;
+    }
+    if (!esBackupV3(snapshot as RestorableBackup)) {
+      this.notificar({ tipo: 'error', detalle: 'El snapshot fusionado no tiene formato v3.' });
+      return false;
+    }
+    if (!this.puente.puedeEscribir() || this.estado === 'publicando' || this.aplicandoRemoto) {
+      this.notificar({
+        tipo: 'error',
+        detalle: 'El motor está ocupado o la pantalla bloqueada; reintenta.',
+      });
+      return false;
+    }
+
+    this.setEstado('aplicando');
+    this.aplicandoRemoto = true; // suprime schedulePublicacion durante la restauración
+    try {
+      const aplicado = await this.puente.restaurar(snapshot);
+      if (!aplicado) {
+        throw new Error('El orquestador no aplicó el snapshot fusionado.');
+      }
+
+      // La huella queda fijada AL contenido fusionado: las auto-publicaciones
+      // posteriores del MISMO contenido (post-restauración) se silencian; la
+      // publicación de abajo usa `ignorarHuella` para salir sí o sí (F-7).
+      this.huellaUltimoRemoto = await huellaSnapshot(JSON.stringify(snapshot));
+      const guardarHuella = this.opciones.guardar ?? saveToStorage;
+      await guardarHuella(CLAVE_HUELLA_REMOTA, this.huellaUltimoRemoto);
+
+      // El conflicto se mantiene VIVO durante la publicación: es el cimiento
+      // del número de versión (definirSiguienteVersion = max(local, conflicto)+1
+      // evita el pseudo-bloqueo K-7); publicacionReal lo limpia al triunfar.
+      // NO se pre-suba versionLocal: un PUT fallido no reclama números.
+      this.notificar({ tipo: 'aplicado', detalle: 'fusión aplicada' });
+
+      // Publicación inmediata SIN publicar(): la puerta anti-reingreso de ese
+      // wrapper bloquearía el camino transicionado; aquí se asienta el vuelo a
+      // mano (publicacionReal pasa por setEstado('publicando') por dentro; el
+      // chequeo remoto NO corre: la decisión de fusión ya se tomó, F-7).
+      const vuelo = this.publicacionReal({
+        saltarChequeoRemoto: true,
+        ignorarHuella: true,
+      });
+      this.promesaEnVuelo = vuelo;
+      const publicado = await vuelo;
+      if (this.promesaEnVuelo === vuelo) this.promesaEnVuelo = null;
+      if (!publicado) {
+        // Fallo de red/relay: el contenido fusionado ya vive en pantalla y
+        // `schedulePublicacion` (sucio) lo envía en el próximo intento. La huella
+        // se limpia para que el reenviado NO sufra anti-eco por la esquina
+        // "fusionado == conflicto original"; el conflicto queda de pie y
+        // sigue siendo el cimiento del número del reenviado (coherencia K-7).
+        this.huellaUltimoRemoto = null;
+        await guardarHuella(CLAVE_HUELLA_REMOTA, null);
+        this.sucio = true;
+        await this.persistirSucio();
+      }
+      return publicado;
+    } catch (error) {
+      // La restauración falló: el conflicto QUEDA DE PIE (F-8) para que el
+      // usuario reintente la fusión o elija otro camino del modal.
+      this.setEstado('conflicto');
+      this.notificar({
+        tipo: 'error',
+        detalle: error instanceof Error ? error.message : 'No se pudo aplicar la fusión.',
+      });
+      return false;
+    } finally {
+      this.aplicandoRemoto = false;
+    }
   }
 
   private async aplicarDocumento(doc: DocumentoRemoto): Promise<void> {

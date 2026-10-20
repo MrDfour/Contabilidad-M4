@@ -24,7 +24,8 @@ export function ConflictoBovedaModal({
   onResolver,
 }: {
   conflicto: ConflictoBovedaVista | null;
-  onResolver: (mantenerLocal: boolean) => void;
+  /** 'local' | 'remoto' | 'fusionar' (Fase C de PLAN_FUSION_BOVEDA.md). */
+  onResolver: (camino: 'local' | 'remoto' | 'fusionar') => void;
 }) {
   return (
     <AnimatePresence>
@@ -45,8 +46,9 @@ export function ConflictoBovedaModal({
             </p>
             <p className="text-slate-400 text-sm mb-4 leading-relaxed">
               Elige qué datos se quedan: la versión ganadora queda vigente para
-              todos los dispositivos de la bóveda. La bóveda es UNA sola: no hay
-              fusión automática de pólizas.
+              todos los dispositivos de la bóveda. Si capturaste cosas distintas
+              en cada lado sin conexión, "Fusionar ambos" conserva las pólizas
+              de los DOS lados con una revisión previa.
             </p>
             <p className="text-slate-500 text-xs mb-8 leading-relaxed">
               El lado que NO se conserve queda como versión en el historial de la
@@ -55,13 +57,22 @@ export function ConflictoBovedaModal({
             </p>
             <div className="flex flex-col gap-3">
               <button
-                onClick={() => onResolver(true)}
-                className="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-lg shadow-indigo-500/20 text-sm font-semibold"
+                onClick={() => onResolver('fusionar')}
+                className="px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-lg shadow-emerald-500/20 text-sm font-semibold text-left"
               >
-                Conservar datos locales
+                Fusionar ambos
+                <span className="block text-[11px] font-normal opacity-90 mt-0.5">
+                  Recomendado si capturaste en paralelo sin conexión: conserva las pólizas de los DOS lados con revisión previa.
+                </span>
               </button>
               <button
-                onClick={() => onResolver(false)}
+                onClick={() => onResolver('local')}
+                className="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-lg shadow-indigo-500/20 text-sm font-medium"
+              >
+                Conservar solo datos locales
+              </button>
+              <button
+                onClick={() => onResolver('remoto')}
                 className="px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 transition-colors text-sm font-medium"
               >
                 Sobrescribir con datos remotos

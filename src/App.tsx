@@ -17,6 +17,7 @@ import SyncModal from './components/SyncModal';
 import { GlobalInfoModal, type ModalInfo } from './components/modals/GlobalInfoModal';
 import { ConfirmDeleteModal, type ConfirmDeleteData } from './components/modals/ConfirmDeleteModal';
 import { ConflictoBovedaModal, type ConflictoBovedaVista } from './components/modals/ConflictoBovedaModal';
+import { FusionBovedaModal, narrarResumenFusion } from './components/modals/FusionBovedaModal';
 import { UpdateAvailableModal } from './components/modals/UpdateAvailableModal';
 import { AboutModal } from './components/modals/AboutModal';
 import { DownloadProgressBar } from './components/modals/DownloadProgressBar';
@@ -225,6 +226,8 @@ export default function App() {
   /** Último error del motor (evento 'error'): lo muestra el SyncModal en bruto. */
   const [falloBoveda, setFalloBoveda] = useState<string | null>(null);
   const [conflictoBoveda, setConflictoBoveda] = useState<ConflictoBovedaVista | null>(null);
+  /** Fusión en revisión (Fase C de PLAN_FUSION_BOVEDA.md): local Y remoto descifrado. */
+  const [fusionBoveda, setFusionBoveda] = useState<{ local: BackupSnapshotV3; remoto: BackupSnapshotV3 } | null>(null);
   const hasLoadedRef = useRef(false);
   hasLoadedRef.current = hasLoaded; // fresco por render (recarga C-4)
   const snapshotBovedaRef = useRef(obtenerSnapshotCompleto);
@@ -296,6 +299,25 @@ export default function App() {
       motor.parar();
     }
   }, [hasLoaded]);
+
+  // Fase C de PLAN_FUSION_BOVEDA.md: abrir la revisión de fusión. El contenido
+  // del conflicto lo descifra el motor (solo lectura); el local sale del
+  // snapshot completo actual. El conflicto NO se consume aquí (F-8).
+  const iniciarFusion = async (): Promise<void> => {
+    const motor = motorRef.current;
+    if (!motor) return;
+    const remoto = await motor.contenidoConflicto();
+    if (!remoto || !esBackupV3(remoto)) {
+      setModalInfo({
+        type: 'error',
+        title: 'No se pudo leer el lado remoto',
+        message: 'El contenido del dispositivo en conflicto no se pudo descifrar. Conserva un solo lado o reintenta.',
+      });
+      return;
+    }
+    const local = await obtenerSnapshotCompleto();
+    setFusionBoveda({ local, remoto });
+  };
 
   // K-5: cada persistencia confirmada de dominio agenda la publicación. El
   // dedupe por huella dentro del motor descarta el eco de la restauración.
@@ -620,11 +642,41 @@ export default function App() {
       />
 
       <ConflictoBovedaModal
-        conflicto={conflictoBoveda}
-        onResolver={(mantenerLocal) => {
+        conflicto={conflictoBoveda && !fusionBoveda ? conflictoBoveda : null}
+        onResolver={(camino) => {
+          if (camino === 'fusionar') {
+            // F-8: el conflicto queda de pie en el motor; la pantalla de
+            // revisión se superpone y el conflicto sigue visible si cancela.
+            void iniciarFusion();
+            return;
+          }
           setConflictoBoveda(null);
-          void motorRef.current?.resolverConflicto(mantenerLocal);
+          void motorRef.current?.resolverConflicto(camino === 'local');
         }}
+      />
+
+      {/* Revisión de la fusión (se superpone al conflicto; al cancelar, el conflicto reaparece) */}
+      <FusionBovedaModal
+        entrada={fusionBoveda}
+        onAplicar={(snapshot, resumen) => {
+          void (async () => {
+            const ok = motorRef.current
+              ? await motorRef.current.aplicarSnapshotFusionado(snapshot)
+              : false;
+            setFusionBoveda(null);
+            setConflictoBoveda(null);
+            if (ok) {
+              setModalInfo({ type: 'success', title: 'Fusión aplicada', message: narrarResumenFusion(resumen) });
+            } else {
+              setModalInfo({
+                type: 'error',
+                title: 'La fusión no se pudo publicar',
+                message: `${narrarResumenFusion(resumen)} El contenido quedó aplicado EN ESTE dispositivo y se reenviará automáticamente por el sync.`,
+              });
+            }
+          })();
+        }}
+        onCancelar={() => setFusionBoveda(null)}
       />
 
       {/* Gestor de clientes (C-1): switch + alta + edición + baja confirmada */}

@@ -161,4 +161,49 @@ manual multi-dispositivo del escenario de uso.
   conflicto) por `capturadoEn` con salto de folios tomados fuera del lote.
   15 tests en `src/lib/unionBovedas.test.ts` (total del proyecto: 273). Gate
   limpio (lint/tsc, vitest, build) y escaneo anti-CJK/mojibake sin hallazgos.
-- Fase B (motor) — PENDIENTE.
+- **Fase B — COMPLETADA (2026-10-20).** Motor en `src/services/vaultSyncEngine.ts`:
+  - `contenidoConflicto()`: descifra el doc del conflicto con la credencial
+    (solo lectura; null con error notificado si el blob no descifra).
+  - `aplicarSnapshotFusionado(snapshot)`: valida v3 → restaura vía puente →
+    publica como versión NUEVA = max(local, conflicto)+1, conflicto despejado
+    y estado 'al dia' al triunfar. La huella anti-eco queda fijada al contenido
+    fusionado (las re-persistencias idénticas NO re-publican) pero la
+    publicación del merge corre con `ignorarHuella` (opción nueva de
+    `publicar`/`publicacionReal`): el contenido merged puede coincidir con el
+    del conflicto (esquina "local sin altas propias") y aun así sale — el
+    anti-eco jamás silencia la orden explícita del usuario (F-7).
+  - Decisión de diseño durante: el conflicto queda VIVO mientras la
+    publicación no triunfe — es el cimiento del `max+1` (si falla el PUT y se
+    pre-subía versionLocal, el otro lado podría publicar ese número y quedar
+    ignorado: pseudo-bloqueo K-7 otra vez). `publicacionReal` limpia el
+    conflicto al triunfar; en fallo de restauración el conflicto queda de pie
+    (F-8) para reintentar o elegir otro camino.
+  - 6 tests nuevos en `vaultSyncEngine.test.ts` (29 del motor, 279 del
+    proyecto): descifrado de solo lectura, blob roto, fusión publicada con
+    conflicto despejado, anti-eco post-fusión silenciado, esquina
+    "merged == conflicto" sale igualmente, restauración fallida deja el
+    conflicto de pie, PUT fallido → sucio + huella limpia + reenvío con
+    max+1. Fix de helper:`fabricarPuente` aplicaba su parámetro
+    `sobrescribir` (era muerto). Gate limpio (lint/tsc, vitest, build) y
+    escaneo anti-CJK/mojibake sin hallazgos.
+- **Fase C — COMPLETADA (2026-10-20).** Tercer camino en la UI:
+  - `ConflictoBovedaModal`: `onResolver` ahora lleva camino
+    'local' | 'remoto' | 'fusionar'; botón "Fusionar ambos" arriba
+    (recomendado si solo hubo ALTAS) y texto ajustado.
+  - `FusionBovedaModal` NUEVO: pantalla de revision con tres pestañas
+    (Resumen / Folios en disputa / Duplicados sospechosos), decisión POR
+    ELEMENTO de folio con las 3 opciones F-2 (radio), duplicados con checkbox
+    excluidos por defecto F-5, ediciones cruzadas resueltas listadas F-3 y
+    avisos F-4 (inventarios/clientes locales, clientes faltantes NO
+    fusionados). "Aplicar fusión" deshabilitado mientras haya folios sin
+    decisión (F-8). Produce el snapshot con `aplicarFusion` y delega la
+    publicación al motor `aplicarSnapshotFusionado`. Z-order 110 sobre el
+    modal de conflicto (z-100): al CANCELAR, el conflicto reaparece intacto
+    (quedó de pie en el motor). Toast final vía `narrarResumenFusion`.
+  - `App.tsx`: estado `fusionBoveda`, `iniciarFusion()` (descifrado del
+    conflicto vía el motor + snapshot local) y aplicar → toast de éxito
+    (o de fallo de publicación: el contenido queda aplicado en este
+    dispositivo y el sync lo reenvía automáticamente).
+  - 6 tests en `src/components/modals/FusionBovedaModal.test.tsx`
+    (285 del proyecto). Gate limpio y escaneo anti-CJK/mojibake limpio.
+- Fase D (acción "Asignar folios pendientes") — PENDIENTE.

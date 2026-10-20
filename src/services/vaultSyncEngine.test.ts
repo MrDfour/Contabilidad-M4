@@ -84,7 +84,7 @@ function fabricarPuente(
     }),
     relayUrl: () => 'http://localhost:8787',
   };
-  return Object.assign(base, {
+  return Object.assign(base, sobrescribir, {
     get registro() {
       return registro;
     },
@@ -698,10 +698,236 @@ describe('vaultSyncEngine: eco de la restauración no se publica', () => {
   });
 });
 
+// --- Fusión del conflicto (PLAN_FUSION_BOVEDA.md, Fase B / F-7) ------------------
+
+describe('vaultSyncEngine: fusión del conflicto (contenidoConflicto + aplicarSnapshotFusionado)', () => {
+  it('contenidoConflicto descifra el doc del conflicto SIN tocar estado ni restaurar', async () => {
+    const puente = fabricarPuente();
+    const doc = await docRemoto(9, 'Móvil del contador');
+    const motor = new VaultSyncEngine(puente);
+    await motor.activar();
+
+    motor.schedulePublicacion(); // sucio
+    await motor.ingresarDocumentoRemoto(doc);
+    expect(motor.getEstado()).toBe('conflicto');
+
+    const contenido = await motor.contenidoConflicto();
+    expect(contenido).toEqual(SNAPSHOT_V3);
+    // Solo lectura: conflicto de pie, nada restaurado, versión intacta.
+    expect(motor.getEstado()).toBe('conflicto');
+    expect(motor.getConflicto()).toEqual(doc);
+    expect(puente.registro.aplicados).toHaveLength(0);
+    motor.parar();
+
+    // Sin conflicto → null (motor nuevo, sin entrar documento).
+    const fresco = new VaultSyncEngine(fabricarPuente());
+    await fresco.activar();
+    expect(await fresco.contenidoConflicto()).toBeNull();
+    fresco.parar();
+  });
+
+  it('contenidoConflicto devuelve null con error cuando el blob no descifra', async () => {
+    const puente = fabricarPuente();
+    const eventos: EventoMotor[] = [];
+    const docRoto: DocumentoRemoto = {
+      version: 3,
+      updatedAt: FECHA,
+      deviceLabel: 'Móvil',
+      blob: '{"no-es-un-sobre- valido": true }',
+    };
+    const motor = new VaultSyncEngine(puente);
+    motor.suscribir((e) => eventos.push(e));
+    await motor.activar();
+
+    motor.schedulePublicacion();
+    await motor.ingresarDocumentoRemoto(docRoto);
+    expect(motor.getEstado()).toBe('conflicto');
+
+    expect(await motor.contenidoConflicto()).toBeNull();
+    expect(eventos.some((e) => e.tipo === 'error')).toBe(true);
+    motor.parar();
+  });
+
+  it('aplicarSnapshotFusionado: restaura, publica max(local, conflicto)+1 y despeja el conflicto', async () => {
+    const puente = fabricarPuente();
+    const doc = await docRemoto(5, 'Móvil del contador');
+    const SNAPSHOT_FUSIONADO = { ...SNAPSHOT_V3, activaId: 'e2' };
+    let snapshotActual: unknown = SNAPSHOT_V3;
+    const pasesPut: DocumentoRemoto[] = [];
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        pasesPut.push(JSON.parse(String(init?.body)) as DocumentoRemoto);
+        return new Response('{"success":true}', { status: 200 });
+      }
+      return new Response(JSON.stringify({ success: true, noChanges: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const motor = new VaultSyncEngine(
+      {
+        ...fabricarPuente({
+          restaurar: async (snapshot: unknown) => {
+            snapshotActual = snapshot;
+            puente.registro.aplicados.push(snapshot);
+            return true;
+          },
+        }),
+        getSnapshot: async () => JSON.parse(JSON.stringify(snapshotActual)),
+      },
+      { fetchImpl },
+    );
+    await motor.activar();
+
+    motor.schedulePublicacion(); // sucio → conflicto contra el doc v5
+    await motor.ingresarDocumentoRemoto(doc);
+    expect(motor.getEstado()).toBe('conflicto');
+
+    const ok = await motor.aplicarSnapshotFusionado(SNAPSHOT_FUSIONADO);
+    expect(ok).toBe(true);
+    expect(puente.registro.aplicados[0]).toEqual(SNAPSHOT_FUSIONADO);
+    expect(motor.getConflicto()).toBeNull();
+    expect(motor.getEstado()).toBe('al dia');
+    expect(motor.getVersionLocal()).toBe(6); // max(0, conflicto 5) + 1: nunca colisionado
+    expect(pasesPut).toHaveLength(1);
+    expect(pasesPut[0].version).toBe(6);
+    // El contenido publicado es EXACTAMENTE el fusionado.
+    expect(pasesPut[0].blob.length).toBeGreaterThan(16);
+
+    // Anti-eco post-fusión: la re-persistencia del MISMO contenido no repite PUT
+    // (debounce + coalescing de 120 s + silencio por huella al dispararse).
+    motor.schedulePublicacion();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
+    await vi.advanceTimersByTimeAsync(GAP_ESCRITURA_MS);
+    await vi.waitFor(() => expect(motor.getSucio()).toBe(false));
+    expect(pasesPut).toHaveLength(1);
+    motor.parar();
+  });
+
+  it('el anti-eco NO silencia la fusión cuando el merged es idéntico al conflicto (F-7, F-8)', async () => {
+    // Caso de esquina del plan: local sin altas propias → el snapshot fusionado
+    // coincide byte a byte con el contenido del conflicto; aun así sale como
+    // versión nueva (el anti-eco jamás censa la orden explícita del usuario).
+    const puente = fabricarPuente();
+    const doc = await docRemoto(4);
+    const pasesPut: DocumentoRemoto[] = [];
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        pasesPut.push(JSON.parse(String(init?.body)) as DocumentoRemoto);
+        return new Response('{"success":true}', { status: 200 });
+      }
+      return new Response(JSON.stringify({ success: true, noChanges: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const motor = new VaultSyncEngine(puente, { fetchImpl });
+    await motor.activar();
+
+    motor.schedulePublicacion();
+    await motor.ingresarDocumentoRemoto(doc);
+    expect(motor.getEstado()).toBe('conflicto');
+
+    const ok = await motor.aplicarSnapshotFusionado(SNAPSHOT_V3);
+    expect(ok).toBe(true);
+    expect(pasesPut).toHaveLength(1); // huella igual al conflicto: sin ignorarHuella NO saldría
+    expect(pasesPut[0].version).toBe(5);
+    motor.parar();
+  });
+
+  it('restauración fallida deja el conflicto de pie (F-8); sin conflicto devuelve false', async () => {
+    const doc = await docRemoto(7);
+    const eventos: EventoMotor[] = [];
+
+    // restaurar false → ok=false y el conflicto sigue disponible.
+    const puenteFallo = fabricarPuente({ restaurar: async () => false });
+    const motorFallo = new VaultSyncEngine(puenteFallo);
+    motorFallo.suscribir((e) => eventos.push(e));
+    await motorFallo.activar();
+    motorFallo.schedulePublicacion();
+    await motorFallo.ingresarDocumentoRemoto(doc);
+    const ok = await motorFallo.aplicarSnapshotFusionado(SNAPSHOT_V3);
+    expect(ok).toBe(false);
+    expect(motorFallo.getConflicto()).toEqual(doc); // queda de pie para reintentar/otro camino
+    expect(motorFallo.getEstado()).toBe('conflicto');
+    motorFallo.parar();
+
+    // Sin conflicto: rechaza SIN restaurar ni publicar.
+    const puente = fabricarPuente();
+    let puestas = 0;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') puestas += 1;
+      return new Response('{"success":true}', { status: 200 });
+    }) as unknown as typeof fetch;
+    const motor = new VaultSyncEngine(puente, { fetchImpl });
+    motor.suscribir((e) => eventos.push(e));
+    await motor.activar();
+    expect(await motor.aplicarSnapshotFusionado(SNAPSHOT_V3)).toBe(false);
+    expect(puente.registro.aplicados).toHaveLength(0);
+    expect(puestas).toBe(0);
+    expect(eventos.some((e) => e.detalle === 'No hay conflicto que fusionar.')).toBe(true);
+    motor.parar();
+  });
+
+  it('PUT fallido tras la fusión: el estado queda sucio y el reintento publica el fusionado', async () => {
+    const puente = fabricarPuente();
+    const doc = await docRemoto(5);
+    const SNAPSHOT_FUSIONADO = { ...SNAPSHOT_V3, activaId: 'e2' };
+    let snapshotActual: unknown = SNAPSHOT_V3;
+    let puestas = 0;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        puestas += 1;
+        // Solo el PRIMER PUT falla; el reintento sale.
+        return puestas === 1
+          ? new Response(' relay saturado ', { status: 500 })
+          : new Response('{"success":true}', { status: 200 });
+      }
+      return new Response(JSON.stringify({ success: true, noChanges: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const motor = new VaultSyncEngine(
+      {
+        ...fabricarPuente({
+          restaurar: async (snapshot: unknown) => {
+            snapshotActual = snapshot;
+            puente.registro.aplicados.push(snapshot);
+            return true;
+          },
+        }),
+        getSnapshot: async () => JSON.parse(JSON.stringify(snapshotActual)),
+      },
+      { fetchImpl },
+    );
+    await motor.activar();
+
+    motor.schedulePublicacion();
+    await motor.ingresarDocumentoRemoto(doc);
+
+    expect(await motor.aplicarSnapshotFusionado(SNAPSHOT_FUSIONADO)).toBe(false);
+    // conflicto de pie: es el cimiento del número del reenviado (coherencia K-7).
+    expect(motor.getConflicto()).toEqual(doc);
+    expect(motor.getSucio()).toBe(true); // marcado para reenvío
+    expect(puestas).toBe(1); // solo el intento que falló
+
+    // El reintento natural (schedule + debounce) SÍ publica el contenido
+    // fusionado: la huella se limpió y el conflicto informa max(local, conflicto)+1.
+    motor.schedulePublicacion();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
+    // El reintento corre dentro de los timers falsos: bombear timers/microtareas
+    // hasta el desenlace (vi.waitFor con timers falsos no siempre bombea aquí).
+    for (let i = 0; i < 200 && motor.getVersionLocal() === null; i += 1) {
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(puestas).toBe(2);
+    expect(motor.getVersionLocal()).toBe(6);
+    expect(motor.getConflicto()).toBeNull(); // la publicación triunfa: conflicto despejado
+    expect(motor.getEstado()).toBe('al dia');
+    motor.parar();
+  });
+});
+
 // --- Persistencia del puntero (K-7) ---------------------------------------------
 
 describe('vaultSyncEngine: persistencia de versión/suciedad', () => {
   it('versión publicada y bandera limpia sobreviven a un motor nuevo', async () => {
+
     const puente = fabricarPuente();
     let llamadasPut = 0;
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
