@@ -1,0 +1,18 @@
+# Relay de Sincronización — Cloudflare Workers + KV
+# El relay solo transporta blobs cifrados en origen (E2EE): jamás interpreta el contenido.
+#
+# Para el despliegue (Pasos en README, Fase 6 de PLAN_SYNC_KV.md):
+#   1. Crear el namespace: npx wrangler kv:namespace create CONTABILIDAD_VAULT
+#   2. Reemplazar el id marcado con REEMPLAZAR_ID por el id real (el id NO es un secreto:
+#      los blobs opacos no revelan nada sin la clave del dispositivo).
+#   3. Disparar el flujo de GitHub Actions "Deploy Cloudflare Relay Worker":
+#      Secrets requeridos -> CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID.
+name = "contabilidad-sync-relay"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# Espacio de nombres KV para la bóveda de sincronización (documento único por bóveda
+# con rotación de historial, PLAN_SYNC_KV.md K-5/K-8).
+[[kv_namespaces]]
+binding = "CONTABILIDAD_VAULT"
+id = "REEMPLAZAR_ID"

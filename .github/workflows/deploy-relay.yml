@@ -1,0 +1,24 @@
+name: Deploy Cloudflare Relay Worker
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-worker:
+    name: Despliegue del relay en Cloudflare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Desplegar con Wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: 'worker'

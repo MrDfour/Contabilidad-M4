@@ -27,7 +27,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'worker/tests/**/*.test.ts'],
     setupFiles: ['src/test/setup.ts'],
 
     /** Integración completa de la red: npm run lint && npm run test (criterio de salida). */
