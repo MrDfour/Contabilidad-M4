@@ -21,6 +21,8 @@ interface AppHeaderProps {
   /** Nombre del cliente activo (null antes del boot o sin clientes). */
   empresaActivaNombre: string | null;
   onOpenEmpresas: () => void;
+  /** Estado de la bóveda para el punto del botón Sync (Fase 5 de PLAN_SYNC_KV.md). */
+  indicadorBoveda?: 'sin' | 'ok' | 'pendiente' | 'conflicto' | 'error';
 }
 
 export function AppHeader({
@@ -31,7 +33,8 @@ export function AppHeader({
   isMobile,
   activeMobileTabLabel,
   empresaActivaNombre,
-  onOpenEmpresas
+  onOpenEmpresas,
+  indicadorBoveda = 'sin'
 }: AppHeaderProps) {
   return (
     <header className="relative overflow-visible border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top))' }}>
@@ -103,6 +106,23 @@ export function AppHeader({
           >
             <Smartphone className="w-3.5 h-3.5" />
             Sync
+            <span
+              title={
+                indicadorBoveda === 'sin' ? 'Sin bóveda' :
+                indicadorBoveda === 'ok' ? 'Bóveda al día' :
+                indicadorBoveda === 'pendiente' ? 'Cambios pendientes de publicar' :
+                indicadorBoveda === 'conflicto' ? 'Conflicto de bóveda' :
+                'Error de bóveda'
+              }
+              className={cn(
+                'w-2 h-2 rounded-full',
+                indicadorBoveda === 'ok' && 'bg-emerald-400',
+                indicadorBoveda === 'pendiente' && 'bg-amber-400',
+                indicadorBoveda === 'conflicto' && 'bg-rose-400 animate-pulse',
+                indicadorBoveda === 'error' && 'bg-rose-400',
+                indicadorBoveda === 'sin' && 'bg-slate-600'
+              )}
+            />
           </button>
           <button
             onClick={() => onSetAppMode(prev => (prev === 'basic' ? 'fiscal' : 'basic'))}

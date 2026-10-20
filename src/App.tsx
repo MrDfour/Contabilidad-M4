@@ -10,11 +10,14 @@ import { useUpdateProgress } from './hooks/useUpdateProgress';
 import type { Account, FixedAsset, Poliza } from './types';
 import { buildTAccountsData, computeAccountBalances, formatPolizaFolio, flattenPolizasToJournalEntries, entryToPolizaInput } from './lib/accounting';
 import { clavePorEmpresa, arrayDe, objetoDe } from './lib/empresas';
-import { esBackupV3, type EmpresaWorkspace } from './hooks/useBackup';
+import { esBackupV3, type BackupSnapshotV3, type EmpresaWorkspace } from './hooks/useBackup';
+import { VaultSyncEngine, type EventoMotor } from './services/vaultSyncEngine';
+import { obtenerCredenciales, obtenerRelayUrl } from './services/vaultService';
 import FeedbackModal from './components/FeedbackModal';
 import SyncModal from './components/SyncModal';
 import { GlobalInfoModal, type ModalInfo } from './components/modals/GlobalInfoModal';
 import { ConfirmDeleteModal, type ConfirmDeleteData } from './components/modals/ConfirmDeleteModal';
+import { ConflictoBovedaModal, type ConflictoBovedaVista } from './components/modals/ConflictoBovedaModal';
 import { UpdateAvailableModal } from './components/modals/UpdateAvailableModal';
 import { AboutModal } from './components/modals/AboutModal';
 import { DownloadProgressBar } from './components/modals/DownloadProgressBar';
@@ -125,65 +128,76 @@ export default function App() {
     hydrateAssetsEmpresa
   }, setHasLoaded, activaId);
 
-  // Vigilante de Respaldo Semanal + lógica de respaldo (hook propio)
-  const { handleExportBackup, handleImportBackup } = useBackup({
-    // C-5: snapshot v3 de TODOS los clientes. Lecturas ONLY (anti-R1): la RAM
-    // ya cubre al activo; los demás se leen de SU clave (App orquesta solo la lectura).
-    getSnapshot: async () => {
-      const workspaces: EmpresaWorkspace[] = await Promise.all(
-        empresasState.empresas.map(async (empresa) => {
-          if (empresa.id === activaId) {
-            return {
-              id: empresa.id,
-              nombre: empresa.nombre,
-              rfc: empresa.rfc,
-              polizas,
-              accounts,
-              fixedAssets,
-              finalInventories
-            };
-          }
-          const [otrasPolizas, otrasAccounts, otrosAssets, otrosInventories] = await Promise.all([
-            loadFromStorage(clavePorEmpresa('contasis_polizas', empresa.id)),
-            loadFromStorage(clavePorEmpresa('contasis_accounts', empresa.id)),
-            loadFromStorage(clavePorEmpresa('contasis_fixed_assets', empresa.id)),
-            loadFromStorage(clavePorEmpresa('contasis_final_inventories', empresa.id))
-          ]);
+  // Snapshot completo v3 (C-5): solo lectura de TODAS las empresas; el activo
+  // sale de RAM y el resto de su clave. COMPARTIDO por la exportación de
+  // respaldos y por la bóveda (K-11: única puerta; el motor no toca hooks).
+  const obtenerSnapshotCompleto = async (): Promise<BackupSnapshotV3> => {
+    const workspaces: EmpresaWorkspace[] = await Promise.all(
+      empresasState.empresas.map(async (empresa) => {
+        if (empresa.id === activaId) {
           return {
             id: empresa.id,
             nombre: empresa.nombre,
             rfc: empresa.rfc,
-            polizas: arrayDe(otrasPolizas) as Poliza[],
-            accounts: arrayDe(otrasAccounts) as Account[],
-            fixedAssets: arrayDe(otrosAssets) as FixedAsset[],
-            finalInventories: objetoDe(otrosInventories) as Record<string, number>
+            polizas,
+            accounts,
+            fixedAssets,
+            finalInventories
           };
-        })
-      );
-      return { empresas: workspaces, activaId: activaId ?? '' };
-    },
+        }
+        const [otrasPolizas, otrasAccounts, otrosAssets, otrosInventories] = await Promise.all([
+          loadFromStorage(clavePorEmpresa('contasis_polizas', empresa.id)),
+          loadFromStorage(clavePorEmpresa('contasis_accounts', empresa.id)),
+          loadFromStorage(clavePorEmpresa('contasis_fixed_assets', empresa.id)),
+          loadFromStorage(clavePorEmpresa('contasis_final_inventories', empresa.id))
+        ]);
+        return {
+          id: empresa.id,
+          nombre: empresa.nombre,
+          rfc: empresa.rfc,
+          polizas: arrayDe(otrasPolizas) as Poliza[],
+          accounts: arrayDe(otrasAccounts) as Account[],
+          fixedAssets: arrayDe(otrosAssets) as FixedAsset[],
+          finalInventories: objetoDe(otrosInventories) as Record<string, number>
+        };
+      })
+    );
+    return { empresas: workspaces, activaId: activaId ?? '' };
+  };
+
+  // Aplicador v3 compartido: importación de respaldo y remoto de bóveda usan
+  // el MISMO camino (DV-C-3 restaura TODAS las empresas). La cantidad de
+  // clientes válidos decide el éxito; el feedback (modal) lo agrega cada
+  // llamador. Orquestador anti-R1: cada hook dueño recibe SU parte; nadie
+  // escribe claves ajenas. Composición atómica en el mismo evento.
+  const aplicarSnapshotV3 = (backup: BackupSnapshotV3): number => {
+    const validos = backup.empresas.filter(e => e && typeof e.id === 'string');
+    const activaRestaurada = validos.some(e => e.id === backup.activaId)
+      ? backup.activaId
+      : validos[0]?.id ?? '';
+    hydrateEmpresas({
+      activaId: activaRestaurada,
+      empresas: validos.map(({ id, nombre, rfc }) => ({ id, nombre, rfc }))
+    });
+    validos.forEach(ws => {
+      polizasState.hydrateEmpresa(ws.id, ws.polizas ?? []);
+      catalogState.hydrateEmpresa(ws.id, ws.accounts ?? []);
+      inventoriesState.hydrateEmpresa(ws.id, inventoriesToGeneral(ws.finalInventories ?? {}));
+      hydrateAssetsEmpresa(ws.id, ws.fixedAssets ?? []);
+    });
+    return validos.length;
+  };
+
+  // Vigilante de Respaldo Semanal + lógica de respaldo (hook propio)
+  const { handleExportBackup, handleImportBackup } = useBackup({
+    getSnapshot: obtenerSnapshotCompleto,
     notify: setModalInfo,
     canSuggest: () => !modalInfoRef.current,
     restore: (backup) => {
-      // Orquestador anti-R1: cada hook dueño recibe SU parte; nadie más
-      // escribe claves ajenas. Composición atómica en el mismo evento.
+      // C-5: v3 hidrata a TODOS los clientes con sus datos.
       if (esBackupV3(backup)) {
-        // C-5: v3 hidrata a TODOS los clientes con sus datos.
-        const validos = backup.empresas.filter(e => e && typeof e.id === 'string');
-        const activaRestaurada = validos.some(e => e.id === backup.activaId)
-          ? backup.activaId
-          : validos[0]?.id ?? '';
-        hydrateEmpresas({
-          activaId: activaRestaurada,
-          empresas: validos.map(({ id, nombre, rfc }) => ({ id, nombre, rfc }))
-        });
-        validos.forEach(ws => {
-          polizasState.hydrateEmpresa(ws.id, ws.polizas ?? []);
-          catalogState.hydrateEmpresa(ws.id, ws.accounts ?? []);
-          inventoriesState.hydrateEmpresa(ws.id, inventoriesToGeneral(ws.finalInventories ?? {}));
-          hydrateAssetsEmpresa(ws.id, ws.fixedAssets ?? []);
-        });
-        setModalInfo({ type: 'success', title: 'Restauración Exitosa', message: `Se restauraron ${validos.length} cliente(s). Las claves viejas quedaron reemplazadas con el contenido del respaldo.` });
+        const restaurados = aplicarSnapshotV3(backup);
+        setModalInfo({ type: 'success', title: 'Restauración Exitosa', message: `Se restauraron ${restaurados} cliente(s). Las claves viejas quedaron reemplazadas con el contenido del respaldo.` });
         return;
       }
 
@@ -205,6 +219,78 @@ export default function App() {
       setModalInfo({ type: 'success', title: 'Restauración Exitosa', message: `Se restauraron los datos del cliente "${empresaActiva?.nombre ?? 'Activo'}". Los demás clientes quedaron intactos.` });
     }
   });
+
+  // --- Motor de bóveda E2EE (Fase 5 de PLAN_SYNC_KV.md) ------------------------
+  // Única puerta con el dominio (K-11): el motor solo consume el snapshot v3 y
+  // pide restauración por el applier compartido; NUNCA toca claves de dominio.
+  const [indicadorBoveda, setIndicadorBoveda] = useState<'sin' | 'ok' | 'pendiente' | 'conflicto' | 'error'>('sin');
+  const [conflictoBoveda, setConflictoBoveda] = useState<ConflictoBovedaVista | null>(null);
+  const hasLoadedRef = useRef(false);
+  hasLoadedRef.current = hasLoaded; // fresco por render (recarga C-4)
+  const snapshotBovedaRef = useRef(obtenerSnapshotCompleto);
+  snapshotBovedaRef.current = obtenerSnapshotCompleto;
+  const restaurarBovedaRef = useRef<(snapshot: unknown) => Promise<boolean>>(async () => false);
+  restaurarBovedaRef.current = async (snapshot) => {
+    try {
+      return aplicarSnapshotV3(snapshot as BackupSnapshotV3) > 0;
+    } catch (error) {
+      console.error('No se pudo aplicar el estado remoto de la bóveda:', error);
+      return false;
+    }
+  };
+
+  const motorRef = useRef<VaultSyncEngine | null>(null);
+  if (!motorRef.current) {
+    motorRef.current = new VaultSyncEngine({
+      getSnapshot: () => snapshotBovedaRef.current(),
+      restaurar: (snapshot) => restaurarBovedaRef.current(snapshot),
+      puedeEscribir: () => hasLoadedRef.current,
+      credenciales: () => obtenerCredenciales(),
+      relayUrl: () => obtenerRelayUrl()
+    });
+  }
+
+  // Suscripción única: estado para el punto del AppHeader + conflicto a modal.
+  useEffect(() => {
+    const motor = motorRef.current;
+    if (!motor) return;
+    return motor.suscribir((evento: EventoMotor) => {
+      if (evento.tipo === 'conflicto') {
+        setConflictoBoveda({ version: evento.version, deviceLabel: evento.deviceLabel, updatedAt: evento.updatedAt });
+        setIndicadorBoveda('conflicto');
+        return;
+      }
+      if (evento.tipo === 'cambio') {
+        const detalle = evento.detalle ?? '';
+        if (detalle === 'sin bóveda' || detalle === 'inactivo') setIndicadorBoveda('sin');
+        else if (detalle === 'al dia') setIndicadorBoveda('ok');
+        else if (detalle === 'conflicto') setIndicadorBoveda('conflicto');
+        else if (detalle === 'error') setIndicadorBoveda('error');
+        else if (detalle === 'sucio' || detalle === 'publicando' || detalle === 'aplicando') setIndicadorBoveda('pendiente');
+      }
+    });
+  }, []);
+
+  // Montaje tras el boot + desmontaje en la recarga C-4 (K-11): mientras
+  // canSave es falso nada entra ni aplica; al volver el verde se reactiva y
+  // se despacha lo que quedó en cola.
+  useEffect(() => {
+    const motor = motorRef.current;
+    if (!motor) return;
+    if (hasLoaded) {
+      void motor.activar();
+      void motor.aplicarPendiente();
+    } else {
+      motor.parar();
+    }
+  }, [hasLoaded]);
+
+  // K-5: cada persistencia confirmada de dominio agenda la publicación. El
+  // dedupe por huella dentro del motor descarta el eco de la restauración.
+  useEffect(() => {
+    if (!hasLoaded) return;
+    motorRef.current?.schedulePublicacion();
+  }, [polizas, accounts, fixedAssets, finalInventories, empresasState.empresas, hasLoaded]);
 
   useEffect(() => {
     localStorage.setItem('contasis_app_mode', appMode);
@@ -335,6 +421,7 @@ export default function App() {
             activeMobileTabLabel={activeMobileTabLabel}
             empresaActivaNombre={empresaActiva?.nombre ?? null}
             onOpenEmpresas={() => setShowEmpresas(true)}
+            indicadorBoveda={indicadorBoveda}
           />
 
           <main className="flex-1 overflow-y-auto pt-3">
@@ -548,6 +635,15 @@ export default function App() {
         onClose={() => setShowSyncModal(false)}
         isDesktop={isDesktopRuntime}
         onNotify={(type, title, message) => setModalInfo({ type, title, message })}
+        onPublicar={async () => (motorRef.current ? motorRef.current.publicarAhora() : false)}
+      />
+
+      <ConflictoBovedaModal
+        conflicto={conflictoBoveda}
+        onResolver={(mantenerLocal) => {
+          setConflictoBoveda(null);
+          void motorRef.current?.resolverConflicto(mantenerLocal);
+        }}
       />
 
       {/* Gestor de clientes (C-1): switch + alta + edición + baja confirmada */}

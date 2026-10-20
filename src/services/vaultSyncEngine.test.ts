@@ -429,6 +429,46 @@ describe('vaultSyncEngine: WebSocket en vivo', () => {
   });
 });
 
+// --- Eco de la restauración (anti-eco de contenido, K-11) ---------------------
+
+describe('vaultSyncEngine: eco de la restauración no se publica', () => {
+  it('tras aplicar un remoto, el estado re-persistido idéntico no genera PUT; una edición real sí', async () => {
+    const puente = fabricarPuente();
+    const doc = await docRemoto(5);
+    let puestas = 0;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') puestas += 1;
+      return new Response('{"success":true}', { status: 200 });
+    }) as unknown as typeof fetch;
+
+    let snapshotActual: unknown = SNAPSHOT_V3;
+    const motor = new VaultSyncEngine(
+      { ...puente, getSnapshot: async () => JSON.parse(JSON.stringify(snapshotActual)) },
+      { fetchImpl },
+    );
+    await motor.activar();
+
+    await motor.ingresarDocumentoRemoto(doc);
+    expect(motor.getVersionLocal()).toBe(5);
+
+    // El App re-persistió al hidratar (eco): mismo contenido → sin PUT.
+    motor.schedulePublicacion();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
+    await vi.waitFor(() => expect(motor.getEstado()).toBe('al dia'));
+    expect(puestas).toBe(0);
+    expect(motor.getSucio()).toBe(false);
+
+    // Edición real del usuario (contenido distinto) → sí publica v6:
+    snapshotActual = { ...SNAPSHOT_V3, activaId: 'e2' };
+    motor.schedulePublicacion();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
+    await vi.waitFor(() => expect(puestas).toBe(1));
+    expect(motor.getVersionLocal()).toBe(6);
+
+    motor.parar();
+  });
+});
+
 // --- Persistencia del puntero (K-7) ---------------------------------------------
 
 describe('vaultSyncEngine: persistencia de versión/suciedad', () => {

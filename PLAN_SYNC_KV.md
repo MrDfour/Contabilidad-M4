@@ -357,3 +357,31 @@ son piezas existentes o envolturas.
   (`{empresas, activaId}`); `esBackupV3` valida antes de restaurar. La
   versión entera del documento ES la de la bóveda (K-5), separada de la
   "3.0.0" del formato de respaldo.
+- **Fase 5 — Integración en App y UX multi-cliente: EJECUTADA (2026-10-20).**
+  `App.tsx`: el snapshot v3 (`obtenerSnapshotCompleto`) y el aplicador
+  (`aplicarSnapshotV3`) se EXTRAJERON del hook `useBackup` para que respaldo
+  e importación sigan rutando igual y la bóveda use el MISMO camino
+  (DV-C-3). Motor creado por ref (instancia única por vida de la pestaña)
+  con puente de refs: `puedeEscribir` lee `hasLoaded` vía ref (recarga C-4),
+  credenciales/relay consultados LAZAMENTE en cada uso (desalistar surte sin
+  reinicio). Montaje: efecto de `hasLoaded` — al verde `activar` +
+  `aplicarPendiente` (cola K-11), a falso `parar` (recarga C-4: nada entra ni
+  aplica). Activación del schedule en cada confirmación de persistencia
+  (efecto sobre pólizas/catálogo/activos/inventarios/empresas) y "Publicar
+  ahora" conectado como `onPublicar` del `SyncModal`. `AppHeader` muestra un
+  punto en el botón Sync (gris sin bóveda / verde al día / naranja
+  pendiente-publicando-aplicando / rojo conflicto-error, con pulso en
+  conflicto). Nuevo `ConflictoBovedaModal` (K-7): "Conservar datos locales" /
+  "Sobrescribir con datos remotos"; la decisión llama
+  `resolverConflicto(mantenerLocal)`. Gate: lint ✓ / test ✓ (249, 22
+  archivos) / build ✓ / escaneo CJK ✓.
+- **DV-K-7 (anti-eco por huella, el refuerzo crítico de la integración):** el
+  anti-eco del motor por candado era insuficiente porque el App re-persiste a
+  los hooks DESPUÉS de que `restaurar` resuelve (otro ciclo de render), así
+  que el eco escapaba al candado y causaría ping-pong infinito de versiones
+  entre dispositivos. Solución: el motor guarda la huella SHA-256 del último
+  snapshot remoto aplicado (`contasis_vault_remoto_huella`, persistida) y
+  `publicar()` omite el PUT cuando el contenido es EXACTAMENTE el de esa
+  huella, reiniciando además la marca del gap (nada se escribió). Ediciones
+  reales difieren de la huella y publican con normalidad. Cubierto con test
+  (eco sin PUT + edición real con PUT v6).

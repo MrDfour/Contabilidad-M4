@@ -23,7 +23,7 @@
  * restauración a través del puente (el orquestador `App` es el dueño, Fase 5).
  */
 
-import { decryptPayload, encryptPayload } from '../lib/crypto';
+import { decryptPayload, encryptPayload, sha256Bytes } from '../lib/crypto';
 import { esBackupV3, type RestorableBackup } from '../hooks/useBackup';
 import { loadFromStorage, saveToStorage } from './storageService';
 import type { CredencialesBoveda } from './vaultService';
@@ -39,6 +39,7 @@ export const RECONEXION_WS_MS = 5000;
 /** Claves de storage del estado del motor (K-7). */
 export const CLAVE_ULTIMA_VERSION = 'contasis_vault_last_version';
 export const CLAVE_SUCIO = 'contasis_vault_dirty';
+export const CLAVE_HUELLA_REMOTA = 'contasis_vault_remoto_huella';
 
 // --- Tipos -------------------------------------------------------------------
 
@@ -96,6 +97,14 @@ export function definirSiguienteVersion(
 ): number {
   const base = Math.max(versionLocal ?? 0, versionEnConflicto ?? 0);
   return base + 1;
+}
+
+/** Huella SHA-256 en hex del texto del snapshot (anti-eco, K-11). */
+export async function huellaSnapshot(texto: string): Promise<string> {
+  const bytes = await sha256Bytes(texto);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 /** Parceo y validación del documento remoto (espejo del worker). */
@@ -164,6 +173,8 @@ export class VaultSyncEngine {
   private conflicto: DocumentoRemoto | null = null;
   private aplicandoRemoto = false;
   private ultimaPublicacion = 0;
+  /** Huella del último remoto aplicado: el eco de la propia restauración no se publica. */
+  private huellaUltimoRemoto: string | null = null;
 
   private socket: SocketSimple | null = null;
   private temporizadorDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -233,6 +244,8 @@ export class VaultSyncEngine {
     }
     const crudaSucio: unknown = await leer(CLAVE_SUCIO).catch(() => null);
     this.sucio = crudaSucio === true;
+    const crudaHuella: unknown = await leer(CLAVE_HUELLA_REMOTA).catch(() => null);
+    this.huellaUltimoRemoto = typeof crudaHuella === 'string' && crudaHuella.length === 64 ? crudaHuella : null;
   }
 
   // --- Ciclo de vida ---------------------------------------------------------
@@ -348,7 +361,19 @@ export class VaultSyncEngine {
       if (!esBackupV3(snapshotV3 as RestorableBackup)) {
         throw new Error('El snapshot no tiene formato v3 (empresas[]).');
       }
-      const sobre = await encryptPayload(JSON.stringify(snapshotV3), credencial.secretKey);
+      const textoSnapshot = JSON.stringify(snapshotV3);
+      // Anti-eco (K-11): si el contenido es EXACTAMENTE el del último remoto
+      // aplicado (el App lo volvió a persistir al hidratar), no se publica —
+      // publicarlo trasladaría el bucle de versiones al otro dispositivo.
+      if (this.huellaUltimoRemoto === await huellaSnapshot(textoSnapshot)) {
+        this.ultimaPublicacion = 0; // nada se escribió: no consume gap
+        this.sucio = false;
+        await this.persistirSucio();
+        this.setEstado('al dia');
+        this.notificar({ tipo: 'cambio', detalle: 'sin cambios que publicar' });
+        return true;
+      }
+      const sobre = await encryptPayload(textoSnapshot, credencial.secretKey);
       const documento = {
         version: definirSiguienteVersion(this.versionLocal, this.conflicto?.version ?? null),
         updatedAt: new Date().toISOString(),
@@ -602,6 +627,7 @@ export class VaultSyncEngine {
     try {
       const sobre = JSON.parse(doc.blob) as unknown;
       const texto = await decryptPayload(sobre, credencial.secretKey);
+      this.huellaUltimoRemoto = await huellaSnapshot(texto);
       const snapshotV3 = JSON.parse(texto) as unknown;
       if (!esBackupV3(snapshotV3 as RestorableBackup)) {
         throw new Error('El documento remoto no contiene un snapshot v3 válido.');
@@ -611,6 +637,8 @@ export class VaultSyncEngine {
         throw new Error('El orquestador no aplicó la restauración remota.');
       }
       await this.persistirVersion(doc.version);
+      const guardarHuella = this.opciones.guardar ?? saveToStorage;
+      await guardarHuella(CLAVE_HUELLA_REMOTA, this.huellaUltimoRemoto);
       this.versionLocal = doc.version;
       this.setEstado('al dia');
       this.notificar({ tipo: 'aplicado', version: doc.version });
