@@ -141,14 +141,25 @@ jobs:
           packages: 'platform-tools'
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '21'
-          # Cache de Gradle (~/.gradle/caches + wrapper): sin esto, cada build
-          # re-descarga la dist de Gradle y los paquetes Maven (~300 MB) porque
-          # `cap add android` regenera el proyecto en cada corrida.
-          cache: 'gradle'
+          # OJO: aquí NO se usa `cache: 'gradle'` — el proyecto android/ aún no
+          # existe en checkout (lo genera `cap add android` más adelante) y el
+          # hashFiles del action aborta sin matches. La cache de Gradle va con
+          # actions/cache y clave ESTÁTICA:
+          # las dependencias de Gradle de Capacitor son estables, así que la
+          # clave solo debe renacer cuando se suba @capacitor/android
+          # (bump v1 -> v2, o borra el cache desde Actions > Management > Caches).
+
+      - name: Cache de Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: cache-gradle-android-v1
 
       - name: Install dependencies
         run: npm ci
