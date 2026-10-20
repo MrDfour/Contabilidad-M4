@@ -17,7 +17,7 @@ import {
   formatAmountInput
 } from '../../lib/format';
 import { validatePolizaBalance } from '../../lib/accounting';
-import { SearchableAccountSelect } from '../journal/AccountPicker';
+import { SearchableAccountSelect } from '../account/AccountPicker';
 
 /**
  * Modal de captura de pólizas (Fase 3 de PLAN_POLIZAS.md).

@@ -69,8 +69,7 @@ Contabilidad-M4/
     │   │   ├── AppHeader.tsx           #   sticky header + toggle Básico/Fiscal (layoutId="app-mode-indicator",
     │   │   │                          #   riesgo R4: existe en móvil y desktop; verifica en ambos)
     │   │   └── AppFooter.tsx           #   botones de respaldo/restaurar/acerca de/feedback
-    │   ├── journal/                  # Carpeta residual: SOLO vive AccountPicker (retiro Fase 5);
-    │   │                             #   moverlo a una carpeta común es opcional (Fase 7)
+    │   ├── account/                  # Selector de cuentas compartido (movido desde journal/ en Fase 7)
     │   │   └── AccountPicker.tsx       # SearchableAccountSelect: lo consumen FixedAssetsView y
     │   │                              #   polizas/PolizaForm
     │   ├── polizas/                  # ⭐ MÓDULO DE PÓLIZAS (Fase 3 PLAN_POLIZAS): captura principal.
@@ -358,3 +357,10 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 | Agregar una vista/nueva pantalla | Nuevo componente + switch en `App.tsx` |
 | Cambiar ventana Electron / autoupdater | `electron/main.js` |
 | Agregar/modificar lógica sujeta a pruebas | Colocar/actualizar el `.test.ts(x)` COLOCADO junto al módulo (regla y niveles en §9 "Red de pruebas"); `npm run lint && npm run test` en verde antes de commitear |
+
+### Quirks conocidos (anotados, no son bugs por decidir — ver `PLAN_POLIZAS.md` §4.5)
+
+1. **Encabezado `CONCEPTO` del Excel de importación nunca funcionó:** el parser (`importEntriesFromExcel.ts`) valida los encabezados ANTES de normalizarlos y solo reconoce `GLOSA`; así se congeló por decisión del plan (no rompe nada: la plantilla siempre usó `GLOSA`).
+2. **Error de importación Excel siempre genérico:** el catch de `PolizaView` muestra "Formato no soportado" ante CUALQUIER fallo (JSON corrupto, plantilla incompleta, etc.) — comportamiento heredado que se conservó.
+3. **`NumOrden` fijo en el XML de Pólizas:** lleva el valor de referencia `AFO1234567/26` (entrega estándar AF, Acto de Fiscalización). Personalizarlo sería un cambio futuro del valor, no del pipeline.
+4. **Inventario final sin auto-guardado:** `contasis_final_inventories` solo persiste al capturar el inventario o aplicar sync (diseño fiel al original, no descuido).

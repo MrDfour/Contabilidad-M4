@@ -1,8 +1,8 @@
 # Contabilidad M4 Pro
 
-Contabilidad M4 Pro es una app de gestión contable para escritorio y móvil. Te permite llevar el **Libro Diario**, generar **Cuentas T**, preparar **Balance General** y **Estado de Resultados**, además de activar herramientas del **modo fiscal** como activos fijos, lectura de CFDI XML y generación de archivos SAT.
+Contabilidad M4 Pro es una app de gestión contable para escritorio y móvil. Su captura principal son las **Pólizas Contables** (ingreso, egreso y diario con partida doble validada), a partir de las cuales se generan automáticamente el **Libro Diario** (reporte consolidado), las **Cuentas T**, el **Balance General** y el **Estado de Resultados**, además de activar herramientas del **modo fiscal** como activos fijos, lectura de CFDI XML y generación de archivos SAT.
 
-> Versión actual: **v0.7.0** · Autor: Fernando Martinez · Licencia: Apache-2.0
+> Versión actual: **v0.7.1** · Autor: Fernando Martinez · Licencia: Apache-2.0
 
 ---
 
@@ -11,15 +11,16 @@ Contabilidad M4 Pro es una app de gestión contable para escritorio y móvil. Te
 1. [Capturas de pantalla](#capturas-de-pantalla)
 2. [Instalación desde el paquete publicado](#instalación-desde-el-paquete-publicado)
 3. [Funcionalidades](#funcionalidades)
-   - [Libro Diario](#1-libro-diario)
-   - [Cuentas T](#2-cuentas-t)
-   - [Balance General](#3-balance-general)
-   - [Estado de Resultados](#4-estado-de-resultados)
-   - [Catálogo de Cuentas](#5-catálogo-de-cuentas)
-   - [Activos Fijos (Modo Fiscal)](#6-activos-fijos-modo-fiscal)
-   - [Contabilidad Electrónica SAT (Modo Fiscal)](#7-contabilidad-electrónica-sat-modo-fiscal)
-   - [Sincronización Escritorio ↔ Móvil](#8-sincronización-escritorio--móvil)
-   - [Mejoras de productividad](#9-mejoras-de-productividad)
+   - [Pólizas Contables](#1-pólizas-contables)
+   - [Libro Diario (reporte)](#2-libro-diario-reporte)
+   - [Cuentas T](#3-cuentas-t)
+   - [Balance General](#4-balance-general)
+   - [Estado de Resultados](#5-estado-de-resultados)
+   - [Catálogo de Cuentas](#6-catálogo-de-cuentas)
+   - [Activos Fijos (Modo Fiscal)](#7-activos-fijos-modo-fiscal)
+   - [Contabilidad Electrónica SAT (Modo Fiscal)](#8-contabilidad-electrónica-sat-modo-fiscal)
+   - [Sincronización Escritorio ↔ Móvil](#9-sincronización-escritorio--móvil)
+   - [Mejoras de productividad](#10-mejoras-de-productividad)
 4. [Configuración del entorno local (desde cero)](#configuración-del-entorno-local-desde-cero)
 5. [Scripts disponibles](#scripts-disponibles)
 6. [Tecnologías utilizadas](#tecnologías-utilizadas)
@@ -63,67 +64,65 @@ Descarga el instalador correspondiente a tu sistema operativo desde la [página 
 
 ## Funcionalidades
 
-### 1. Libro Diario
+### 1. Pólizas Contables
 
-El Libro Diario es el módulo central de la aplicación. Aquí se registran todos los movimientos contables de la empresa.
+Las **Pólizas Contables** son la unidad de captura principal de la aplicación (pestaña por defecto). Cada póliza es un asiento formal con partida doble validada, tipo de póliza SAT y folio consecutivo.
 
-#### Múltiples diarios
-- Puedes crear **varios libros de diario** independientes (útil para distintos períodos o empresas).
-- Cada diario tiene un nombre editable. Por defecto se crea uno llamado "Diario Inicial".
-- Los diarios se muestran como pestañas horizontales; puedes cambiar el activo con un clic.
-- Para renombrar un diario, haz clic en el ícono de lápiz junto al nombre.
-- Para eliminar un diario (solo si hay más de uno), haz clic en el ícono de papelera.
-
-#### Nuevo asiento contable
-1. Haz clic en **"Nuevo Asiento"** (botón azul, esquina superior derecha del módulo).
+#### Crear una póliza
+1. Haz clic en **"Nueva Póliza"** (esquina superior derecha del módulo).
 2. Completa los campos:
-   - **Fecha del Asiento** – fecha del movimiento.
-   - **Concepto / Glosa** – descripción breve de la operación.
-   - **Movimientos** – cada fila representa una cuenta con su tipo (Debe/Haber) y monto.
-3. Agrega tantos movimientos como sea necesario con el botón **"+ Movimiento"**.
-4. La partida doble se valida en tiempo real: el total del Debe debe ser igual al total del Haber. El botón "Guardar" se habilita solo cuando el asiento está cuadrado.
-5. Haz clic en **"Guardar Asiento"** para registrarlo.
+   - **Tipo** – Ingreso (1), Egreso (2) o Diario (3) según el Anexo 24 del SAT. El folio se asigna automáticamente y es **consecutivo por tipo** (ING 1, 2, 3… / EGR 1, 2, 3… / DIA 1, 2, 3…).
+   - **Fecha** y **Concepto** de la operación.
+   - **Partidas** – cada fila es un lado del asiento: cuenta, cargo (Debe) o abono (Haber), monto y concepto opcional.
+3. La **partida doble se valida en vivo**: el guardado solo se habilita cuando las sumas del Debe y del Haber coinciden ("Sumas iguales") y hay al menos 2 partidas.
+4. En **Modo Fiscal** cada partida admite **CFDI**: UUID leído directo de un XML (botón "Leer CFDI") y RFC del tercero, usados por el XML SAT de Pólizas y la DIOT.
 
-#### Editar un asiento
-- Haz clic en el ícono de lápiz (✏️) del asiento que deseas modificar.
-- El formulario se precarga con los datos actuales; realiza los cambios y guarda.
+#### Filtrado y búsqueda
+- Chips **Todas / Ingresos / Egresos / Diario** con conteo por tipo.
+- Buscador por folio numérico o concepto.
+- Pólizas se listan con su folio formateado (ej. `ING 0005`), desglose de partidas y las sumas del Debe/Haber.
 
-#### Eliminar un asiento
-- Haz clic en el ícono de papelera (🗑️); aparecerá una ventana de confirmación antes de eliminar.
+#### Editar y eliminar
+- El lápiz de la tarjeta reabre el formulario precargado (el **tipo queda congelado** en edición; el folio se conserva).
+- La papelera pide confirmación antes de eliminar.
 
-#### Reordenar asientos
-- Usa los botones de flecha (▲ / ▼) disponibles en escritorio para cambiar el orden de los asientos dentro del diario.
+#### Imprimir formato físico
+- Botón "Imprimir" → formato imprimible con distintivo del tipo, desglose de partidas, sumas iguales y renglones de firma **Elaboró / Revisó / Autorizó**.
 
-#### Importar asientos desde Excel
-1. Descarga primero la **Plantilla** (botón verde "Plantilla") para conocer el formato requerido.
-2. Rellena el archivo con tus asientos. Las columnas son:
+#### Importar desde Excel
+1. Descarga la **Plantilla** para conocer el formato. Las columnas son:
 
    | Columna       | Descripción                                              |
    |---------------|----------------------------------------------------------|
-   | `ASIENTO_ID`  | Número de asiento (agrupa las filas del mismo asiento)   |
+   | `ASIENTO_ID`  | Número de asiento (agrupa las filas de la misma póliza)  |
    | `FECHA`       | Fecha en formato `YYYY-MM-DD`                            |
-   | `GLOSA`       | Concepto / descripción del asiento                       |
+   | `GLOSA`       | Concepto / descripción de la póliza                      |
    | `CUENTA`      | Nombre exacto de la cuenta (según el catálogo integrado) |
    | `DEBE`        | Monto en el Debe (0 si no aplica)                        |
    | `HABER`       | Monto en el Haber (0 si no aplica)                       |
 
-3. Haz clic en **"Importar"** y selecciona tu archivo `.xlsx`.
-4. La aplicación agrupa las filas por `ASIENTO_ID`, valida que las cuentas existan en el catálogo y agrega los asientos al diario activo.
-5. Si alguna cuenta no se reconoce, aparecerá un mensaje indicando qué nombres no coincidieron.
-
-#### Exportar el Libro Diario
-- **Excel** → genera un archivo `.xlsx` con todos los movimientos del diario activo (columnas: ID, Fecha, Glosa, Cuenta, Código, Debe, Haber).
-- **PDF** → genera un PDF con cabecera de empresa, tabla de movimientos y pie de página con sección de firmas.
+2. Haz clic en **"Importar"** y selecciona tu archivo `.xlsx`.
+3. La app agrupa las filas por `ASIENTO_ID` y crea pólizas de tipo **Diario** con folios nuevos; si alguna cuenta no se reconoce, aparece un mensaje indicando los nombres que no coincidieron.
 
 ---
 
-### 2. Cuentas T
+### 2. Libro Diario (reporte)
 
-Las Cuentas T se calculan automáticamente a partir de los asientos registrados en el diario activo; no requieren entrada manual.
+El Libro Diario ya no captura movimientos: es un **reporte consolidado de solo lectura** que refleja todas las pólizas ordenadas cronológicamente (fecha + folio).
 
-- Cada cuenta usada en al menos un asiento se muestra como una "T" clásica con:
-  - **Columna izquierda (Debe):** movimientos con número de referencia de asiento.
-  - **Columna derecha (Haber):** movimientos con número de referencia de asiento.
+- Tabla clarina **FECHA / FOLIO / TIPO / CUENTA / CONCEPTO / DEBE / HABER**, con las sumas iguales al final.
+- Exportación a **Excel** y **PDF** (`Libro_Diario_Consolidado`) con cabecera y firmas.
+- Todas las capturas (manual, importación, cierre y depreciación de activos) son automáticas desde Pólizas.
+
+---
+
+### 3. Cuentas T
+
+Las Cuentas T se calculan automáticamente a partir de la **proyección consolidada de las pólizas** (ordenadas fecha + folio); no requieren entrada manual.
+
+- Cada cuenta usada en al menos una póliza se muestra como una "T" clásica con:
+  - **Columna izquierda (Debe):** movimientos con número de referencia (posición en la proyección consolidada, 1-index).
+  - **Columna derecha (Haber):** movimientos con número de referencia.
   - **Fila de totales:** suma del Debe y suma del Haber.
   - **Saldo:** el saldo normal de la cuenta (deudor o acreedor) resaltado.
 - **Exportar a Excel** → genera un archivo `.xlsx` con las cuentas T dibujadas en formato tabular (4 cuentas por fila), incluyendo totales y saldo final.
@@ -131,7 +130,7 @@ Las Cuentas T se calculan automáticamente a partir de los asientos registrados 
 
 ---
 
-### 3. Balance General
+### 4. Balance General
 
 El Balance General se genera automáticamente a partir de los saldos calculados por las Cuentas T.
 
@@ -149,7 +148,7 @@ Exportación:
 
 ---
 
-### 4. Estado de Resultados
+### 5. Estado de Resultados
 
 Presenta el resultado del ejercicio usando el **Método Analítico** (desglosado).
 
@@ -171,7 +170,7 @@ Secciones calculadas automáticamente:
 4. **Gastos Operativos** (Gastos de Venta, Gastos de Administración, Gastos Financieros, Otros Gastos)
 5. **Utilidad / Pérdida Neta**
 
-> El **Inventario Final** debe ingresarse manualmente en el campo correspondiente; su valor se guarda automáticamente por diario.
+> El **Inventario Final** debe ingresarse manualmente en el campo correspondiente; su valor se guarda automáticamente.
 
 Exportación:
 - **PDF** → Estado de resultados completo con encabezado, desglose y firmas.
@@ -179,7 +178,7 @@ Exportación:
 
 ---
 
-### 5. Catálogo de Cuentas
+### 6. Catálogo de Cuentas
 
 La aplicación incluye un catálogo preconfigurado de cuentas contables en español, organizado por tipo y con códigos contables listos para trabajar:
 
@@ -253,29 +252,29 @@ La aplicación incluye un catálogo preconfigurado de cuentas contables en espa�
 
 ---
 
-### 6. Activos Fijos (Modo Fiscal)
+### 7. Activos Fijos (Modo Fiscal)
 
 Cuando activas el **Modo Fiscal**, aparece el módulo de Activos Fijos para llevar mejor el control de inversiones:
 
 - Registro de activos con **nombre, fecha de adquisición, MOI y tasa fiscal anual**.
 - Marcado de activos **en operación** o **dados de baja**.
-- Ejecución de **depreciación mensual** con generación automática de asiento (cargo a gasto y abono a depreciación acumulada).
+- Ejecución de **depreciación mensual** con generación automática de una **póliza de Diario** (cargo a gasto y abono a depreciación acumulada).
 - Cálculo fiscal de **deducción de inversiones actualizada por INPC** para apoyo en análisis fiscal.
 
 ---
 
-### 7. Contabilidad Electrónica SAT (Modo Fiscal)
+### 8. Contabilidad Electrónica SAT (Modo Fiscal)
 
 El módulo de **Contabilidad Electrónica** facilita entregables fiscales del Anexo 24:
 
-- Generación de **Catálogo SAT (CT.xml)** y **Balanza (BN.xml)**.
+- Generación de **Catálogo SAT (CT.xml)**, **Balanza (BN.xml)** y **Pólizas del Periodo (PL.xml)**.
+- El XML de Pólizas se construye directamente desde tus pólizas del periodo: **folio real en `NumUnIdenPol`**, tipo SAT (1/2/3), concepto por partida y soporte de CompNal por CFDI.
 - Generación de **DIOT (.txt)** con base en movimientos de IVA acreditable por RFC.
 - Validación básica de formato de RFC y nomenclatura de archivos para descarga.
-- En captura de pólizas puedes elegir tipo (**diario / ingreso / egreso**) y cargar CFDI XML para autollenar UUID, RFC y total.
 
 ---
 
-### 8. Sincronización Escritorio ↔ Móvil
+### 9. Sincronización Escritorio ↔ Móvil
 
 La app incluye sincronización de datos entre dispositivos para continuar el trabajo sin duplicar captura:
 
@@ -287,7 +286,7 @@ La app incluye sincronización de datos entre dispositivos para continuar el tra
 
 ---
 
-### 9. Mejoras de productividad
+### 10. Mejoras de productividad
 
 - **Verificador de actualizaciones** para avisar cuando hay una versión más reciente.
 - **Feedback integrado** desde la app para reportar sugerencias o errores.
@@ -380,24 +379,32 @@ Contabilidad-M4/
 ├── electron/
 │   └── main.js          # Punto de entrada de Electron
 ├── src/
-│   ├── App.tsx          # Componente principal y toda la lógica de la UI
+│   ├── App.tsx          # Orquestador principal (hooks de dominio + navegación + modales)
 │   ├── types.ts         # Tipos TypeScript y catálogo de cuentas inicial
+│   ├── components/      # Vistas: polizas/, account/, layout/, modales/ y reportes
+│   ├── hooks/           # Dominios de estado (usePolizas, useCatalog, useBackup...)
+│   ├── lib/             # Cálculo contable, formatos, migraciones, exportaciones SAT/Excel/PDF
+│   ├── services/        # Persistencia (storageService) y sincronización (syncService)
 │   ├── main.tsx         # Punto de entrada de React
-│   ├── index.css        # Estilos globales
-│   └── lib/
-│       └── utils.ts     # Utilidades: exportación a Excel/PDF, lectura de Excel
-├── index.html           # Plantilla HTML
+│   └── index.css        # Estilos globales
 ├── vite.config.ts       # Configuración de Vite
 ├── tsconfig.json        # Configuración de TypeScript
 └── package.json         # Dependencias y scripts
 ```
 
+> Documento de arquitectura interna: ver `ARCHITECTURE.md` (mapa completo para desarrollo).
+
 ### Persistencia de datos
 
-Los datos (diarios, asientos e inventario final) se almacenan en el **localStorage** del navegador/Electron bajo las claves:
+Los datos se almacenan localmente bajo estas claves:
 
-- `contasis_journals` – array de diarios con sus asientos.
-- `contasis_final_inventories` – mapa de `{ journalId: inventarioFinal }`.
+- `contasis_polizas` – lista de pólizas contables (captura principal).
+- `contasis_polizas_migrated` – flag de la migración one-shot desde diarios legacy.
+- `contasis_accounts` – catálogo de cuentas (cuentas base readonly + creadas por el usuario).
+- `contasis_catalog_migrated` – flag de la consolidación del catálogo.
+- `contasis_final_inventories` – mapa `{ general: inventarioFinal }`.
+- `contasis_fixed_assets` – activos fijos.
+- `contasis_journals` – histórico de diarios legacy (si venías de una versión anterior; solo lectura, no se elimina desde la app).
 
 Para limpiar todos los datos, abre las herramientas de desarrollo (F12) → Application → Local Storage → elimina las claves mencionadas.
 

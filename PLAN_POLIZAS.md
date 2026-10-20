@@ -1,8 +1,14 @@
 # Guía Central — Módulo de Pólizas Contables y Refactorización del Libro Diario
 
-> **Documento vivo de ejecución.** Este archivo es la referencia única para implementar (y reanudar en cualquier agente) el módulo de Pólizas Contables.
-> El mapa vigente del proyecto está en `ARCHITECTURE.md` — leerlo completo ANTES de escribir código.
-> Este plan complementa (no reemplaza) al mapa; `REFACTORING_PLAN.md` está cerrado y es solo histórico.
+> **⚠ PLAN CERRADO Y ARCHIVADO (2026-10-19).** Todas las fases (1-7) están completas.
+> Desde aquí, `ARCHITECTURE.md` es la única referencia de arquitectura; este documento
+> se conserva como registro histórico del proceso. Las decisiones D-1..D-16, las
+> desviaciones DV-1..DV-10 y el registro de ejecución en §11/§12 siguen siendo la
+> fuente de por qué el código actual es como es.
+
+> **Documento de ejecución (ya histórico).** Era la referencia única para implementar
+> el módulo de Pólizas Contables. El mapa vigente del proyecto está en `ARCHITECTURE.md`.
+> `REFACTORING_PLAN.md` también está cerrado y es solo histórico.
 
 ---
 
@@ -480,11 +486,11 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 ### Fase 7 — Documentación, cierre y verificación global
 
 **Artefactos:**
-- [ ] `ARCHITECTURE.md` revisión íntegra final: árbol real, propiedad de claves con `contasis_polizas` + flag, flujo, modelo de datos (Poliza como unidad primaria, Journal como formato legacy de respaldo), quirks anotados.
-- [ ] `README.md`: si describe el flujo de uso, reflejar Pólizas como captura principal.
-- [ ] `PLAN_POLIZAS.md`: §11 registro final, §12 desviaciones cerradas; marcar plan COMPLETADO (documento pasa a histórico como hizo `REFACTORING_PLAN.md`).
-- [ ] (Opcional, solo si sobra contexto) mover `AccountPicker.tsx` a una carpeta común (`components/account/`) — requiere tocar imports en `polizas/` y `journal/` restante. NO imprescindible.
-- [ ] Gate final COMPLETO: `npm run lint && npm run test && npm run build` + CJK scan en todo + pruebas manuales end-to-end (lista en §8.3).
+- [x] `ARCHITECTURE.md` revisión íntegra final: árbol real, propiedad de claves con `contasis_polizas` + flag, flujo, modelo de datos (Poliza como unidad primaria, Journal como formato legacy de respaldo), quirks anotados (§10 "Quirks conocidos").
+- [x] `README.md`: flujo de uso reescrito — Pólizas como captura principal, Diario como reporte, Taxonomy SAT con PL.xml, claves de persistencia vigentes, versión v0.7.1.
+- [x] `PLAN_POLIZAS.md`: §11 registro final, §12 desviaciones cerradas; plan marcado COMPLETADO (pasa a histórico como hizo `REFACTORING_PLAN.md`).
+- [x] (Opcional) `AccountPicker.tsx` movido a `components/account/` — se retiró la carpeta residual `journal/` por completo.
+- [x] Gate final COMPLETO: `npm run lint && npm run test && npm run build` + CJK scan en todo src/ y docs (resultado anotado en §11).
 
 ---
 
@@ -554,7 +560,7 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 | 4 — Cutover reportes + Diario read-only | Completada | 2026-10-19 | 134 tests en verde (EntryForm.test eliminado, +5 accounting: D-10/D-11/integridad, +3 JournalView read-only); lint/build limpios; escaneo anti-CJK limpio. Reportes derivan de la proyección de pólizas; Diario = reporte consolidado solo lectura; importación Excel pasó a PolizaView. journal/ queda LEGACY (hoja de retiro Fase 5). Sugerencia de commit: `feat: cutover de reportes a pólizas y Libro Diario de solo lectura` |
 | 5 — Compatibilidad + limpieza legacy | Completada | 2026-10-19 | 133 tests en verde (13 archivos; DV-8 y DV-9 justifican el retiro/rebalanceo); lint/build limpios; escaneo anti-CJK limpio. Respaldo v2 (`polizas` + `journals: []`), import v1 migrado al vuelo D-14; sync local comparte `polizas`; catálogo consolidado D-12 con flag `contasis_catalog_migrated` (DV-9); inventarios a clave `'general'` D-13; retirados useJournals + EntryForm/EntryList/EntryCard/JournalTabs (contasis_journals intacto); header neutro. Sugerencia de commit: `feat: respaldo/sync compatibles con pólizas y retiro del modelo Journal` |
 | 6 — SAT por pólizas | Completada | 2026-10-19 | 146 tests en verde (133 + 13 nuevos de `satExport.test.ts`, 14 archivos); lint/build limpios; escaneo anti-CJK limpio. `generatePolizasXML` retirado; `NumUnIdenPol` = folio real; Concepto partida↔general; nada cambia para CT/BN/DIOT (siguen en la proyección). Sugerencia de commit: `feat: XML SAT de pólizas con folios reales desde el modelo Poliza` |
-| 7 — Documentación y cierre | Pendiente | — | |
+| 7 — Documentación y cierre | Completada | 2026-10-19 | 146 tests en verde (14 archivos); lint/build limpios; escaneo anti-CJK en TODO limpio. README reescrito al modelo de pólizas; ARCHITECTURE revisión íntegra + quirks anotados; AccountPicker → `components/account/` (carpeta `journal/` retirada por completo); plan marcado COMPLETADO y archivado. Pendiente posterior al plan (backlog del usuario): D-17 multi-cliente. Sugerencia de commit: `docs: cierre del plan de pólizas y README al modelo Poliza` |
 
 **Estados válidos:** `Pendiente` → `En curso` → `Completada` / `Detenida (motivo)`.
 
