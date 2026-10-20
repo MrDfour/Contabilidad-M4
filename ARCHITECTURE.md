@@ -5,13 +5,14 @@
 > sin necesidad de explorar todo el repositorio.
 > **Regla de mantenimiento:** si cambias la estructura, los datos almacenados o agregas archivos, actualiza este documento en el mismo commit.
 >
-> **⚠ En transición:** existe un plan de migración al modelo de Pólizas en curso
-> (`PLAN_POLIZAS.md`, Fases 6–7 pendientes al cierre de la Fase 5). Durante ese proceso,
-> la regla de mantenimiento aplica doble: cada fase del plan DEBE actualizar este documento
-> en el mismo commit que introduzca cambios de estructura. La tabla de archivos y la
-> sección 9 (convenciones) son las que envejecen más rápido.
+> **⚠ En transición:** existe un plan de extensión MULTI-CLIENTE en curso
+> (`PLAN_MULTI_CLIENTE.md`, heredero de `PLAN_POLIZAS.md` que quedó CERRADO).
+> Durante ese proceso la regla de mantenimiento aplica doble: cada fase del plan
+> DEBE actualizar este documento en el mismo commit que introduzca cambios de
+> estructura. La tabla de archivos y la sección 9 (convenciones) son las que
+> envejecen más rápido.
 
-Versión del código: v0.7.1 · Licencia: Apache-2.0 · README de usuario: `README.md`
+Versión del código: v0.8.0 · Licencia: Apache-2.0 · README de usuario: `README.md`
 
 ---
 
@@ -25,7 +26,7 @@ App de gestión contable (español, dominio fiscal mexicano) que funciona en **t
 | Escritorio | Electron (instaladores con `electron-builder`) | `electron/main.js` |
 | Android | Capacitor (`capacitor.config.ts`) | — |
 
-Módulos funcionales: Pólizas Contables (captura principal: Ingreso/Egreso/Diario), Libro Diario (reporte consolidado de solo lectura), Cuentas T, Balance General, Estado de Resultados, Catálogo de Cuentas, Activos Fijos con depreciación, Contabilidad Electrónica SAT (Anexo 24) y sincronización Escritorio ↔ Móvil.
+Módulos funcionales: Pólizas Contables (captura principal: Ingreso/Egreso/Diario), Multi-Cliente (contador con varios clientes: cada cliente = workspace con catálogo/activos/inventario/pólizas/RFC propios), Libro Diario (reporte consolidado de solo lectura), Cuentas T, Balance General, Estado de Resultados, Catálogo de Cuentas, Activos Fijos con depreciación, Contabilidad Electrónica SAT (Anexo 24) y sincronización Escritorio ↔ Móvil.
 
 **Stack:** React 19 + TypeScript strict + Vite + Tailwind CSS v4 (sin componentes de UI externos; la UI es propia). Exportación con ExcelJS / jsPDF / html2canvas-pro. Sincronización con PeerJS (WebRTC) + Upstash Redis REST como respaldo.
 
@@ -54,20 +55,26 @@ Contabilidad-M4/
     ├── index.css               # Tailwind v4 + estilos globales + animaciones de paleta
     ├── vite-env.d.ts           # Tipos de entorno Vite
     ├── types.ts                # ⭐ TODOS los tipos de dominio + INITIAL_ACCOUNTS (catálogo base).
-    │                           #   `Journal`/`JournalEntry`/`Movement` SOLO sobreviven como formatos
-    │                           #   legacy: migración one-shot, respaldos v1 y sync remoto viejo.
-    ├── App.tsx                 # ⭐ ORQUESTADOR (Fase 5): composición de hooks de dominio SIN el
-    │                           #   dominio Journal en RAM, navegación de vistas (appMode/activeTab),
-    │                           #   modales de UI, activos fijos, orquestadores multi-dominio (sync
-    │                           #   remoto, restauración de respaldo v1/v2); shell visual en layout/
+    │                           #   `Empresa`/`EstadoEmpresas` = clientes (D-17); `Journal`/`JournalEntry`/
+    │                           #   `Movement` SOLO sobreviven como formatos legacy: migración one-shot,
+    │                           #   respaldos v1 y sync remoto viejo.
+    ├── App.tsx                 # ⭐ ORQUESTADOR: composición de hooks de dominio (activos fijos viven
+    │                           #   aquí con clave POR CLIENTE), cambio de cliente activo, navegación
+    │                           #   (appMode/activeTab), modales de UI, orquestadores multi-dominio
+    │                           #   (sync remoto, restauración de respaldo v1/v2/v3); shell en layout/
     │
     ├── components/             # Vistas puras (reciben datos por props, no tocan storage)
+    │   ├── EmpresasModal.tsx         # ⭐ Gestor de CLIENTES (C-1): lista/switch de cliente activo,
+    │   │                             #   alta, renombre, RFC y baja con confirmación (C-8);
+    │   │                             #   el switch dispara la recarga orquestada (C-4)
     │   ├── layout/                   # Shell de layout extraído de App (Fase 3): presentacionales,
     │   │   ├── MobileMenu.tsx          #   drawer móvil (AnimatePresence), ítems derivados de NavigationTab[]
     │   │   ├── Sidebar.tsx             #   sidebar desktop: SIEMPRE montado (se oculta con CSS en móvil)
     │   │   │                          #   para preservar la animación layoutId="sidebar-active-indicator"
-    │   │   ├── AppHeader.tsx           #   sticky header + toggle Básico/Fiscal (layoutId="app-mode-indicator",
-    │   │   │                          #   riesgo R4: existe en móvil y desktop; verifica en ambos)
+    │   │   ├── AppHeader.tsx           #   sticky header + selector de cliente activo (abre el
+    │   │   │                          #   gestor EmpresasModal) + toggle Básico/Fiscal
+    │   │   │                          #   (layoutId="app-mode-indicator", riesgo R4: existe en
+    │   │   │                          #   móvil y desktop; verifica en ambos)
     │   │   └── AppFooter.tsx           #   botones de respaldo/restaurar/acerca de/feedback
     │   ├── account/                  # Selector de cuentas compartido (movido desde journal/ en Fase 7)
     │   │   └── AccountPicker.tsx       # SearchableAccountSelect: lo consumen FixedAssetsView y
@@ -120,6 +127,9 @@ Contabilidad-M4/
     │   ├── navigation.ts        # Tipos de navegación compartidos: AppMode, AppTab, NavigationTab,
     │   │                        #   DEFAULT_TAB ('polizas'), BASIC_NAV_TABS y FISCAL_NAV_TABS.
     │   │                        #   Consumido por App y layout/
+    │   ├── empresas.ts          # ⭐ MULTI-CLIENTE (PLAN_MULTI_CLIENTE): helpers PURAS de claves
+    │   │                        #   por cliente (clavePorEmpresa, arrayDe, objetoDe, BASES_POR_EMPRESA).
+    │   │                        #   Toda composición de clave `<dominio>_<empresaId>` pasa por aquí.
     │   ├── importEntriesFromExcel.ts  # Parser PURO de la plantilla Excel (valida encabezados,
     │   │                        #   carry-forward de celdas, groupKey por ASIENTO_ID,
     │   │                        #   cuentas por nombre normalizado/código y serial de Excel para fechas);
@@ -141,14 +151,15 @@ Contabilidad-M4/
     │                            #   `buildPolizasXML` puro (Fase 6: folios reales, Concepto por
     │                            #   partida) + wrapper `exportPolizasXML` (DV-4)
     │
-    │   # ⭐ Red de pruebas (Fase 5): cada .test.ts(x) COLOCADO junto a lo que prueba,
+    │   # ⭐ Red de pruebas: cada .test.ts(x) COLOCADO junto a lo que prueba,
     │   #    descubierto por src/**/*.test.{ts,tsx} (ver sección 9, "Red de pruebas"):
     │   ├── lib/accounting.test.ts · lib/format.test.ts · lib/export.test.ts
-    │   ├── lib/migrateJournalsToPolizas.test.ts · lib/migrateCatalogToGlobal.test.ts
+    │   ├── lib/empresas.test.ts · lib/migrateJournalsToPolizas.test.ts · lib/migrateCatalogToGlobal.test.ts
     │   ├── lib/navigation.test.ts · lib/satExport.test.ts
-    │   ├── hooks/useCatalog.test.ts · useAppData.test.ts
+    │   ├── hooks/useEmpresas.test.ts · useCatalog.test.ts · useAppData.test.ts
     │   │     · useBackup.test.ts · useInventories.test.ts · usePolizas.test.ts
     │   ├── components/polizas/PolizaForm.test.tsx · components/JournalView.test.tsx
+    │   ├── components/EmpresasModal.test.tsx
     │   └── test/setup.ts        # Setup global: limpieza entre tests + polyfills jsdom
     │
     ├── services/
@@ -160,25 +171,36 @@ Contabilidad-M4/
     └── hooks/
         ├── useCheckForUpdates.ts    # Consulta GitHub Releases vs versión actual
         ├── useUpdateProgress.ts     # Progreso de descarga de la actualización (Electron)
-        ├── useAppData.ts            # ⭐ HYDRATION inicial (Fase 5, SIN dominio Journal): carga las
-        │                            #   4 claves activas; dispara las migraciones one-shot (pólizas,
-        │                            #   catálogo D-12, inventarios D-13); marca onLoaded (protege R2).
-        │                            #   `contasis_journals` solo se LEE para migrar (archivo histórico)
-        ├── usePolizas.ts            # ⭐ Dueño de `contasis_polizas` + flag `contasis_polizas_migrated`:
-        │                            #   alta/edición/borrado con partida doble VALIDADA (D-9, lanza),
-        │                            #   folios por tipo (nextPolizaFolio), hydrate persistente SIEMPRE,
-        │                            #   alta programática (cierre/depreciación). Persistencia post-carga
-        │                            #   con puerta canSave — persiste incluso [] (anti re-migración, D-2)
-        ├── useCatalog.ts            # ⭐ Dueño de `contasis_accounts` + flag `contasis_catalog_migrated`:
-        │                            #   catálogo GLOBAL consolidado (D-12: sin híbrido por diario),
-        │                            #   auto-recuperación quirúrgica de cuentas base, guardado con
-        │                            #   debounce 300ms gated por canSave
-        ├── useInventories.ts        # ⭐ Dueño de `contasis_final_inventories`: mapa con clave fija
-        │                            #   'general' (D-13; migración legacy vía inventoriesToGeneral),
+        ├── useAppData.ts            # ⭐ HYDRATION + ORQUESTADOR MULTI-CLIENTE: boot con migración
+        │                            #   ONE-SHOT legacy → empresa por defecto "Mi Empresa" (C-2,
+        │                            #   flag `contasis_empresas_migrated`; ahí corre por única vez
+        │                            #   la migración de diarios→pólizas D-2 y la consolidación
+        │                            #   D-12), carga de los 4 dominios del cliente ACTIVO y
+        │                            #   recarga orquestada al cambiar de cliente (C-4, puerta
+        │                            #   canSave durante la transición). Las claves legacy se
+        │                            #   leen, NUNCA se borran (archivo histórico)
+        ├── useEmpresas.ts           # ⭐ Dueño de `contasis_empresas` ({activaId, empresas}) + flag
+        │                            #   `contasis_empresas_migrated`: CRUD de clientes (crear con
+        │                            #   uuid/renombrar/RFC/eliminar con guarda de último, C-8),
+        │                            #   setActiva, hydrate persistente SIEMPRE, puerta canSave
+        ├── usePolizas.ts            # ⭐ Dueño de `contasis_polizas_<empresaId>` (C-2): alta/edición/
+        │                            #   borrado con partida doble VALIDADA (D-9, lanza), folios por
+        │                            #   TIPO Y POR CLIENTE (nextPolizaFolio), hydrate (activo) +
+        │                            #   hydrateEmpresa (cualquier cliente, escribe SU clave),
+        │                            #   persistencia incluso [] con puerta canSave
+        ├── useCatalog.ts            # ⭐ Dueño de `contasis_accounts_<empresaId>`: catálogo POR
+        │                            #   CLIENTE (heredero del global D-12), auto-recuperación
+        │                            #   quirúrgica de cuentas base por cliente, hydrateEmpresa,
+        │                            #   guardado con debounce 300ms gated por canSave
+        ├── useInventories.ts        # ⭐ Dueño de `contasis_final_inventories_<empresaId>`: mapa con
+        │                            #   clave fija 'general' (D-13, migración vía
+        │                            #   inventoriesToGeneral), hydrateFromRemote + hydrateEmpresa,
         │                            #   NO autoguarda (fiel al original)
         └── useBackup.ts             # ⭐ Dueño de `contasis_last_backup`: vigilante semanal (12h),
-                                     #   exportación JSON v2 (snapshot CON polizas; journals vacío,
-                                     #   D-14), parseo y validación de restauración v1/v2
+                                     #   exportación JSON v3 ASYNC (todas las empresas con sus 4
+                                     #   dominios, C-5; getSnapshot lee las claves de los otros
+                                     #   clientes), restauración v3 completa / v1-v2 solo cliente
+                                     #   activo (v1 migra al vuelo, D-14)
 ```
 
 Regla general: **el estado vive en hooks de dominio (uno por clave de storage, ver JSDoc de cada hook) que `App.tsx` compondrá; el cálculo contable y la exportación viven en `lib/`; las vistas son presentacionales.** `App.tsx` es el orquestador: cualquier escritura que toque 2+ dominios (sync remoto, restauración de respaldo) pasa por UNA sola función suya (regla anti-R1) — ningún hook escribe la clave de otro.
@@ -196,24 +218,26 @@ Usuario → PolizasView (captura PRINCIPAL: manual + importación Excel D-11) �
         → ProfitLossView/FixedAssetsView (capturas programáticas) → createProgrammaticPoliza (D-10) → usePolizas
 ```
 
-- `App.tsx` es el orquestador: retiene navegación (`appMode`, `activeTab`), modales, activos fijos (`contasis_fixed_assets`, único dominio pendiente de migrar a hook) y compone los hooks de dominio. Desde Fase 5 NO existe dominio Journal en RAM.
-- **Cutover de reportes (Fase 4) / Desmantelamiento Journal (Fase 5) de `PLAN_POLIZAS.md`:** Cuentas T, Balance, Estado de Resultados, Catálogo (guard de cuentas en uso) y Cont. Electrónica se derivan de la PROYECCIÓN de pólizas (orden cronológico: fecha + folio). El Libro Diario es un reporte de solo lectura con las MISMAS pólizas. Las capturas programáticas pasan por `createProgrammaticPoliza` (adaptación `entryToPolizaInput` en App). Los badges de encabezado de Balance/P&L/Cuentas T muestran el literal fijo "Consolidado" (antes era el nombre del diario activo).
+- `App.tsx` es el orquestador: retiene navegación (`appMode`, `activeTab`), modales y el panel de ACTIVOS FIJOS (su dominio no vive en hook: `App` es dueño de la clave `contasis_fixed_assets_<empresaId>`, C-2) y compone los hooks de dominio. Desde Fase 5 NO existe dominio Journal en RAM.
+- **MULTI-CLIENTE (D-17/F-17 de `PLAN_MULTI_CLIENTE.md`):** la captura y todos los reportes operan SIEMPRE sobre el CLIENTE ACTIVO. `contasis_empresas` (dueño: `useEmpresas`) guarda la lista y el `activaId`; los 4 dominios de datos viven en claves por cliente (`contasis_<dominio>_<empresaId>`, C-2) y el cambio de cliente es una recarga orquestada por `useAppData` con `canSave` bajado durante la transición (C-4). Los folios de póliza son consecutivos POR TIPO Y POR CLIENTE. El RFC de la exportación SAT es `Empresa.rfc` (C-7): se precarga en Cont. Electrónica y se persiste tras exportar.
+- **Cutover de reportes (Fase 4) / Desmantelamiento Journal (Fase 5) de `PLAN_POLIZAS.md`:** Cuentas T, Balance, Estado de Resultados, Catálogo (guard de cuentas en uso) y Cont. Electrónica se derivan de la PROYECCIÓN de pólizas (orden cronológico: fecha + folio). El Libro Diario es un reporte de solo lectura con las MISMAS pólizas. Las capturas programáticas pasan por `createProgrammaticPoliza` (adaptación `entryToPolizaInput` en App). Los badges de encabezado de Balance/P&L/Cuentas T muestran el literal fijo "Consolidado".
 - Los saldos de Cuentas T, Balance y Estado de Resultados **no se almacenan**: se recalculan en cada render a partir de la proyección de pólizas (vía `lib/accounting.ts`).
-- **Limitación conocida (acordada con el usuario, ver `PLAN_POLIZAS.md` §10/§12 DV-7):** no existe segmentación por libro contable/empresa — `Poliza` es la captura única consolidada. Caso de uso aclarado: **contador externo con varios clientes** (cada cliente = empresa con RFC, catálogo y activos propios); el modelo Journal viejo tampoco lo satisfacía (catálogo base global, activos globales, un solo RFC para SAT). Una futura decisión D-17 (concepto de cliente/workspace: `empresaId` en Poliza, RFC por cliente en `satExport`) se diseñará tras el cierre del plan; `contasis_journals` permanece intacto para permitir una re-migración segmentada si se decide.
-- `useAppData` carga/migra pólizas (Fase 2) y desde Fase 5 consolida el catálogo (D-12: subcuentas de diarios → `contasis_accounts`, GOBERNADA por `contasis_catalog_migrated` — respeta eliminaciones del usuario) y normaliza inventarios a la clave `'general'` (D-13, vía `inventoriesToGeneral`).
+- `useAppData` carga los dominios del cliente activo y ejecuta la migración ONE-SHOT a clientes (C-2): al no existir el flag `contasis_empresas_migrated`, copia los contenidos históricos de las claves GLOBALES (sin sufijo) a las claves por cliente de la empresa por defecto "Mi Empresa"; las claves globales quedan como ARCHIVO (nunca se borran). El flag `contasis_polizas_migrated` heredado se lee y respeta dentro de esa migración; esos flags ya no gobiernan el boot normal.
 
 ### Propiedad de claves de storage (anti-R1)
 
 | Clave | Hook dueño |
 |---|---|
-| `contasis_polizas` | `usePolizas` (efecto con puerta `canSave` — persiste incluso `[]` — + `hydrate` explícito) |
-| `contasis_polizas_migrated` | `usePolizas` (flag de migración ONE-SHOT; solo se consulta en `useAppData`) |
-| `contasis_accounts` | `useCatalog` (debounce 300 ms, gated por `hasLoaded`) |
-| `contasis_catalog_migrated` | `useCatalog` (flag de consolidación D-12; se consulta y comanda desde `useAppData` vía applier) |
-| `contasis_final_inventories` | `useInventories` (solo guarda explícito — sin efecto automático, fiel al original) |
-| `contasis_fixed_assets` | `App.tsx` (efecto auto-guarda, aún sin hook) |
+| `contasis_empresas` | `useEmpresas` — `{ activaId, empresas: Empresa[] }` (efecto con puerta `canSave` + `hydrate` explícito) |
+| `contasis_empresas_migrated` | `useEmpresas` (flag de migración ONE-SHOT C-2; consulta solo en `useAppData`) |
+| `contasis_polizas_<empresaId>` | `usePolizas` (`hydrate` del activo implícito + `hydrateEmpresa` para escribir UN cliente; persiste incluso `[]`) |
+| `contasis_accounts_<empresaId>` | `useCatalog` (debounce 300 ms, gated por `canSave`; `hydrateEmpresa` para el resto) |
+| `contasis_final_inventories_<empresaId>` | `useInventories` (solo guarda explícito — sin efecto automático, fiel al original) |
+| `contasis_fixed_assets_<empresaId>` | `App.tsx` (efecto auto-guarda con puerta `canSave`; `hydrateAssetsEmpresa` como applier del boot) |
 | `contasis_app_mode` | `App.tsx` (localStorage simple) |
 | `contasis_last_backup` | `useBackup` |
+| `contasis_polizas` / `contasis_accounts` / `contasis_fixed_assets` / `contasis_final_inventories` (SIN sufijo) | ARCHIVO HISTÓRICO (C-2) — leídos UNA vez por la migración a clientes; nunca se escriben ni se borran |
+| `contasis_polizas_migrated` / `contasis_catalog_migrated` | Flags legados: solo se consultan dentro de la migración one-shot C-2; mantienen su semántica original |
 | `contasis_journals` | SIN dueño de escritura: ARCHIVO HISTÓRICO (D-2/D-15) — solo se LEE para las migraciones one-shot y para restaurar respaldos v1 |
 
 > **Sin dominio Journal en RAM (Fase 5, D-15):** `useJournals` y los componentes de captura del diario (`EntryForm`, `EntryList`, `EntryCard`, `JournalTabs`) fueron retirados. `Journal`/`JournalEntry`/`Movement` sobreviven en `types.ts` únicamente como formatos de migración, respaldo v1 y sync remoto viejo.
@@ -229,7 +253,9 @@ Usuario → PolizasView (captura PRINCIPAL: manual + importación Excel D-11) �
 | `JournalEntry` | Asiento (id, fecha, descripción, `movements[]`, `policyType?: 'diario'&#124;'ingreso'&#124;'egreso'`). **Formato LEGACY (Fase 5):** ya no se captura en la app; vive para la migración one-shot, respaldos v1 y sync remoto viejo |
 | `TipoPoliza` | Tipo de póliza contable: `'ingreso' \| 'egreso' \| 'diario'` (mapea a TipoPoliza SAT 1/2/3 en el XML Anexo 24) |
 | `PartidaPoliza` | Línea de una póliza de un solo lado (`accountId`, snapshot `accountCode`/`accountName`, `debit ≥ 0`, `credit ≥ 0`, `concept?`, `uuidCFDI?`, `rfcTercero?`). Regla: si `debit > 0` entonces es cargo, si no, es abono en `credit` — nunca ambos |
-| `Poliza` | Póliza contable formal (id, `folio` consecutivo INDEPENDIENTE por tipo, `tipo: TipoPoliza`, fecha, concepto, `partidas[]`, `totalDebe`/`totalHaber` recalculados al guardar con `normalizeAmount`, `elaboro?`, `autorizo?`). Unidad de captura del nuevo módulo de Pólizas (ver `PLAN_POLIZAS.md`) |
+| `Poliza` | Póliza contable formal (id, `folio` consecutivo INDEPENDIENTE por tipo y por CLIENTE, `tipo: TipoPoliza`, fecha, concepto, `partidas[]`, `totalDebe`/`totalHaber` recalculados al guardar con `normalizeAmount`, `elaboro?`, `autorizo?`). Unidad de captura del módulo de Pólizas (ver `PLAN_POLIZAS.md`) |
+| `Empresa` | Cliente del contador (C-1 de `PLAN_MULTI_CLIENTE.md`): `{ id` (uuid estable; compone las claves de storage por cliente)`, nombre, rfc? }` — el RFC es el que llevan los XML SAT (C-7) |
+| `EstadoEmpresas` | Metadatos de clientes: `{ activaId: string \| null, empresas: Empresa[] }`; clave `contasis_empresas`, dueño `useEmpresas` |
 | `Journal` | Libro diario (id, nombre, `entries[]`, `subAccounts?`). **Formato LEGACY (Fase 5):** ya no existe estado RAM de diarios; el tipo sobrevive por migración/respaldo v1/sync viejo |
 | `FixedAsset` | Activo fijo (nombre, fecha, MOI, cuentas asociadas asset/depr/gasto, `fiscalRate`, `isDisposed`) |
 | `TAccountsData` | Cuentas T derivadas: `Record<accountId, { debits: TAccountSide[], credits: TAccountSide[] }>` con `ref` = nº de asiento (1-index). **No se almacena** — se recalcula vía `lib/accounting.ts` |
@@ -256,15 +282,20 @@ Claves usadas (uniformes en las tres plataformas):
 
 | Clave | Contenido |
 |---|---|
-| `contasis_polizas` | `Poliza[]` — unidad de captura contable primaria (ver `PLAN_POLIZAS.md`) |
-| `contasis_polizas_migrated` | Flag `true` cuando la migración de diarios → pólizas ya corrió (una sola vez) |
-| `contasis_catalog_migrated` | Flag `true` cuando la consolidación del catálogo (D-12) ya corrió (una sola vez) |
-| `contasis_fixed_assets` | `FixedAsset[]` |
-| `contasis_final_inventories` | `{ general: number }` (post-D-13); el formato legacy `{ [journalId]: number }` se normaliza al vuelo en la hidratación y sync |
-| `contasis_accounts` | Catálogo de cuentas COMPLETO: cuentas base (readonly) + creadas/editadas por el usuario (post-D-12; antes solo globales) |
+| `contasis_empresas` | `{ activaId, empresas: Empresa[] }` — metadatos de clientes (C-1/C-3; RFC propio por cliente) |
+| `contasis_empresas_migrated` | Flag `true` cuando la migración one-shot legacy → cliente por defecto "Mi Empresa" ya corrió (C-2) |
+| `contasis_polizas_<empresaId>` | `Poliza[]` del cliente (folios por tipo y por cliente); la clave SIN sufijo quedó como archivo histórico |
+| `contasis_accounts_<empresaId>` | Catálogo COMPLETO del cliente: cuentas base (readonly) + propias (post-D-12) |
+| `contasis_fixed_assets_<empresaId>` | `FixedAsset[]` del cliente |
+| `contasis_final_inventories_<empresaId>` | `{ general: number }` del cliente (post-D-13); formato legacy `{ [journalId]: number }` se normaliza al vuelo |
+| `contasis_polizas` / `contasis_accounts` / `contasis_fixed_assets` / `contasis_final_inventories` (sin sufijo) | ARCHIVO HISTÓRICO (C-2): contenido previo a multi-cliente, leído UNA vez por la migración; nunca se escribe ni se borra |
+| `contasis_polizas_migrated` | Flag heredado (D-2): respetado dentro de la migración one-shot C-2 |
+| `contasis_catalog_migrated` | Flag heredado (D-12): respetado dentro de la migración one-shot C-2 |
 | `contasis_journals` | `Journal[]` — ARCHIVO HISTÓRICO: no se escribe desde Fase 5 (D-2/D-15); solo lectura para migraciones y compatibilidad de restauración |
 | `contasis_app_mode` | Solo localStorage: `'basic' \| 'fiscal'` |
-| `contasis_last_backup` | Timestamp de último respaldo de sincronización |
+| `contasis_last_backup` | Timestamp de último respaldo |
+
+La composición de las claves por cliente se hace SIEMPRE con el helper puro `clavePorEmpresa` (`lib/empresas.ts`, C-2).
 
 `migrateFromLocalStorage()` traslada datos viejos de `contasis_journals`, `contasis_fixed_assets`, `contasis_final_inventories` (del localStorage) al backend físico, solo si no existen aún.
 
@@ -275,7 +306,7 @@ Claves usadas (uniformes en las tres plataformas):
 - Central en `src/services/syncService.ts` (lógica) + `SyncModal.tsx` (UI).
 - **WebRTC con PeerJS**: escritorio actúa de host con un ID de sesión; móvil escanea QR (MLKit) o entra un PIN de 6 dígitos (el PIN deriva el sessionId con aritmética módulo CSRNG).
 - **Upstash Redis REST es parte integral del protocolo de emparejamiento, no un simple respaldo**: registra la sesión activa y compone el payload desktop ↔ móvil (`sync_desktop_*` / `sync_mobile_*`); el flujo de PIN usa Redis para el registro de sesiones, contadores de intentos fallidos y bloqueo temporal. Si faltan las credenciales, el escritorio lanza "Upstash Redis env vars are missing" y el companion "Failed to fetch". El rol "escritorio" solo se activa en Electron (`window.electronAPI`); un navegador puro siempre toma el flujo móvil (limitación preexistente, ver Mejoras futuras).
-- Conflictos: el móvil ofrece "mantener local" vs "sobrescribir con datos remotos" (payload completo, no merge por asiento). El `SyncState` compartido (Fase 5/D-14) incluye `polizas` (opcional para parsear clientes viejos; el desktop ya comparte pólizas y `journals: []`). Al aplicar un estado remoto de formato viejo (solo `journals`), App lo MIGRA al vuelo con `migrateJournalsToPolizas` antes de hidratar.
+- Conflictos: el móvil ofrece "mantener local" vs "sobrescribir con datos remotos" (payload completo, no merge por asiento). El `SyncState` compartido (C-6 de `PLAN_MULTI_CLIENTE.md`) viaja marcado con `empresaId`/`empresaNombre` (cliente ACTIVO): si el remoto apunta a un cliente existente sobrescribe ESE cliente, si es nuevo lo agrega con su nombre; remotos viejos (sin marcado) se aplican al cliente activo como antes. `polizas` sigue siendo opcional para parsear estados de clientes viejos (solo `journals`), que se migran al vuelo con `migrateJournalsToPolizas` antes de hidratar.
 - Medidas de seguridad: límite de intentos de PIN, bloqueo temporal y regeneración de sesión.
 - **Mejora futura identificada (no en refactor):** el sistema Upstash está planificado a reemplazarse por **Cloudflare KV Workers**; candidato a considerar entonces: emparejamiento por QR vía PeerJS puro sin Redis (degradación elegante cuando no haya credenciales).
 
@@ -325,12 +356,12 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 
 - Stack: `vitest` + `@testing-library/react` + `jest-dom`, **solo devDependencies**. Config en `vitest.config.ts` (espeja el `define __APP_VERSION__` de Vite); setup global en `src/test/setup.ts` (limpieza de DOM/storage entre tests + polyfills de jsdom: `crypto.randomUUID`, `URL.createObjectURL`).
 - **Ubicación:** cada `.test.ts(x)` vive COLOCADO junto al código que prueba (`lib/`, `hooks/`, `components/`). Vitest descubre `src/**/*.test.{ts,tsx}`.
-- **Niveles cubiertos (14 archivos / 146 tests):**
-  1. Unitarias puras: `lib/accounting.test.ts` (Cuentas T, saldos por naturaleza, depreciación, INPC truncado + validación/flatten/folios/entrada-a-póliza), `lib/format.test.ts` (normalización, parseo de importaciones, sanitización de input y contrato de `parseJournalImport`) y `lib/satExport.test.ts` (XML PL re-parseado: folios reales, tipos 1/2/3, CompNal, escaping, filename).
+- **Niveles cubiertos (17 archivos / 174 tests):**
+  1. Unitarias puras: `lib/accounting.test.ts` (Cuentas T, saldos por naturaleza, depreciación, INPC truncado + validación/flatten/folios/entrada-a-póliza), `lib/format.test.ts` (normalización, parseo de importaciones, sanitización de input y contrato de `parseJournalImport`), `lib/satExport.test.ts` (XML PL re-parseado: folios reales, tipos 1/2/3, CompNal, escaping, filename) y `lib/empresas.test.ts` (C-2: composición de claves por cliente + normalizadores `arrayDe`/`objetoDe`).
   2. Funcional: `lib/export.test.ts` — el workbook Excel se RELEE con ExcelJS (solo `file-saver` mockeado) y el PDF se valida por firma `%PDF-` real.
   3. Migraciones: `lib/migrateJournalsToPolizas.test.ts` (determinismo congelado: folios por tipo, ids, CFDI/RFC) y `lib/migrateCatalogToGlobal.test.ts` (D-12: dedup por código, idempotencia, orden).
-  4. Hooks: `hooks/usePolizas` (CRUD de pólizas, folios por tipo, tipo congelado en edición, hydrate persistente, puerta `canSave`), `useCatalog` (catálogo global sin híbrido: recuperación de base, dedup por `code`, flag own `contasis_catalog_migrated`, debounce gated por `canSave`), `useAppData` (hidratación sin Journal, migraciones D-12/D-13, migración de pólizas y fallback corrupto), `useBackup` (respaldo v2 con polizas+journals vacío, import v1/v2, vigía 7 días, import corrupto NO restaura), `useInventories` (clave 'general' D-13, helper `inventoriesToGeneral`, sin auto-guardado), `lib/navigation.test.ts` (DEFAULT_TAB = polizas, composición de pestañas básicas/fiscales).
-  5. Render: `components/polizas/PolizaForm.test.tsx` (partida doble en vivo: 0/0 bloqueado, diferencia visible en un solo nodo, cuadre habilita, campos CFDI solo en fiscal, mín. 2 partidas, tipo congelado al editar D-8, elaboro/autorizo al input) y `components/JournalView.test.tsx` (contrato de solo lectura: sin captura, fila por partida con folio/tipo, 0/0 no genera fila).
+  4. Hooks: `hooks/usePolizas` (CRUD de pólizas, folios por tipo, tipo congelado en edición, hydrate persistente + `hydrateEmpresa` por cliente, puerta `canSave`), `useEmpresas` (CRUD de clientes, guarda de último cliente C-8, hydrate, flag own), `useCatalog` (catálogo por cliente: recuperación de base, dedup por `code`, debounce gated por `canSave`, `hydrateEmpresa`), `useAppData` (boot multi-cliente: migración one-shot C-2, carga del activo, recarga por cambio de cliente C-4, fallback de metadatos corruptos SIN escribir claves), `useBackup` (respaldo v3 con todas las empresas, import v3/v2/v1, vigía 7 días, import corrupto NO restaura), `useInventories` (clave 'general' D-13, helper `inventoriesToGeneral`, `hydrateEmpresa`, sin auto-guardado), `lib/navigation.test.ts` (DEFAULT_TAB = polizas, composición de pestañas).
+  5. Render: `components/polizas/PolizaForm.test.tsx` (partida doble en vivo, tipo congelado D-8), `components/JournalView.test.tsx` (contrato de solo lectura) y `components/EmpresasModal.test.tsx` (gestor de clientes C-1/C-8: switch, alta recortada, edición nombre+RFC mayúsculas, baja con confirmación, último cliente deshabilitado).
 - **Regla de oro:** cualquier cambio en `lib/accounting.ts`, `lib/format.ts`, `lib/importEntriesFromExcel.ts`, `lib/migrateCatalogToGlobal.ts` o los hooks de dominio DEBE dejar `npm run lint && npm run test` en verde antes de commitear; si el cambio es intencional de comportamiento, se actualiza el test en el MISMO commit.
 - *Quirk de entorno documentado:* Node 22+ trae un `localStorage` global nativo que en Windows puede instalarse sin ruta válida; `setup.ts` rebindea al de jsdom (o memoria) si hace falta. No afecta navegador/Electron.
 - Cobertura deliberadamente FUERA de alcance: render completo de `App` (requiere mock de sync/Upstash; `isDesktopRuntime` impide probar el rol escritorio en browser — mejora futura documentada en §6), el rechazo de duplicados de `CatalogView` en render (mismo aserto ya cubierto a nivel de hook en `handleCombinedAccountsUpdate`) y los tests retirados junto al dominio Journal (`useJournals.test.ts` se eliminó con su hook en Fase 5, registro de retiros en `PLAN_POLIZAS.md`).
@@ -347,8 +378,10 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 | Cambiar formato de montos/moneda o formateo de inputs | `src/lib/format.ts` |
 | Cambiar formato de reportes Excel/PDF | `src/lib/utils.ts` |
 | Cambiar parseo/formato del Excel de IMPORTACIÓN | `src/lib/importEntriesFromExcel.ts` (lógica) · `polizas/PolizaView.tsx` (modales, D-11) · `lib/accounting.ts` (`entriesToPolizasDiarias`) |
-| Capturar/editar/imprimir pólizas contables | `src/components/polizas/` (UI) · `src/hooks/usePolizas.ts` (reglas: folios, validación, tipo congelado) · `src/lib/accounting.ts` (validación partida doble, folio formateado) |
-| Modificar migraciones legacy (pólizas/catálogo/inventario) | `src/lib/migrateJournalsToPolizas.ts` · `src/lib/migrateCatalogToGlobal.ts` (D-12) · `inventoriesToGeneral` en `hooks/useInventories.ts` (D-13); flags en `hooks/usePolizas.ts` y `hooks/useCatalog.ts`, comando en `hooks/useAppData.ts` |
+| Capturar/editar/imprimir pólizas contables | `src/components/polizas/` (UI) · `src/hooks/usePolizas.ts` (reglas: folios por tipo y cliente, validación, tipo congelado) · `src/lib/accounting.ts` (validación partida doble, folio formateado) |
+| Gestionar clientes (switch/alta/renombre/RFC/baja) | `src/components/EmpresasModal.tsx` (UI) · `src/hooks/useEmpresas.ts` (CRUD + activaId) · botón del header en `layout/AppHeader.tsx` |
+| Cambiar cómo se cargan/cambian los clientes | `src/hooks/useAppData.ts` (boot + recarga C-4) |
+| Modificar migraciones legacy | `useAppData.ts` (migración one-shot a cliente por defecto C-2, que respeta los flags heredados) · `src/lib/migrateJournalsToPolizas.ts` · `src/lib/migrateCatalogToGlobal.ts` (D-12) · `inventoriesToGeneral` en `hooks/useInventories.ts` (D-13) |
 | Ajustar el reporte del Libro Diario (solo lectura y sus exports) | `src/components/JournalView.tsx` (fecha/folio/tipo/cuenta/concepto/debe/haber) |
 | Cambiar navegación de pestañas / tab inicial | `src/lib/navigation.ts` (BASIC_NAV_TABS, FISCAL_NAV_TABS, DEFAULT_TAB) |
 | Cambiar XML/TXT SAT o DIOT | `src/lib/satExport.ts` (el XML de Pólizas consume PÓLIZAS reales desde ContabilidadElectronicaView: folio real = NumUnIdenPol, Fase 6) |
@@ -363,4 +396,6 @@ Dependencias clave instaladas: React 19, Tailwind v4 (`@tailwindcss/vite`), Exce
 1. **Encabezado `CONCEPTO` del Excel de importación nunca funcionó:** el parser (`importEntriesFromExcel.ts`) valida los encabezados ANTES de normalizarlos y solo reconoce `GLOSA`; así se congeló por decisión del plan (no rompe nada: la plantilla siempre usó `GLOSA`).
 2. **Error de importación Excel siempre genérico:** el catch de `PolizaView` muestra "Formato no soportado" ante CUALQUIER fallo (JSON corrupto, plantilla incompleta, etc.) — comportamiento heredado que se conservó.
 3. **`NumOrden` fijo en el XML de Pólizas:** lleva el valor de referencia `AFO1234567/26` (entrega estándar AF, Acto de Fiscalización). Personalizarlo sería un cambio futuro del valor, no del pipeline.
-4. **Inventario final sin auto-guardado:** `contasis_final_inventories` solo persiste al capturar el inventario o aplicar sync (diseño fiel al original, no descuido).
+4. **Inventario final sin auto-guardado:** `contasis_final_inventories_<empresaId>` solo persiste al capturar el inventario o aplicar sync (diseño fiel al original, no descuido).
+5. **Metadatos de clientes corruptos → cliente en RAM:** si `contasis_empresas` se corrompe con el flag ya presente, la app arranca con un cliente "Mi Empresa" NUEVO en RAM y el boot NO escribe claves de dominio (el storage real queda intacto); las claves por cliente huérfanas no son visibles hasta un restauro de respaldo (fallback defensivo, aceptado).
+6. **Baja de cliente no borra claves de dominio:** `eliminarEmpresa` solo saca el cliente de `contasis_empresas`; sus claves `contasis_<dominio>_<id>` quedan huérfanas en el almacenamiento (archivo permanente, conservadurismo C-2/C-8).

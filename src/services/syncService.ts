@@ -5,15 +5,20 @@ export type SyncOrigin = 'desktop' | 'mobile';
 export type SyncTransport = 'peerjs' | 'redis';
 
 /**
- * Estado compartido por sync (Fase 5/D-14): `polizas` es opcional para que los
- * clientes viejos (solo `journals`) sigan parseando; el desktop ya comparte
- * pólizas y `journals: []`. La migración de un estado remoto viejo ocurre en
- * App (`applyRemoteSyncState`), nunca aquí.
+ * Estado compartido por sync (Fase 5/D-14 de PLAN_POLIZAS.md + C-6 de
+ * PLAN_MULTI_CLIENTE.md): `polizas` es opcional para que los clientes viejos
+ * (solo `journals`) sigan parseando. Con multi-cliente, el estado viaja
+ * marcado con `empresaId`/`empresaNombre` (cliente ACTIVO); remotos viejos
+ * sin ese marcado apuntan al cliente activo de siempre. La migración y la
+ * asignación por empresa ocurren en App (`applyRemoteSyncState`), nunca aquí.
  */
 export interface SyncState {
   journals: Journal[];
   polizas?: Poliza[];
   finalInventories: Record<string, number>;
+  /** Cliente (C-6): id del workspace compartido; ausente en estados viejos. */
+  empresaId?: string;
+  empresaNombre?: string;
 }
 
 export interface SyncPayload {

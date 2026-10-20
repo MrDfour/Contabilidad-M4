@@ -94,8 +94,21 @@ export interface TAccountColumns {
   credits: TAccountSide[];
 }
 
-/** Cuentas T agrupadas por accountId, derivadas de un Journal (no se almacenan: se recalculan). */
+/** Cuentas T agrupadas por accountId, derivadas de una póliza (no se almacenan: se recalculan). */
 export type TAccountsData = Record<string, TAccountColumns>;
+
+/** Cliente/empresa (D-17 de PLAN_POLIZAS.md, plan PLAN_MULTI_CLIENTE.md): workspace del contador. */
+export interface Empresa {
+  id: string;          // estable (uuid al crear; compone las claves de storage por cliente)
+  nombre: string;
+  rfc?: string;        // RFC propio para los XML SAT CT/BN/PL/DIOT
+}
+
+/** Estado de metadatos de clientes (clave `contasis_empresas`, dueño: useEmpresas). */
+export interface EstadoEmpresas {
+  activaId: string | null;
+  empresas: Empresa[];
+}
 
 export const INITIAL_ACCOUNTS: Account[] = [
   // Activo Circulante

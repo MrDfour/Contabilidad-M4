@@ -6,22 +6,22 @@
 import { useEffect, useState } from 'react';
 import { saveToStorage } from '../services/storageService';
 import { normalizeAmount } from '../lib/format';
+import { clavePorEmpresa } from '../lib/empresas';
 
 /**
- * Hook del INVENTARIO FINAL (Fase 5 de PLAN_POLIZAS.md).
+ * Hook del INVENTARIO FINAL por CLIENTE (Fase 3 de PLAN_MULTI_CLIENTE.md).
  *
- * Dueño EXCLUSIVO de la clave de storage: `contasis_final_inventories`.
+ * Dueño EXCLUSIVO de la clave POR CLIENTE: `contasis_final_inventories_<empresaId>`
+ * (C-2); la clave global sin sufijo quedó como ARCHIVO histórico tras la
+ * migración one-shot de clientes (C-2).
  *
- * Cambio D-13: sin diario activo no hay clave por la cual indexar; el mapa
- * opera con la clave fija `'general'`. La migración del formato legacy
- * (claves por journalId) vive en el helper puro `inventoriesToGeneral` y se
- * aplica en TODAS las vías de entrada (hidratación, sync remoto).
+ * Cambio D-13 heredado: el mapa opera con la clave fija `'general'`; la
+ * normalización del formato legacy vive en el helper puro `inventoriesToGeneral`
+ * y se aplica en TODAS las vías de entrada (hidratación, sync remoto).
  *
  * Comportamiento fiel al original: esta clave NO tiene persistencia
- * automática; solo se guarda en `handleSetFinalInventory` y en la aplicación
- * de estado remoto (`hydrateFromRemote`). La restauración de respaldo escribe
- * en RAM únicamente (vía `setFinalInventories` crudo, expuesto para el
- * orquestador de App — regla anti-R1), igual que el `handleImportBackup` original.
+ * automática; solo se guarda en `handleSetFinalInventory` y en las vías
+ * explícitas (`hydrateFromRemote`, `hydrateEmpresa`).
  */
 const INVENTORIES_KEY = 'contasis_final_inventories';
 
@@ -44,7 +44,7 @@ export const inventoriesToGeneral = (
   return values.length > 0 ? { [GENERAL_INVENTORY_KEY]: values[0] } : {};
 };
 
-export function useInventories() {
+export function useInventories({ empresaId }: { empresaId: string | null }) {
   const [finalInventories, setFinalInventories] = useState<Record<string, number>>({});
   const [finalInventory, setFinalInventory] = useState<number>(0);
 
@@ -58,26 +58,44 @@ export function useInventories() {
     setFinalInventory(normalizedValue);
     const updated = { ...finalInventories, [GENERAL_INVENTORY_KEY]: normalizedValue };
     setFinalInventories(updated);
-    saveToStorage(INVENTORIES_KEY, updated).catch(console.error);
+    if (empresaId) {
+      saveToStorage(clavePorEmpresa(INVENTORIES_KEY, empresaId), updated).catch(console.error);
+    }
   };
 
   /**
-   * Aplicación atómica de inventarios remotos (sync móvil→escritorio):
-   * normaliza al formato 'general', setea el estado y persiste explícitamente,
-   * como el `applyRemoteSyncState` original.
+   * Aplicación atómica de inventarios remotos/respaldo para el cliente ACTIVO
+   * (sync móvil→escritorio): normaliza al formato 'general', setea el estado
+   * y persiste explícitamente la clave del cliente.
    */
   const hydrateFromRemote = (inventories: Record<string, number>) => {
     const normalizado = inventoriesToGeneral(inventories);
     setFinalInventories(normalizado);
-    saveToStorage(INVENTORIES_KEY, normalizado).catch(console.error);
+    if (empresaId) {
+      saveToStorage(clavePorEmpresa(INVENTORIES_KEY, empresaId), normalizado).catch(console.error);
+    }
+  };
+
+  /**
+   * C-5 (PLAN_MULTI_CLIENTE.md): escritura de la clave de UN cliente concreto
+   * (boot-migración / restauración de respaldos de otros clientes). Anti-R1:
+   * el hook dueño escribe SU clave sea cual sea el cliente; la RAM solo
+   * cambia si el cliente objetivo es el activo.
+   */
+  const hydrateEmpresa = (empresaDestinoId: string, inventories: Record<string, number>): void => {
+    if (empresaDestinoId === empresaId) {
+      setFinalInventories(inventories);
+    }
+    saveToStorage(clavePorEmpresa(INVENTORIES_KEY, empresaDestinoId), inventories).catch(console.error);
   };
 
   return {
     finalInventories,
-    /** Escritura cruda en RAM (solo restauración de respaldo, vía orquestador de App). */
+    /** Escritura cruda en RAM (solo carga por cliente, vía orquestador de App). */
     setFinalInventories,
     finalInventory,
     handleSetFinalInventory,
-    hydrateFromRemote
+    hydrateFromRemote,
+    hydrateEmpresa
   };
 }

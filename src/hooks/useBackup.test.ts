@@ -17,18 +17,23 @@ type FileInputEvent = { target: { files: File[] | null; value: string } };
 const asChangeEvent = (file: File) =>
   ({ target: { files: [file], value: 'input-value' } }) as unknown as Parameters<ReturnType<typeof useBackup>['handleImportBackup']>[0];
 
+/** Workspace v3 de un cliente (C-5). */
+const empresaWorkspace = () => ({
+  id: 'e1',
+  nombre: 'Éxito',
+  rfc: 'ABCD',
+  polizas: [{ id: 'p1', folio: 1, tipo: 'diario' as const, fecha: '2025-01-01', concepto: 'X', partidas: [], totalDebe: 0, totalHaber: 0 }],
+  accounts: [{ id: 'a1', code: '1101', name: 'Caja', type: 'asset' as const }],
+  fixedAssets: [] as any[],
+  finalInventories: { general: 100 }
+});
+
 const renderUseBackup = () => {
   const notify = vi.fn();
   const restore = vi.fn();
-  const snapshot = {
-    polizas: [{ id: 'p1', folio: 1, tipo: 'diario' as const, fecha: '2025-01-01', concepto: 'X', partidas: [], totalDebe: 0, totalHaber: 0 }],
-    accounts: [{ id: 'a1', code: '1101', name: 'Caja', type: 'asset' as const }],
-    fixedAssets: [],
-    finalInventories: { general: 100 },
-    journals: [] as any[]
-  };
+  const snapshot = { empresas: [empresaWorkspace()], activaId: 'e1' };
   const rendered = renderHook(() => useBackup({
-    getSnapshot: () => snapshot,
+    getSnapshot: async () => snapshot,
     notify,
     restore,
     canSuggest: () => true
@@ -36,7 +41,7 @@ const renderUseBackup = () => {
   return { ...rendered, notify, restore, snapshot };
 };
 
-const v2EmptySnapshot = () => ({ polizas: [], journals: [], accounts: [], fixedAssets: [], finalInventories: {} });
+const v3EmptySnapshot = () => ({ empresas: [], activaId: '' });
 
 describe('useBackup (dominio `contasis_last_backup` — vigilante + respaldo/restauración)', () => {
   beforeEach(() => { localStorage.clear(); });
@@ -44,7 +49,7 @@ describe('useBackup (dominio `contasis_last_backup` — vigilante + respaldo/res
   it('primer arranque sin respaldo previo: estampa timestamp y NO sugiere', () => {
     const notify = vi.fn();
     renderHook(() => useBackup({
-      getSnapshot: v2EmptySnapshot as never,
+      getSnapshot: async () => v3EmptySnapshot(),
       notify,
       restore: vi.fn(),
       canSuggest: () => true
@@ -59,7 +64,7 @@ describe('useBackup (dominio `contasis_last_backup` — vigilante + respaldo/res
     const notify = vi.fn();
 
     renderHook(() => useBackup({
-      getSnapshot: v2EmptySnapshot as never,
+      getSnapshot: async () => v3EmptySnapshot(),
       notify,
       restore: vi.fn(),
       canSuggest: () => true
@@ -75,7 +80,7 @@ describe('useBackup (dominio `contasis_last_backup` — vigilante + respaldo/res
     const notify = vi.fn();
 
     renderHook(() => useBackup({
-      getSnapshot: v2EmptySnapshot as never,
+      getSnapshot: async () => v3EmptySnapshot(),
       notify,
       restore: vi.fn(),
       canSuggest: () => false
@@ -95,11 +100,13 @@ describe('useBackup (dominio `contasis_last_backup` — vigilante + respaldo/res
       const blobPayload = createObjectURLSpy.mock.calls[0][0] as Blob;
       const parsed = JSON.parse(await blobPayload.text());
 
-      expect(parsed.version).toBe('2.0.0');
+      expect(parsed.version).toBe('3.0.0');
       expect(parsed.timestamp).toBeTruthy();
       expect(parsed.data).toEqual(snapshot);
-      expect(parsed.data.polizas).toEqual(snapshot.polizas); // D-14: v2 captura en pólizas
-      expect(parsed.data.journals).toEqual([]); // compat: journals vacío en v2
+      expect(parsed.data.empresas).toHaveLength(1); // C-5: TODOS los clientes
+      expect(parsed.data.empresas[0].polizas).toEqual(empresaWorkspace().polizas);
+      expect(parsed.data.empresas[0].finalInventories).toEqual({ general: 100 });
+      expect(parsed.data.activaId).toBe('e1');
       expect(revokeSpy).toHaveBeenCalled();
       expect(notify).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'success', title: 'Respaldo Exitoso' })
@@ -119,6 +126,17 @@ describe('useBackup (dominio `contasis_last_backup` — vigilante + respaldo/res
         accounts: [], fixedAssets: [], finalInventories: {}, journals: []
       };
       const file = new File([JSON.stringify({ version: '2.0.0', data: payload })], 'b.json', { type: 'application/json' });
+      await act(async () => { await result.current.handleImportBackup(asChangeEvent(file)); });
+
+      expect(restore).toHaveBeenCalledWith(payload);
+      expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    });
+
+    it('archivo v3 (C-5, multi-cliente): restaura {empresas, activaId} completo', async () => {
+      const { result, restore, notify } = renderUseBackup();
+
+      const payload = { empresas: [empresaWorkspace()], activaId: 'e1' };
+      const file = new File([JSON.stringify({ version: '3.0.0', data: payload })], 'b3.json', { type: 'application/json' });
       await act(async () => { await result.current.handleImportBackup(asChangeEvent(file)); });
 
       expect(restore).toHaveBeenCalledWith(payload);

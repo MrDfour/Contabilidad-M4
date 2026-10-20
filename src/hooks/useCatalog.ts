@@ -7,32 +7,39 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Account, INITIAL_ACCOUNTS } from '../types';
 import { saveToStorage } from '../services/storageService';
 import type { ModalInfo } from '../components/modals/GlobalInfoModal';
+import { clavePorEmpresa } from '../lib/empresas';
 
 /**
- * Hook del CATÁLOGO GLOBAL (Fase 5 de PLAN_POLIZAS.md — D-12).
+ * Hook del CATÁLOGO por CLIENTE (Fase 3 de PLAN_MULTI_CLIENTE.md, heredera
+ * del catálogo global de D-12 en PLAN_POLIZAS.md).
  *
- * Dueño EXCLUSIVO de la clave de storage: `contasis_accounts`, y del flag
- * one-shot `contasis_catalog_migrated`.
+ * Dueño EXCLUSIVO de la clave POR CLIENTE: `contasis_accounts_<empresaId>` (C-2).
+ * La clave global sin sufijo quedó como ARCHIVO histórico tras la migración
+ * one-shot de clientes (C-2, flag `contasis_empresas_migrated` del boot).
  *
- * Cambio D-12: se retiró el catálogo híbrido. El estado `accounts` ahora
- * contiene TODAS las cuentas (globales readonly + las antes locales del
- * diario, consolidadas por la migración one-shot). La auto-recuperación
- * quirúrgica de cuentas base se conserva idéntica al original.
+ * El estado `accounts` contiene TODAS las cuentas del cliente activo
+ * (globales readonly + locales). La auto-recuperación quirúrgica de cuentas
+ * base se conserva idéntica al original y opera por cliente.
  */
 const ACCOUNTS_KEY = 'contasis_accounts';
-const ACCOUNTS_MIGRATED_KEY = 'contasis_catalog_migrated';
 const ACCOUNTS_SAVE_DEBOUNCE_MS = 300;
 
 export function useCatalog({
   canSave,
-  onSaveError
+  onSaveError,
+  empresaId
 }: {
   /** true cuando useAppData terminó de cargar (protege R2: no persistir vacíos). */
   canSave: boolean,
   /** Callback para surfear errores de persistencia en UI. */
-  onSaveError: (info: ModalInfo) => void
+  onSaveError: (info: ModalInfo) => void,
+  /** Cliente activo (null antes del boot: el efecto no escribe). */
+  empresaId: string | null
 }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
+
+  /** Clave del cliente activo (null antes del boot: el efecto no escribe). */
+  const storageKey = empresaId ? clavePorEmpresa(ACCOUNTS_KEY, empresaId) : null;
 
   // --- Catálogo global con auto-recuperación quirúrgica (idéntico al original) ---
   const finalGlobals = useMemo(() => {
@@ -74,16 +81,11 @@ export function useCatalog({
     setAccounts([...finalGlobals, ...nextLocalAccounts]);
   };
 
-  /** Marca la migración one-shot del catálogo como ejecutada (owner del flag). */
-  const markMigrated = useCallback(() => {
-    saveToStorage(ACCOUNTS_MIGRATED_KEY, true).catch(console.error);
-  }, []);
-
   // Persistencia con debounce (idéntico al original; puerta hasLoaded → canSave).
   useEffect(() => {
-    if (!canSave) return;
+    if (!canSave || !storageKey) return;
     const timeoutId = window.setTimeout(() => {
-      saveToStorage(ACCOUNTS_KEY, accounts).catch((error) => {
+      saveToStorage(storageKey, accounts).catch((error) => {
         console.error('Failed to save accounts:', error);
         onSaveError({
           type: 'error',
@@ -94,16 +96,28 @@ export function useCatalog({
     }, ACCOUNTS_SAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [accounts, canSave, onSaveError, markMigrated]);
+  }, [accounts, canSave, storageKey, onSaveError]);
+
+  /**
+   * C-5 (PLAN_MULTI_CLIENTE.md): escritura de la clave de UN cliente concreto
+   * (boot-migración / restauración de respaldos de otros clientes). Anti-R1:
+   * el hook dueño escribe SU clave sea cual sea el cliente; la RAM solo
+   * cambia si el cliente objetivo es el activo.
+   */
+  const hydrateEmpresa = useCallback((empresaDestinoId: string, valor: Account[]): void => {
+    if (empresaDestinoId === empresaId) {
+      setAccounts(valor);
+    }
+    saveToStorage(clavePorEmpresa(ACCOUNTS_KEY, empresaDestinoId), valor).catch(console.error);
+  }, [empresaId]);
 
   return {
     accounts,
-    /** Escritura cruda (solo restauración de respaldo, vía orquestador de App — anti-R1). */
+    /** Escritura cruda (solo carga por cliente, vía orquestador de App — anti-R1). */
     setAccounts,
     finalGlobals,
     combinedAccounts,
     handleCombinedAccountsUpdate,
-    /** Escritura del flag `contasis_catalog_migrated` (comandada por useAppData). */
-    markMigrated
+    hydrateEmpresa
   };
 }

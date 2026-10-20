@@ -8,18 +8,40 @@ import type { ModalInfo } from '../components/modals/GlobalInfoModal';
 import { Account, FixedAsset, Journal, Poliza } from '../types';
 
 /**
- * Hook del RESPALDO LOCAL (Fase 2 del plan de modularización; Fase 5 → v2, D-14).
+ * Hook del RESPALDO LOCAL (Fase 5 de PLAN_MULTI_CLIENTE.md → v3; heredero de
+ * la Fase 5 → v2, D-14, de PLAN_POLIZAS.md).
  *
- * Dueño EXCLUSIVO de la clave: `contasis_last_backup` (localStorage simple,
- * timestamp del último respaldo). Las claves de datos JAMÁS se escriben aquí:
- * el hook solo empaqueta el snapshot actual o delega su restauración al
- * orquestador de App (`restore`) que comanda a cada hook dueño — regla anti-R1.
+ * Dueño EXCLUSIVO de la clave: `contasis_last_backup` (timestamp del último
+ * respaldo). Las claves de datos JAMÁS se escriben ni leen aquí: el hook
+ * empaqueta el snapshot que le entrega App (delegando lecturas y escrituras
+ * al hook dueño de cada clave — regla anti-R1).
  */
 const LAST_BACKUP_STORAGE_KEY = 'contasis_last_backup';
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Formato v2.0.0 (post-Fase 5): la captura vive en pólizas. */
-export interface BackupSnapshot {
+/**
+ * Datos de UN cliente dentro del respaldo (C-5): workspace completo con sus
+ * cuatro dominios. En la exportación App lee las claves por cliente vía sus
+ * dueños appliers; en la restauración cada parte vuelve por su dueño.
+ */
+export interface EmpresaWorkspace {
+  id: string;
+  nombre: string;
+  rfc?: string;
+  polizas: Poliza[];
+  accounts: Account[];
+  fixedAssets: FixedAsset[];
+  finalInventories: Record<string, number>;
+}
+
+/** Formato v3.0.0 (multi-cliente): TODAS las empresas + cuál estaba activa. */
+export interface BackupSnapshotV3 {
+  empresas: EmpresaWorkspace[];
+  activaId: string;
+}
+
+/** Formato v2.0.0 (post-Fase 5 de PLAN_POLIZAS.md): la captura vive en pólizas. */
+export interface BackupSnapshotV2 {
   polizas: Poliza[];
   accounts: Account[];
   fixedAssets: FixedAsset[];
@@ -36,9 +58,16 @@ export interface BackupSnapshotV1 {
   finalInventories?: Record<string, number>;
 }
 
-/** Formatos aceptados por la restauración: v2 (polizas) o v1 (journals). */
-export type RestorableBackup = BackupSnapshot | BackupSnapshotV1;
+/**
+ * Formatos aceptados por la restauración (C-5):
+ * - v3 → hidrata a TODOS los clientes con sus datos.
+ * - v2/v1 → sobrescriben SOLO los datos del cliente ACTIVO (semántica previa).
+ */
+export type RestorableBackup = BackupSnapshotV3 | BackupSnapshotV2 | BackupSnapshotV1;
 
+/** Discriminador de respaldo v3 (multi-cliente). */
+export const esBackupV3 = (backup: RestorableBackup): backup is BackupSnapshotV3 =>
+  Array.isArray((backup as BackupSnapshotV3).empresas);
 
 export function useBackup({
   getSnapshot,
@@ -46,11 +75,11 @@ export function useBackup({
   restore,
   canSuggest
 }: {
-  /** Snapshot actual de todos los dominios (leído solo al exportar). */
-  getSnapshot: () => BackupSnapshot,
+  /** Snapshot actual de todos los clientes (async: lee las claves de cada empresa al exportar). */
+  getSnapshot: () => Promise<BackupSnapshotV3>,
   /** Muestra modales de éxito/error en UI. */
   notify: (info: ModalInfo) => void,
-  /** Restauración de una estructura válida v1 o v2 (orquestador multi-hook en App). */
+  /** Restauración de una estructura válida v3/v2/v1 (orquestador multi-hook en App). */
   restore: (backup: RestorableBackup) => void,
   /** false mientras haya un modal abierto: el vigilante no interrumpe. */
   canSuggest: () => boolean
@@ -92,21 +121,27 @@ export function useBackup({
     return () => clearInterval(intervalId);
   }, []);
 
-  const handleExportBackup = () => {
-    const backupData = {
-      version: '2.0.0',
-      timestamp: new Date().toISOString(),
-      data: depsRef.current.getSnapshot()
-    };
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Contabilidad_M4_Respaldo_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    localStorage.setItem(LAST_BACKUP_STORAGE_KEY, new Date().toISOString());
-    depsRef.current.notify({ type: 'success', title: 'Respaldo Exitoso', message: 'Se ha descargado el archivo JSON con toda tu base de datos.' });
+  const handleExportBackup = async () => {
+    try {
+      const data = await depsRef.current.getSnapshot();
+      const backupData = {
+        version: '3.0.0',
+        timestamp: new Date().toISOString(),
+        data
+      };
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Contabilidad_M4_Respaldo_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      localStorage.setItem(LAST_BACKUP_STORAGE_KEY, new Date().toISOString());
+      depsRef.current.notify({ type: 'success', title: 'Respaldo Exitoso', message: 'Se ha descargado el archivo JSON con la base de datos de todos tus clientes.' });
+    } catch (error) {
+      console.error('Error al exportar el respaldo:', error);
+      depsRef.current.notify({ type: 'error', title: 'Error de Respaldo', message: 'No se pudo generar el archivo de respaldo. Intenta nuevamente.' });
+    }
   };
 
   const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,13 +150,14 @@ export function useBackup({
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
-      const backup = parsed.data || parsed; // Soporte para respaldo v2 o v1 (con envoltorio)
+      const backup = parsed.data || parsed; // Soporte para respaldo con envoltorio
 
-      // D-14: se aceptan AMBOS formatos — v2 trae `polizas`; v1 trae `journals`
+      // v3: `empresas` por cliente; v2: `polizas`; v1: `journals`
       // (la migración al vuelo ocurre en el orquestador `restore` de App).
+      const esV3 = esBackupV3(backup);
       const esV2 = Array.isArray(backup.polizas);
-      const esV1 = Array.isArray(backup.journals) && Array.isArray(backup.accounts);
-      if (esV2 || esV1) {
+      const esV1 = !esV3 && Array.isArray(backup.journals) && Array.isArray(backup.accounts);
+      if (esV3 || esV2 || esV1) {
         depsRef.current.restore(backup);
       } else {
         throw new Error('Formato inválido');

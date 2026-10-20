@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useCatalog } from './useCatalog';
 import { INITIAL_ACCOUNTS } from '../types';
 import type { Account } from '../types';
@@ -18,7 +18,8 @@ const local = (id: string, code: string, name = `Cuenta ${code}`): Account => ({
 const setup = (overrides: Partial<Parameters<typeof useCatalog>[0]> = {}) => {
   const props = Object.assign({
     canSave: true,
-    onSaveError: vi.fn()
+    onSaveError: vi.fn(),
+    empresaId: 'e1' // cliente de prueba: compone la clave (C-2 de PLAN_MULTI_CLIENTE.md)
   }, overrides) as Parameters<typeof useCatalog>[0];
 
   const rendered = renderHook(() => useCatalog(props));
@@ -27,7 +28,7 @@ const setup = (overrides: Partial<Parameters<typeof useCatalog>[0]> = {}) => {
 
 /* Tests ---------------------------------------------------------------- */
 
-describe('useCatalog (catálogo global consolidado — sin híbrido, D-12)', () => {
+describe('useCatalog (catálogo por cliente — sin híbrido, heredero de D-12)', () => {
   beforeEach(() => { localStorage.clear(); });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -93,26 +94,16 @@ describe('useCatalog (catálogo global consolidado — sin híbrido, D-12)', () 
     expect(result.current.accounts.filter(a => a.isReadOnly)).toHaveLength(INITIAL_ACCOUNTS.length);
   });
 
-  it('markMigrated escribe el flag one-shot `contasis_catalog_migrated`', async () => {
-    const { result } = setup();
-
-    act(() => { result.current.markMigrated(); });
-
-    await waitFor(() => {
-      expect(localStorage.getItem('contasis_catalog_migrated')).not.toBeNull();
-    });
-  });
-
-  it('persistencia debounced con canSave=true: escribe contasis_accounts tras 300ms', () => {
+  it('persistencia debounced con canSave=true: escribe contasis_accounts_e1 tras 300ms', () => {
     vi.useFakeTimers();
     const { result } = setup();
 
     const custom = [local('l1', '8888')];
     act(() => { result.current.setAccounts(custom); }); // dispara efecto + timeout 300ms
-    expect(localStorage.getItem('contasis_accounts')).toBeNull(); // aún silencioso
+    expect(localStorage.getItem('contasis_accounts_e1')).toBeNull(); // aún silencioso
 
     act(() => { vi.advanceTimersByTime(300); });
-    const saved = localStorage.getItem('contasis_accounts');
+    const saved = localStorage.getItem('contasis_accounts_e1');
     expect(saved).not.toBeNull();
     expect(JSON.parse(saved as string)).toEqual(custom);
   });
@@ -124,7 +115,7 @@ describe('useCatalog (catálogo global consolidado — sin híbrido, D-12)', () 
     act(() => { result.current.setAccounts([local('l1', '8888')]); });
     act(() => { vi.advanceTimersByTime(1000); });
 
-    expect(localStorage.getItem('contasis_accounts')).toBeNull();
+    expect(localStorage.getItem('contasis_accounts_e1')).toBeNull();
   });
 
   it('guardado exitoso no genera llamados a onSaveError', () => {
@@ -136,5 +127,21 @@ describe('useCatalog (catálogo global consolidado — sin híbrido, D-12)', () 
     act(() => { vi.advanceTimersByTime(300); });
 
     expect(onSaveError).not.toHaveBeenCalled();
+  });
+
+  it('hydrateEmpresa escribe la clave del cliente destino y toca la RAM solo si es el activo', async () => {
+    vi.useFakeTimers();
+    const { result } = setup({ canSave: false, empresaId: 'e1' });
+    const destino = [local('x1', '7777')];
+
+    act(() => { result.current.hydrateEmpresa('e2', destino); });
+
+    // La RAM del activo (e1) queda intacta (vacía); la clave del destino sí es escrita.
+    expect(result.current.accounts).toEqual([]);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(JSON.parse(localStorage.getItem('contasis_accounts_e2') as string)).toEqual(destino);
+    expect(localStorage.getItem('contasis_accounts_e1')).toBeNull();
   });
 });

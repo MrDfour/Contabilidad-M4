@@ -9,7 +9,9 @@ export function ContabilidadElectronicaView({
   entries,
   polizas,
   tAccountsData,
-  onSetModal
+  onSetModal,
+  rfcInicial = '',
+  onGuardarRfc
 }: {
   accounts: Account[];
   /** Proyección aplanada de las pólizas (fuente de CT/BN/DIOT — consistencia con Catalogo/Balanza). */
@@ -18,12 +20,21 @@ export function ContabilidadElectronicaView({
   polizas: Poliza[];
   tAccountsData: TAccountsData;
   onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void;
+  /** C-7: RFC del cliente activo, precargado en el formulario. */
+  rfcInicial?: string;
+  /** C-7: persiste el RFC en `Empresa.rfc` tras una exportación exitosa. */
+  onGuardarRfc?: (rfc: string) => void;
 }) {
   const now = React.useMemo(() => new Date(), []);
   const currentYear = now.getFullYear().toString();
   const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
 
-  const [rfc, setRfc] = React.useState('');
+  const [rfc, setRfc] = React.useState(rfcInicial);
+  // Si el RFC del cliente activo cambia (cambio de cliente / exportación), el
+  // formulario lo refleja salvo que haya una edición en curso no persistida.
+  React.useEffect(() => {
+    setRfc(rfcInicial || '');
+  }, [rfcInicial]);
   const [anio, setAnio] = React.useState(currentYear);
   const [mes, setMes] = React.useState(currentMonth);
 
@@ -47,20 +58,29 @@ export function ContabilidadElectronicaView({
   const isRfcValid = rfcRegex.test(rfc.trim());
   const isValid = isRfcValid && /^\d{4}$/.test(anio);
 
+  /** C-7: tras una exportación exitosa, el RFC queda en el cliente activo (Empresa.rfc). */
+  const persistirRfc = () => {
+    const limpio = rfc.trim();
+    if (limpio && onGuardarRfc) onGuardarRfc(limpio);
+  };
+
   const handleCatalogo = () => {
     if (!isValid) return;
     generateCatalogoXML(rfc.trim(), anio, mes, accounts);
+    persistirRfc();
   };
 
   const handleBalanza = () => {
     if (!isValid) return;
     generateBalanzaXML(rfc.trim(), anio, mes, accounts, tAccountsData);
+    persistirRfc();
   };
 
   const handleDIOT = () => {
     if (!isValid) return;
     try {
       generateDIOTTxt(rfc.trim(), anio, mes, entries, accounts);
+      persistirRfc();
     } catch (error) {
       const message = error instanceof Error
         ? error.message
@@ -77,6 +97,7 @@ export function ContabilidadElectronicaView({
     if (!isValid) return;
     try {
       exportPolizasXML(rfc.trim(), anio, mes, polizas, accounts);
+      persistirRfc();
       onSetModal({ type: 'success', title: 'Pólizas Generadas', message: 'El archivo XML de Pólizas del Periodo se ha descargado correctamente.' });
     } catch (error: any) {
       onSetModal({ type: 'error', title: 'Error', message: error.message });

@@ -7,10 +7,10 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCheckForUpdates } from './hooks/useCheckForUpdates';
 import { useUpdateProgress } from './hooks/useUpdateProgress';
-import {
-  FixedAsset
-} from './types';
+import type { Account, FixedAsset, Poliza } from './types';
 import { buildTAccountsData, computeAccountBalances, formatPolizaFolio, flattenPolizasToJournalEntries, entryToPolizaInput } from './lib/accounting';
+import { clavePorEmpresa, arrayDe, objetoDe } from './lib/empresas';
+import { esBackupV3, type EmpresaWorkspace } from './hooks/useBackup';
 import FeedbackModal from './components/FeedbackModal';
 import SyncModal from './components/SyncModal';
 import { GlobalInfoModal, type ModalInfo } from './components/modals/GlobalInfoModal';
@@ -27,15 +27,17 @@ import { FixedAssetsView } from './components/FixedAssetsView';
 import { ContabilidadElectronicaView } from './components/ContabilidadElectronicaView';
 import { CatalogView } from './components/CatalogView';
 import type { SyncState } from './services/syncService';
-import { saveToStorage } from './services/storageService';
+import { saveToStorage, loadFromStorage } from './services/storageService';
 import { useAppData } from './hooks/useAppData';
 import { usePolizas } from './hooks/usePolizas';
 import { useCatalog } from './hooks/useCatalog';
 import { useInventories, inventoriesToGeneral } from './hooks/useInventories';
+import { useEmpresas } from './hooks/useEmpresas';
 import { useBackup } from './hooks/useBackup';
 import { migrateJournalsToPolizas } from './lib/migrateJournalsToPolizas';
 import { migrateCatalogToGlobal } from './lib/migrateCatalogToGlobal';
 import { BASIC_NAV_TABS, DEFAULT_TAB, FISCAL_NAV_TABS, type AppMode, type AppTab, type NavigationTab } from './lib/navigation';
+import { EmpresasModal } from './components/EmpresasModal';
 import { MobileMenu } from './components/layout/MobileMenu';
 import { Sidebar } from './components/layout/Sidebar';
 import { AppHeader } from './components/layout/AppHeader';
@@ -61,6 +63,7 @@ export default function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [showEmpresas, setShowEmpresas] = useState(false);
   const downloadPercent = useUpdateProgress();
   const isDesktopRuntime = typeof window !== 'undefined' && ('electronAPI' in window || navigator.userAgent.toLowerCase().includes('electron'));
   const modalInfoRef = useRef<ModalInfo | null>(null);
@@ -76,52 +79,116 @@ export default function App() {
     modalInfoRef.current = modalInfo;
   }, [modalInfo]);
 
-  // --- Dominios como hooks (Fase 2; Fase 5 retira el dominio Journal de RAM) ---
-  // Pólizas (Fases 2-4 de PLAN_POLIZAS.md): fuente de TODAS las derivaciones.
-  const polizasState = usePolizas({ canSave: hasLoaded });
-  const { polizas, createPoliza, updatePoliza, deletePoliza, createProgrammaticPoliza, importPolizas, setPolizas, markMigrated, hydrate } = polizasState;
+  // --- Dominios como hooks (Fases 2-3 de PLAN_POLIZAS.md + PLAN_MULTI_CLIENTE.md) ---
+  // Pólizas: fuente de TODAS las derivaciones. Dominios POR CLIENTE: los datos
+  // de RAM son SIEMPRE los del cliente activo (C-4).
+  const empresasState = useEmpresas({ canSave: hasLoaded });
+  const { activaId, activa: empresaActiva, crearEmpresa, actualizarEmpresa, eliminarEmpresa, setActiva, hydrate: hydrateEmpresas, markMigrated: markEmpresasMigrated } = empresasState;
 
-  const inventoriesState = useInventories();
+  const polizasState = usePolizas({ canSave: hasLoaded, empresaId: activaId });
+  const { polizas, createPoliza, updatePoliza, deletePoliza, createProgrammaticPoliza, importPolizas, setPolizas, hydrate } = polizasState;
+
+  const inventoriesState = useInventories({ empresaId: activaId });
   const { finalInventories, setFinalInventories, finalInventory, handleSetFinalInventory, hydrateFromRemote } = inventoriesState;
 
-  // activos fijos permanecen en App (Fase 3+): persistencia propia idéntica a la original
+  // activos fijos permanecen en App (dueño del dominio): clave POR CLIENTE + puerta canSave (C-4)
   useEffect(() => {
-    saveToStorage('contasis_fixed_assets', fixedAssets).catch(console.error);
-  }, [fixedAssets]);
+    if (!hasLoaded || !activaId) return;
+    saveToStorage(clavePorEmpresa('contasis_fixed_assets', activaId), fixedAssets).catch(console.error);
+  }, [fixedAssets, hasLoaded, activaId]);
+  // Escritura de la clave de activos de UN cliente concreto (boot-migración / respaldo; anti-R1: App es dueña).
+  const hydrateAssetsEmpresa = (empresaDestinoId: string, assets: FixedAsset[]): void => {
+    if (empresaDestinoId === activaId) setFixedAssets(assets);
+    saveToStorage(clavePorEmpresa('contasis_fixed_assets', empresaDestinoId), assets).catch(console.error);
+  };
 
-  // Catálogo global consolidado (D-12: sin catálogo híbrido por diario)
+  // Catálogo global consolidado del cliente activo (D-12 heredada; claves por cliente C-2)
   const catalogState = useCatalog({
     canSave: hasLoaded,
-    onSaveError: setModalInfo
+    onSaveError: setModalInfo,
+    empresaId: activaId
   });
   const { accounts, combinedAccounts, handleCombinedAccountsUpdate, setAccounts } = catalogState;
 
-  // Carga inicial (hidratación) — al final de la cadena: ve los setters ya creados
+  // Carga inicial (hidratación) — al final de la cadena: ve los setters ya creados.
+  // El tercer parámetro (activaId) dispara la recarga orquestada al cambiar cliente (C-4).
   useAppData({
+    hydrateEmpresas,
+    markEmpresasMigrated,
     setPolizas: polizasState.setPolizas,
-    markPolizasMigrated: polizasState.markMigrated,
     setFinalInventories: setFinalInventories,
     setFixedAssets: setFixedAssets,
     setAccounts: setAccounts,
-    markCatalogMigrated: catalogState.markMigrated
-  }, setHasLoaded);
+    hydratePolizasEmpresa: polizasState.hydrateEmpresa,
+    hydrateInventoriesEmpresa: inventoriesState.hydrateEmpresa,
+    hydrateAccountsEmpresa: catalogState.hydrateEmpresa,
+    hydrateAssetsEmpresa
+  }, setHasLoaded, activaId);
 
   // Vigilante de Respaldo Semanal + lógica de respaldo (hook propio)
   const { handleExportBackup, handleImportBackup } = useBackup({
-    getSnapshot: () => ({
-      polizas,
-      accounts,
-      fixedAssets,
-      finalInventories,
-      // D-14: journals vacío por compatibilidad de formato v2 (el archivo `contasis_journals` queda intacto)
-      journals: []
-    }),
+    // C-5: snapshot v3 de TODOS los clientes. Lecturas ONLY (anti-R1): la RAM
+    // ya cubre al activo; los demás se leen de SU clave (App orquesta solo la lectura).
+    getSnapshot: async () => {
+      const workspaces: EmpresaWorkspace[] = await Promise.all(
+        empresasState.empresas.map(async (empresa) => {
+          if (empresa.id === activaId) {
+            return {
+              id: empresa.id,
+              nombre: empresa.nombre,
+              rfc: empresa.rfc,
+              polizas,
+              accounts,
+              fixedAssets,
+              finalInventories
+            };
+          }
+          const [otrasPolizas, otrasAccounts, otrosAssets, otrosInventories] = await Promise.all([
+            loadFromStorage(clavePorEmpresa('contasis_polizas', empresa.id)),
+            loadFromStorage(clavePorEmpresa('contasis_accounts', empresa.id)),
+            loadFromStorage(clavePorEmpresa('contasis_fixed_assets', empresa.id)),
+            loadFromStorage(clavePorEmpresa('contasis_final_inventories', empresa.id))
+          ]);
+          return {
+            id: empresa.id,
+            nombre: empresa.nombre,
+            rfc: empresa.rfc,
+            polizas: arrayDe(otrasPolizas) as Poliza[],
+            accounts: arrayDe(otrasAccounts) as Account[],
+            fixedAssets: arrayDe(otrosAssets) as FixedAsset[],
+            finalInventories: objetoDe(otrosInventories) as Record<string, number>
+          };
+        })
+      );
+      return { empresas: workspaces, activaId: activaId ?? '' };
+    },
     notify: setModalInfo,
     canSuggest: () => !modalInfoRef.current,
     restore: (backup) => {
       // Orquestador anti-R1: cada hook dueño recibe SU parte; nadie más
       // escribe claves ajenas. Composición atómica en el mismo evento.
-      // D-14: respaldo v2 trae polizas; v1 (solo journals) MIGRA AL VUELO.
+      if (esBackupV3(backup)) {
+        // C-5: v3 hidrata a TODOS los clientes con sus datos.
+        const validos = backup.empresas.filter(e => e && typeof e.id === 'string');
+        const activaRestaurada = validos.some(e => e.id === backup.activaId)
+          ? backup.activaId
+          : validos[0]?.id ?? '';
+        hydrateEmpresas({
+          activaId: activaRestaurada,
+          empresas: validos.map(({ id, nombre, rfc }) => ({ id, nombre, rfc }))
+        });
+        validos.forEach(ws => {
+          polizasState.hydrateEmpresa(ws.id, ws.polizas ?? []);
+          catalogState.hydrateEmpresa(ws.id, ws.accounts ?? []);
+          inventoriesState.hydrateEmpresa(ws.id, inventoriesToGeneral(ws.finalInventories ?? {}));
+          hydrateAssetsEmpresa(ws.id, ws.fixedAssets ?? []);
+        });
+        setModalInfo({ type: 'success', title: 'Restauración Exitosa', message: `Se restauraron ${validos.length} cliente(s). Las claves viejas quedaron reemplazadas con el contenido del respaldo.` });
+        return;
+      }
+
+      // C-5: respaldos v2 (polizas) y v1 (journals) sobrescriben SOLO el cliente ACTIVO.
+      // D-14: v1 MIGRA AL VUELO para no romper la carga de archivos viejos.
       const esFormatoV2 = 'polizas' in backup && Array.isArray(backup.polizas);
       const nextPolizas = esFormatoV2
         ? backup.polizas
@@ -135,7 +202,7 @@ export default function App() {
       setAccounts(nextAccounts);
       if (backup.fixedAssets) setFixedAssets(backup.fixedAssets);
       if (backup.finalInventories) setFinalInventories(inventoriesToGeneral(backup.finalInventories));
-      setModalInfo({ type: 'success', title: 'Restauración Exitosa', message: 'Toda la información ha sido restaurada correctamente.' });
+      setModalInfo({ type: 'success', title: 'Restauración Exitosa', message: `Se restauraron los datos del cliente "${empresaActiva?.nombre ?? 'Activo'}". Los demás clientes quedaron intactos.` });
     }
   });
 
@@ -154,15 +221,25 @@ export default function App() {
     if (!confirmDelete) return;
     if (confirmDelete.type === 'poliza') {
       deletePoliza(confirmDelete.id);
+    } else if (confirmDelete.type === 'empresa') {
+      // C-8: el hook prohíbe eliminar el último cliente (defensa extra en UI).
+      const eliminada = eliminarEmpresa(confirmDelete.id);
+      if (eliminada) {
+        setModalInfo({ type: 'success', title: 'Cliente eliminado', message: 'El cliente salió de la lista. Sus claves por cliente quedan como archivo histórico en el almacenamiento.' });
+      } else {
+        setModalInfo({ type: 'error', title: 'No se pudo eliminar', message: 'Siempre debe existir al menos un cliente.' });
+      }
     }
     setConfirmDelete(null);
   };
 
   /**
-   * Orquestador de sync remoto (anti-R1): una sola función compone ambos hooks.
-   * `hydrate` de pólizas persiste explícitamente (incluso vacío); 
-   * `hydrateFromRemote` persiste la clave de inventarios explícitamente.
-   * D-14: estado remoto de formato viejo (solo journals) MIGRA al vuelo.
+   * Orquestador de sync remoto (C-6 de PLAN_MULTI_CLIENTE.md). Asignación
+   * por empresa:
+   * - remoto con `empresaId` existente → sobrescribe ESE cliente;
+   * - remoto con `empresaId` nuevo → registra un cliente nuevo con ese nombre;
+   * - remoto viejo (sin `empresaId`) → sobrescribe el cliente ACTIVO (semántica previa).
+   * `hydrate`/`hydrateEmpresa` de cada hook dueño persiste explícitamente.
    */
   const applyRemoteSyncState = (state: SyncState) => {
     const nextInventories = state.finalInventories ?? {};
@@ -170,8 +247,30 @@ export default function App() {
       ? state.polizas
       : migrateJournalsToPolizas(Array.isArray(state.journals) ? state.journals : [], accounts);
 
-    hydrate(nextPolizas);
-    inventoriesState.hydrateFromRemote(nextInventories);
+    const remotoId = typeof state.empresaId === 'string' ? state.empresaId : '';
+    if (!remotoId) {
+      // Remoto viejo: se aplica al cliente activo como siempre.
+      hydrate(nextPolizas);
+      inventoriesState.hydrateFromRemote(nextInventories);
+      return;
+    }
+
+    const existente = empresasState.empresas.find(e => e.id === remotoId);
+    if (!existente) {
+      // Cliente nuevo (id remoto se respeta para que los próximos pases emparejen).
+      empresasState.setEmpresas(prev => [
+        ...prev,
+        { id: remotoId, nombre: state.empresaNombre ?? 'Sincronizado' }
+      ]);
+    }
+
+    if (remotoId === activaId) {
+      hydrate(nextPolizas);
+      inventoriesState.hydrateFromRemote(nextInventories);
+    } else {
+      polizasState.hydrateEmpresa(remotoId, nextPolizas);
+      inventoriesState.hydrateEmpresa(remotoId, inventoriesToGeneral(nextInventories));
+    }
   };
 
   /**
@@ -234,6 +333,8 @@ export default function App() {
             onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
             isMobile={isMobile}
             activeMobileTabLabel={activeMobileTabLabel}
+            empresaActivaNombre={empresaActiva?.nombre ?? null}
+            onOpenEmpresas={() => setShowEmpresas(true)}
           />
 
           <main className="flex-1 overflow-y-auto pt-3">
@@ -378,6 +479,10 @@ export default function App() {
                       polizas={polizasCronologicas}
                       tAccountsData={tAccountsData}
                       onSetModal={setModalInfo}
+                      rfcInicial={empresaActiva?.rfc ?? ''}
+                      onGuardarRfc={(rfc) => {
+                        if (activaId) actualizarEmpresa(activaId, { rfc });
+                      }}
                     />
                   </motion.div>
                 )}
@@ -442,9 +547,38 @@ export default function App() {
         isOpen={showSyncModal}
         onClose={() => setShowSyncModal(false)}
         isDesktop={isDesktopRuntime}
-        localState={{ journals: [], polizas, finalInventories }}
+        localState={{
+          journals: [],
+          polizas,
+          finalInventories,
+          empresaId: activaId ?? undefined,
+          empresaNombre: empresaActiva?.nombre
+        }}
         onApplyRemoteState={applyRemoteSyncState}
         onNotify={(type, title, message) => setModalInfo({ type, title, message })}
+      />
+
+      {/* Gestor de clientes (C-1): switch + alta + edición + baja confirmada */}
+      <EmpresasModal
+        isOpen={showEmpresas}
+        onClose={() => setShowEmpresas(false)}
+        empresas={empresasState.empresas}
+        activaId={activaId}
+        onSetActiva={setActiva}
+        onCrear={(nombre) => {
+          crearEmpresa(nombre);
+          setModalInfo({ type: 'success', title: 'Cliente agregado', message: `Se creó el cliente "${nombre}". Usa "Usar" para cambiar a su contabilidad.` });
+        }}
+        onEditar={(id, cambios) => actualizarEmpresa(id, cambios)}
+        onEliminarSolicitud={(empresa) => {
+          setShowEmpresas(false);
+          setConfirmDelete({
+            type: 'empresa',
+            id: empresa.id,
+            title: 'Eliminar Cliente',
+            message: `¿Seguro que deseas eliminar a "${empresa.nombre}" de la lista? Sus datos ya no estarán accesibles. Esta acción no se puede deshacer.`
+          });
+        }}
       />
     </div>
   );

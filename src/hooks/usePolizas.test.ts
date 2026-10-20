@@ -38,22 +38,25 @@ const polizaCompleta = (id: string, tipo: Poliza['tipo'], folio: number): Poliza
   totalHaber: 500
 });
 
-describe('usePolizas (dominio contasis_polizas, regla anti-R1)', () => {
+/** Cliente de prueba: id que compone las claves (C-2 de PLAN_MULTI_CLIENTE.md). */
+const E1 = 'e1';
+
+describe('usePolizas (dominio contasis_polizas_e1 — clave por cliente, regla anti-R1)', () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
   it('con canSave=false NO persiste: ni el montaje vacío ni después de mutar (guard de migración)', () => {
-    const { result } = renderHook(() => usePolizas({ canSave: false }));
-    expect(localStorage.getItem('contasis_polizas')).toBeNull();
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
+    expect(localStorage.getItem('contasis_polizas_e1')).toBeNull();
 
     act(() => { result.current.createPoliza(inputCuadrada()); });
     expect(result.current.polizas).toHaveLength(1); // cambia en RAM…
-    expect(localStorage.getItem('contasis_polizas')).toBeNull(); // …pero no en storage
+    expect(localStorage.getItem('contasis_polizas_e1')).toBeNull(); // …pero no en storage
   });
 
   it('createPoliza: asigna folio 1, id generado y recalcula totales (D-7/D-9/Folio D-4)', () => {
-    const { result } = renderHook(() => usePolizas({ canSave: true }));
+    const { result } = renderHook(() => usePolizas({ canSave: true, empresaId: E1 }));
     let creada!: Poliza;
     act(() => { creada = result.current.createPoliza(inputCuadrada()); });
 
@@ -65,7 +68,7 @@ describe('usePolizas (dominio contasis_polizas, regla anti-R1)', () => {
   });
 
   it('createPoliza lanza con < 2 partidas y lanza con desbalance (última línea D-9)', () => {
-    const { result } = renderHook(() => usePolizas({ canSave: false }));
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
 
     act(() => {
       expect(() => result.current.createPoliza({
@@ -84,7 +87,7 @@ describe('usePolizas (dominio contasis_polizas, regla anti-R1)', () => {
   });
 
   it('folios consecutivos e independientes entre tipos (D-4)', () => {
-    const { result } = renderHook(() => usePolizas({ canSave: false }));
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
     let a!: Poliza, b!: Poliza, c!: Poliza, d!: Poliza;
     // Un evento de guardado por act: el folio se lee del estado materializado
     // (patrón idéntico a createJournal en useJournals, cierre sobre el estado).
@@ -98,7 +101,7 @@ describe('usePolizas (dominio contasis_polizas, regla anti-R1)', () => {
   });
 
   it('updatePoliza: preserva folio y tipo (D-8) aunque el payload diga lo contrario; recalcula totales', () => {
-    const { result } = renderHook(() => usePolizas({ canSave: false }));
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
     act(() => { result.current.createPoliza(inputCuadrada('diario')); });
 
     act(() => {
@@ -119,7 +122,7 @@ describe('usePolizas (dominio contasis_polizas, regla anti-R1)', () => {
   });
 
   it('updatePoliza lanza con póliza desbalanceada y no muta', () => {
-    const { result } = renderHook(() => usePolizas({ canSave: false }));
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
     act(() => { result.current.createPoliza(inputCuadrada()); });
     const original = [...result.current.polizas];
 
@@ -132,7 +135,7 @@ describe('usePolizas (dominio contasis_polizas, regla anti-R1)', () => {
   });
 
   it('deletePoliza elimina SOLO la póliza indicada', () => {
-    const { result } = renderHook(() => usePolizas({ canSave: false }));
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
     act(() => {
       result.current.createPoliza(inputCuadrada('diario'));
       result.current.createPoliza(inputCuadrada('egreso'));
@@ -144,7 +147,7 @@ describe('usePolizas (dominio contasis_polizas, regla anti-R1)', () => {
   });
 
   it('importPolizas sobre estado en RAM: folio faltante asignado y colisión reasignada por tipo', () => {
-    const { result } = renderHook(() => usePolizas({ canSave: false }));
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
     act(() => { result.current.hydrate([polizaCompleta('p-eg-1', 'egreso', 5)]); });
 
     act(() => {
@@ -163,7 +166,7 @@ describe('usePolizas (dominio contasis_polizas, regla anti-R1)', () => {
   });
 
   it('createProgrammaticPoliza es la misma lógica de alta validada (D-10)', () => {
-    const { result } = renderHook(() => usePolizas({ canSave: false }));
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
     let creada!: Poliza;
     act(() => { creada = result.current.createProgrammaticPoliza(inputCuadrada('diario', 'Depreciación mensual')); });
     expect(creada.folio).toBe(1);
@@ -171,44 +174,55 @@ describe('usePolizas (dominio contasis_polizas, regla anti-R1)', () => {
   });
 
   it('hydrate persiste explícitamente lo que recibe', async () => {
-    const { result } = renderHook(() => usePolizas({ canSave: false }));
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
     await act(async () => { result.current.hydrate([polizaCompleta('p1', 'diario', 1)]); });
 
     expect(result.current.polizas).toHaveLength(1);
     await waitFor(() => {
-      const saved = localStorage.getItem('contasis_polizas');
+      const saved = localStorage.getItem('contasis_polizas_e1');
       expect(saved).not.toBeNull();
       expect(JSON.parse(saved as string)[0]?.id).toBe('p1');
     });
   });
 
   it('hydrate escribe SIEMPRE, incluso [] → contasis_polizas queda "[]" (no resucita por re-migración)', async () => {
-    const { result } = renderHook(() => usePolizas({ canSave: false }));
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
     await act(async () => { result.current.hydrate([]); });
-    await waitFor(() => expect(localStorage.getItem('contasis_polizas')).toBe('[]'));
+    await waitFor(() => expect(localStorage.getItem('contasis_polizas_e1')).toBe('[]'));
     expect(result.current.polizas).toEqual([]);
   });
 
   it('efecto con canSave persiste los cambios de los mutadores (post-carga persiste SIEMPRE)', async () => {
-    const { result } = renderHook(() => usePolizas({ canSave: true }));
+    const { result } = renderHook(() => usePolizas({ canSave: true, empresaId: E1 }));
     act(() => { result.current.createPoliza(inputCuadrada('egreso')); });
 
     await waitFor(() => {
-      const saved = localStorage.getItem('contasis_polizas');
+      const saved = localStorage.getItem('contasis_polizas_e1');
       const parsed = JSON.parse(saved as string) as Poliza[];
       expect(parsed).toHaveLength(1);
       expect(parsed[0].tipo).toBe('egreso');
     });
   });
 
-  it('markMigrated/isMigrated: flag ausente → false; tras marcar → true (idempotente)', async () => {
-    const { result } = renderHook(() => usePolizas({ canSave: false }));
-    await expect(result.current.isMigrated()).resolves.toBe(false);
+  it('hydrate persiste en la clave del cliente activo y NO toca la de otro cliente', async () => {
+    localStorage.setItem('contasis_polizas_e2', JSON.stringify([polizaCompleta('otra', 'ingreso', 1)]));
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
 
-    await act(async () => { result.current.markMigrated(); });
-    await expect(result.current.isMigrated()).resolves.toBe(true);
+    await act(async () => { result.current.hydrate([polizaCompleta('p1', 'diario', 1)]); });
+    await waitFor(() => expect(localStorage.getItem('contasis_polizas_e1')).toBe(JSON.stringify([polizaCompleta('p1', 'diario', 1)])));
 
-    await act(async () => { result.current.markMigrated(); });
-    await expect(result.current.isMigrated()).resolves.toBe(true); // idempotente
+    expect(JSON.parse(localStorage.getItem('contasis_polizas_e2') as string)).toHaveLength(1); // intacto
+  });
+
+  it('hydrateEmpresa escribe la clave del cliente destino (anti-R1) sin tocar la RAM del activo', async () => {
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
+    act(() => { result.current.createPoliza(inputCuadrada('diario')); });
+    const ramActiva = [...result.current.polizas];
+
+    await act(async () => { result.current.hydrateEmpresa('e2', [polizaCompleta('otra', 'ingreso', 1)]); });
+
+    await waitFor(() => expect(localStorage.getItem('contasis_polizas_e2')).not.toBeNull());
+    expect(result.current.polizas).toEqual(ramActiva); // RAM del activo intacta
+    expect(localStorage.getItem('contasis_polizas_e1')).toBeNull(); // persiste la del destino only
   });
 });

@@ -1,8 +1,8 @@
 # Contabilidad M4 Pro
 
-Contabilidad M4 Pro es una app de gestión contable para escritorio y móvil. Su captura principal son las **Pólizas Contables** (ingreso, egreso y diario con partida doble validada), a partir de las cuales se generan automáticamente el **Libro Diario** (reporte consolidado), las **Cuentas T**, el **Balance General** y el **Estado de Resultados**, además de activar herramientas del **modo fiscal** como activos fijos, lectura de CFDI XML y generación de archivos SAT.
+Contabilidad M4 Pro es una app de gestión contable para escritorio y móvil. Su captura principal son las **Pólizas Contables** (ingreso, egreso y diario con partida doble validada), a partir de las cuales se generan automáticamente el **Libro Diario** (reporte consolidado), las **Cuentas T**, el **Balance General** y el **Estado de Resultados**. Diseñada para contadores externos, la app admite **varios Clientes**: cada cliente tiene su propio catálogo, activos fijos, inventario, pólizas y RFC para los archivos SAT.
 
-> Versión actual: **v0.7.1** · Autor: Fernando Martinez · Licencia: Apache-2.0
+> Versión actual: **v0.8.0** · Autor: Fernando Martinez · Licencia: Apache-2.0
 
 ---
 
@@ -11,16 +11,17 @@ Contabilidad M4 Pro es una app de gestión contable para escritorio y móvil. Su
 1. [Capturas de pantalla](#capturas-de-pantalla)
 2. [Instalación desde el paquete publicado](#instalación-desde-el-paquete-publicado)
 3. [Funcionalidades](#funcionalidades)
-   - [Pólizas Contables](#1-pólizas-contables)
-   - [Libro Diario (reporte)](#2-libro-diario-reporte)
-   - [Cuentas T](#3-cuentas-t)
-   - [Balance General](#4-balance-general)
-   - [Estado de Resultados](#5-estado-de-resultados)
-   - [Catálogo de Cuentas](#6-catálogo-de-cuentas)
-   - [Activos Fijos (Modo Fiscal)](#7-activos-fijos-modo-fiscal)
-   - [Contabilidad Electrónica SAT (Modo Fiscal)](#8-contabilidad-electrónica-sat-modo-fiscal)
-   - [Sincronización Escritorio ↔ Móvil](#9-sincronización-escritorio--móvil)
-   - [Mejoras de productividad](#10-mejoras-de-productividad)
+   - [Clientes (multi-cliente)](#1-clientes-multi-cliente)
+   - [Pólizas Contables](#2-pólizas-contables)
+   - [Libro Diario (reporte)](#3-libro-diario-reporte)
+   - [Cuentas T](#4-cuentas-t)
+   - [Balance General](#5-balance-general)
+   - [Estado de Resultados](#6-estado-de-resultados)
+   - [Catálogo de Cuentas](#7-catálogo-de-cuentas)
+   - [Activos Fijos (Modo Fiscal)](#8-activos-fijos-modo-fiscal)
+   - [Contabilidad Electrónica SAT (Modo Fiscal)](#9-contabilidad-electrónica-sat-modo-fiscal)
+   - [Sincronización Escritorio ↔ Móvil](#10-sincronización-escritorio--móvil)
+   - [Mejoras de productividad](#11-mejoras-de-productividad)
 4. [Configuración del entorno local (desde cero)](#configuración-del-entorno-local-desde-cero)
 5. [Scripts disponibles](#scripts-disponibles)
 6. [Tecnologías utilizadas](#tecnologías-utilizadas)
@@ -64,9 +65,22 @@ Descarga el instalador correspondiente a tu sistema operativo desde la [página 
 
 ## Funcionalidades
 
-### 1. Pólizas Contables
+### 1. Clientes (multi-cliente)
 
-Las **Pólizas Contables** son la unidad de captura principal de la aplicación (pestaña por defecto). Cada póliza es un asiento formal con partida doble validada, tipo de póliza SAT y folio consecutivo.
+Los contadores que atienden **varias empresas** alternan entre clientes desde el botón del encabezado (muestra el nombre del cliente activo). Todo lo que ves y capturas en la app pertenece **siempre al cliente activo**:
+
+- Cada cliente tiene su propio **catálogo de cuentas, activos fijos, inventario final, pólizas y RFC**.
+- Los **folios de póliza son consecutivos por tipo dentro de cada cliente** (el ING 1 de un cliente no interfiere con el de otro).
+- El botón **"Clientes"** abre el gestor donde puedes:
+  - **Cambiar de cliente** (botón "Usar"): la contabilidad del otro cliente se carga al instante.
+  - **Agregar un cliente** nuevo (arranca con catálogo base readonly).
+  - **Editar nombre y RFC** del cliente (el RFC se usa para los XML SAT y la DIOT).
+  - **Eliminar un cliente** (con confirmación; siempre debe existir al menos uno).
+- Los **respaldos incluyen a todos tus clientes**; al restaurar un respaldo viejo de versión anterior, sus datos se aplican al **cliente activo**.
+
+### 2. Pólizas Contables
+
+Las **Pólizas Contables** son la unidad de captura principal de la aplicación (pestaña por defecto). Cada póliza es un asiento formal con partida doble validada, tipo de póliza SAT y folio consecutivo por tipo dentro del cliente activo.
 
 #### Crear una póliza
 1. Haz clic en **"Nueva Póliza"** (esquina superior derecha del módulo).
@@ -106,7 +120,7 @@ Las **Pólizas Contables** son la unidad de captura principal de la aplicación 
 
 ---
 
-### 2. Libro Diario (reporte)
+### 3. Libro Diario (reporte)
 
 El Libro Diario ya no captura movimientos: es un **reporte consolidado de solo lectura** que refleja todas las pólizas ordenadas cronológicamente (fecha + folio).
 
@@ -116,7 +130,7 @@ El Libro Diario ya no captura movimientos: es un **reporte consolidado de solo l
 
 ---
 
-### 3. Cuentas T
+### 4. Cuentas T
 
 Las Cuentas T se calculan automáticamente a partir de la **proyección consolidada de las pólizas** (ordenadas fecha + folio); no requieren entrada manual.
 
@@ -130,7 +144,7 @@ Las Cuentas T se calculan automáticamente a partir de la **proyección consolid
 
 ---
 
-### 4. Balance General
+### 5. Balance General
 
 El Balance General se genera automáticamente a partir de los saldos calculados por las Cuentas T.
 
@@ -148,7 +162,7 @@ Exportación:
 
 ---
 
-### 5. Estado de Resultados
+### 6. Estado de Resultados
 
 Presenta el resultado del ejercicio usando el **Método Analítico** (desglosado).
 
@@ -178,7 +192,7 @@ Exportación:
 
 ---
 
-### 6. Catálogo de Cuentas
+### 7. Catálogo de Cuentas
 
 La aplicación incluye un catálogo preconfigurado de cuentas contables en español, organizado por tipo y con códigos contables listos para trabajar:
 
@@ -252,7 +266,7 @@ La aplicación incluye un catálogo preconfigurado de cuentas contables en espa�
 
 ---
 
-### 7. Activos Fijos (Modo Fiscal)
+### 8. Activos Fijos (Modo Fiscal)
 
 Cuando activas el **Modo Fiscal**, aparece el módulo de Activos Fijos para llevar mejor el control de inversiones:
 
@@ -263,30 +277,31 @@ Cuando activas el **Modo Fiscal**, aparece el módulo de Activos Fijos para llev
 
 ---
 
-### 8. Contabilidad Electrónica SAT (Modo Fiscal)
+### 9. Contabilidad Electrónica SAT (Modo Fiscal)
 
 El módulo de **Contabilidad Electrónica** facilita entregables fiscales del Anexo 24:
 
 - Generación de **Catálogo SAT (CT.xml)**, **Balanza (BN.xml)** y **Pólizas del Periodo (PL.xml)**.
+- **RFC por cliente:** el campo del RFC se precarga con el RFC del cliente activo y, tras exportar, queda guardado en el cliente para las siguientes entregas.
 - El XML de Pólizas se construye directamente desde tus pólizas del periodo: **folio real en `NumUnIdenPol`**, tipo SAT (1/2/3), concepto por partida y soporte de CompNal por CFDI.
 - Generación de **DIOT (.txt)** con base en movimientos de IVA acreditable por RFC.
 - Validación básica de formato de RFC y nomenclatura de archivos para descarga.
 
 ---
 
-### 9. Sincronización Escritorio ↔ Móvil
+### 10. Sincronización Escritorio ↔ Móvil
 
 La app incluye sincronización de datos entre dispositivos para continuar el trabajo sin duplicar captura:
 
 - Conexión principal por **WebRTC (PeerJS)**.
 - Respaldo automático por **Redis** cuando WebRTC no está disponible.
 - Emparejamiento con **QR** o **PIN de 6 dígitos**.
-- Manejo de conflictos para decidir si conservar datos locales o sobrescribir con datos remotos.
+- Manejo de conflictos para decidir si conservar datos locales o sobrescribir con datos remotos. La sincronización trabaja sobre el **cliente activo**: si el celular envía un cliente que aún no existe en el escritorio, se agrega a la lista.
 - Controles de seguridad ante intentos inválidos de PIN.
 
 ---
 
-### 10. Mejoras de productividad
+### 11. Mejoras de productividad
 
 - **Verificador de actualizaciones** para avisar cuando hay una versión más reciente.
 - **Feedback integrado** desde la app para reportar sugerencias o errores.
@@ -396,15 +411,15 @@ Contabilidad-M4/
 
 ### Persistencia de datos
 
-Los datos se almacenan localmente bajo estas claves:
+Los datos se almacenan localmente. Con multi-cliente, los datos de cada cliente viven en claves con **sufijo** (`contasis_<dominio>_<empresaId>`):
 
-- `contasis_polizas` – lista de pólizas contables (captura principal).
-- `contasis_polizas_migrated` – flag de la migración one-shot desde diarios legacy.
-- `contasis_accounts` – catálogo de cuentas (cuentas base readonly + creadas por el usuario).
-- `contasis_catalog_migrated` – flag de la consolidación del catálogo.
-- `contasis_final_inventories` – mapa `{ general: inventarioFinal }`.
-- `contasis_fixed_assets` – activos fijos.
+- `contasis_empresas` – lista de clientes y cuál está activo.
+- `contasis_polizas_<id>` – pólizas del cliente (la clave sin sufijo quedó como histórico tras la migración).
+- `contasis_accounts_<id>` – catálogo de cuentas del cliente (base readonly + propias).
+- `contasis_final_inventories_<id>` – mapa `{ general: inventarioFinal }` del cliente.
+- `contasis_fixed_assets_<id>` – activos fijos del cliente.
 - `contasis_journals` – histórico de diarios legacy (si venías de una versión anterior; solo lectura, no se elimina desde la app).
+- Claves sin sufijo (`contasis_polizas`, `contasis_accounts`, etc.) – archivo histórico de tu contabilidad previa a clientes; la migración las copió al primer cliente y no se vuelven a usar.
 
 Para limpiar todos los datos, abre las herramientas de desarrollo (F12) → Application → Local Storage → elimina las claves mencionadas.
 

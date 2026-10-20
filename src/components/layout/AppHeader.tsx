@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { motion } from 'motion/react';
-import { BarChart3, Menu, Shield, Smartphone } from 'lucide-react';
+import { BarChart3, Menu, Shield, Smartphone, Users } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { APP_VERSION } from '../../lib/appMeta';
 import type { AppMode } from '../../lib/navigation';
@@ -18,6 +18,9 @@ interface AppHeaderProps {
   onOpenMobileMenu: () => void;
   isMobile: boolean;
   activeMobileTabLabel: string;
+  /** Nombre del cliente activo (null antes del boot o sin clientes). */
+  empresaActivaNombre: string | null;
+  onOpenEmpresas: () => void;
 }
 
 export function AppHeader({
@@ -26,7 +29,9 @@ export function AppHeader({
   onOpenSync,
   onOpenMobileMenu,
   isMobile,
-  activeMobileTabLabel
+  activeMobileTabLabel,
+  empresaActivaNombre,
+  onOpenEmpresas
 }: AppHeaderProps) {
   return (
     <header className="relative overflow-visible border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top))' }}>
@@ -48,6 +53,16 @@ export function AppHeader({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={onOpenEmpresas}
+            title="Gestionar clientes"
+            className="inline-flex items-center gap-1.5 max-w-[13rem] px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors text-xs font-semibold"
+          >
+            <Users className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">
+              {empresaActivaNombre || 'Clientes'}
+            </span>
+          </button>
           <div className="hidden sm:grid grid-cols-2 items-center rounded-lg border border-white/10 bg-white/5 p-1 relative">
             <button
               onClick={() => onSetAppMode('basic')}
