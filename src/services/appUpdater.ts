@@ -66,6 +66,16 @@ export async function descargarApkConProgreso(
   try {
     await AppUpdater.descargarApk({ url });
     await termino;
+  } catch (e) {
+    const mensaje = e instanceof Error ? e.message : String(e);
+    if (/not implemented|unimplemented/i.test(mensaje)) {
+      // El plugin nativo no está registrado en la APK instalada (u otra
+      // plataforma): da el aviso explícito en vez de un fallo críptico.
+      throw new Error(
+        `El plugin nativo AppUpdater no está registrado en esta APK (${mensaje})`
+      );
+    }
+    throw e;
   } finally {
     for (const sub of suscripciones) {
       await sub.remove();

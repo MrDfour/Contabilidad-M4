@@ -98,10 +98,14 @@ public class AppUpdaterPlugin extends Plugin {
                 completado.put("ruta", destinoApk.getAbsolutePath());
                 completado.put("bytes", destinoApk.length());
                 notifyListeners("completado", completado);
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 archivoApk().delete();
                 JSObject error = new JSObject();
-                error.put("mensaje", e.getMessage() != null ? e.getMessage() : e.toString());
+                String mensaje = e.getClass().getSimpleName();
+                if (e.getMessage() != null) {
+                    mensaje += ": " + e.getMessage();
+                }
+                error.put("mensaje", mensaje);
                 notifyListeners("error", error);
             } finally {
                 HttpURLConnection activa = conexionActiva;

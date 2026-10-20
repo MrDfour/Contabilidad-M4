@@ -36,6 +36,7 @@ export function UpdateAvailableModal({
 }) {
   const [etapa, setEtapa] = useState<Etapa>('disponible');
   const [progreso, setProgreso] = useState(0);
+  const [fallo, setFallo] = useState('');
   const [showSkipDialog, setShowSkipDialog] = useState(false);
   const descargaEnCurso = useRef(false);
 
@@ -44,6 +45,7 @@ export function UpdateAvailableModal({
     if (isOpen) {
       setEtapa('disponible');
       setProgreso(0);
+      setFallo('');
     }
   }, [isOpen]);
 
@@ -94,9 +96,11 @@ export function UpdateAvailableModal({
       await descargarApkConProgreso(downloadUrl, (p) => setProgreso(p));
       descargaEnCurso.current = false;
       setEtapa('descargado');
-    } catch {
+    } catch (e) {
       descargaEnCurso.current = false;
+      setFallo(e instanceof Error ? e.message : 'Error desconocido.');
       setEtapa('fallo');
+      console.error('[Actualizador]', e);
     }
   }
 
@@ -147,6 +151,15 @@ export function UpdateAvailableModal({
                 />
               </div>
               <p className="text-xs text-slate-400 mt-2">{progreso}% descargado</p>
+            </div>
+          ) : null}
+
+          {etapa === 'fallo' && fallo ? (
+            <div className="mb-6 bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-left">
+              <p className="text-rose-300 text-xs font-semibold flex items-center gap-1.5 mb-1">
+                <CircleX className="w-3.5 h-3.5 shrink-0" /> Error en la descarga
+              </p>
+              <p className="text-rose-200/80 text-xs break-words">{fallo}</p>
             </div>
           ) : null}
 
