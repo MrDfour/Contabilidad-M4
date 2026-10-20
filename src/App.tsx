@@ -4,20 +4,13 @@
  */
 
 import { useState, useMemo, useEffect, useRef } from 'react';
-import {
-  FileText,
-  Table as TableIcon,
-  Briefcase,
-  TrendingUp,
-  Settings
-} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCheckForUpdates } from './hooks/useCheckForUpdates';
 import { useUpdateProgress } from './hooks/useUpdateProgress';
 import {
   FixedAsset
 } from './types';
-import { buildTAccountsData, computeAccountBalances } from './lib/accounting';
+import { buildTAccountsData, computeAccountBalances, formatPolizaFolio } from './lib/accounting';
 import FeedbackModal from './components/FeedbackModal';
 import SyncModal from './components/SyncModal';
 import { GlobalInfoModal, type ModalInfo } from './components/modals/GlobalInfoModal';
@@ -26,6 +19,7 @@ import { UpdateAvailableModal } from './components/modals/UpdateAvailableModal';
 import { AboutModal } from './components/modals/AboutModal';
 import { DownloadProgressBar } from './components/modals/DownloadProgressBar';
 import { JournalView } from './components/JournalView';
+import { PolizaView } from './components/polizas/PolizaView';
 import { TAccountsView } from './components/TAccountsView';
 import { ProfitLossView } from './components/ProfitLossView';
 import { BalanceSheetView } from './components/BalanceSheetView';
@@ -40,7 +34,7 @@ import { usePolizas } from './hooks/usePolizas';
 import { useCatalog } from './hooks/useCatalog';
 import { useInventories } from './hooks/useInventories';
 import { useBackup } from './hooks/useBackup';
-import { FISCAL_NAV_TABS, type AppMode, type AppTab, type NavigationTab } from './lib/navigation';
+import { BASIC_NAV_TABS, DEFAULT_TAB, FISCAL_NAV_TABS, type AppMode, type AppTab, type NavigationTab } from './lib/navigation';
 import { MobileMenu } from './components/layout/MobileMenu';
 import { Sidebar } from './components/layout/Sidebar';
 import { AppHeader } from './components/layout/AppHeader';
@@ -55,7 +49,7 @@ const getStoredAppMode = (): AppMode => {
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>(getStoredAppMode);
   const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
-  const [activeTab, setActiveTab] = useState<AppTab>('journal');
+  const [activeTab, setActiveTab] = useState<AppTab>(DEFAULT_TAB);
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDeleteData | null>(null);
   const [modalInfo, setModalInfo] = useState<ModalInfo | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -85,10 +79,10 @@ export default function App() {
   const journalsState = useJournals();
   const { journals, activeJournalId, setActiveJournalId, activeJournal } = journalsState;
 
-  // Pólizas (Fase 2 de PLAN_POLIZAS.md): canal de carga/migración vía useAppData;
-  // aún sin UI — la captura del módulo llega en Fase 3.
+  // Pólizas (Fases 2-3 de PLAN_POLIZAS.md): canal de carga/migración vía useAppData;
+  // desde Fase 3 la captura vive en el módulo de Pólizas (PolizaView).
   const polizasState = usePolizas({ canSave: hasLoaded });
-  const { setPolizas, markMigrated } = polizasState;
+  const { polizas, createPoliza, updatePoliza, deletePoliza, setPolizas, markMigrated } = polizasState;
 
   const inventoriesState = useInventories({ activeJournalId });
   const { finalInventories, setFinalInventories, finalInventory, handleSetFinalInventory } = inventoriesState;
@@ -144,10 +138,10 @@ export default function App() {
     localStorage.setItem('contasis_app_mode', appMode);
   }, [appMode]);
 
-  // Redireccionar al Diario si se cambia a modo básico estando en una pestaña fiscal
+  // Redireccionar si se cambia a modo básico estando en una pestaña fiscal
   useEffect(() => {
     if (appMode === 'basic' && FISCAL_NAV_TABS.some(tab => tab.id === activeTab)) {
-      setActiveTab('journal');
+      setActiveTab(DEFAULT_TAB);
     }
   }, [appMode, activeTab]);
 
@@ -177,6 +171,8 @@ export default function App() {
     if (confirmDelete.type === 'entry') {
       if (!activeJournalId) return;
       journalsState.deleteEntry(confirmDelete.id);
+    } else if (confirmDelete.type === 'poliza') {
+      deletePoliza(confirmDelete.id);
     } else {
       journalsState.deleteJournal(confirmDelete.id);
     }
@@ -197,14 +193,10 @@ export default function App() {
   };
 
   const navigationTabs: NavigationTab[] = [
-    { id: 'journal', label: 'Libro Diario', shortLabel: 'Diario', icon: FileText },
-    { id: 't-accounts', label: 'Cuentas T', shortLabel: 'Cuentas T', icon: TableIcon },
-    { id: 'balance', label: 'Balance General', shortLabel: 'Balance', icon: Briefcase },
-    { id: 'profit-loss', label: 'Estado de Resultados', shortLabel: 'Resultados', icon: TrendingUp },
-    { id: 'catalog', label: 'Catálogo de Cuentas', shortLabel: 'Catálogo', icon: Settings },
+    ...BASIC_NAV_TABS,
     ...(appMode === 'fiscal' ? FISCAL_NAV_TABS : [])
   ];
-  const activeMobileTabLabel = navigationTabs.find(tab => tab.id === activeTab)?.shortLabel ?? 'Diario';
+  const activeMobileTabLabel = navigationTabs.find(tab => tab.id === activeTab)?.shortLabel ?? 'Pólizas';
 
   return (
     <div className="min-h-screen bg-[#0a0f1d] text-slate-100 font-sans selection:bg-indigo-500 selection:text-white relative overflow-x-hidden">
@@ -246,6 +238,32 @@ export default function App() {
           <main className="flex-1 overflow-y-auto pt-3">
             <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
               <AnimatePresence mode="wait">
+                {activeTab === 'polizas' && (
+                  <motion.div
+                    key="polizas"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                  >
+                    <PolizaView
+                      polizas={polizas}
+                      accounts={combinedAccounts}
+                      appMode={appMode}
+                      onCreate={createPoliza}
+                      onUpdate={updatePoliza}
+                      onDeleteRequest={(p) => {
+                        setConfirmDelete({
+                          type: 'poliza',
+                          id: p.id,
+                          title: 'Eliminar Póliza',
+                          message: `¿Estás seguro de que deseas eliminar la póliza "${formatPolizaFolio(p)}" (${p.concepto})? Esta acción no se puede deshacer.`
+                        });
+                      }}
+                      onSetModal={setModalInfo}
+                    />
+                  </motion.div>
+                )}
+
                 {activeTab === 'journal' && (
                   <motion.div
                     key="journal"

@@ -145,11 +145,11 @@ export interface Journal {
 - `App.tsx`: `fallback 'Diario'` para etiqueta móvil y redirección de pestañas fiscales a `'journal'`.
 - `useBackup` / `SyncModal` / `syncService`: `BackupSnapshot.journals` y `SyncState.journals`.
 
-### 4.4 Estado de la navegación (hoy)
+### 4.4 Estado de la navegación (Fase 3 ejecutada)
 
-- El arreglo base de pestañas vive **en `App.tsx`** (líneas ~191-198), NO en `navigation.ts`; ahí solo están `FISCAL_NAV_TABS` y los tipos `AppMode`/`AppTab`/`NavigationTab`.
-- `AppTab` inicial: `'journal'` (`useState` en App). Redirección: modo básico → pestaña fiscal → `setActiveTab('journal')`.
-- `Sidebar.tsx` y `MobileMenu.tsx` solo renderizan el arreglo que reciben (`navigationTabs` prop) — el cambio de orden es automático al mover Pólizas al primer lugar. Icono sugerido: `BookOpen` / `BookLock` de lucide-react (decisión libre, consistente con el set actual).
+- El arreglo base vive **en `lib/navigation.ts` como `BASIC_NAV_TABS`** (pólizas PRIMERA, luego journal/t-accounts/balance/profit-loss/catalog); `FISCAL_NAV_TABS` igual que antes. `App.tsx` solo compone `[...BASIC_NAV_TABS, ...(fiscal ? FISCAL : [])]`.
+- `DEFAULT_TAB: AppTab = 'polizas'` es el tab inicial (useState en App). Redirección: modo básico → pestaña fiscal → `setActiveTab(DEFAULT_TAB)`.
+- `Sidebar.tsx` y `MobileMenu.tsx` solo renderizan el arreglo que reciben (`navigationTabs` prop) — sin cambios en esta fase. Icono adoptado: `BookOpen` (lucide-react).
 
 ### 4.5 Quirks congelados (no "arreglar" sin decisión)
 
@@ -400,22 +400,23 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 ### Fase 3 — Módulo de Pólizas (UI) + Navegación
 
 **Artefactos:**
-- [ ] `src/components/polizas/PolizaView.tsx` — contenedor: toolbar (Nueva Póliza; "Importar Excel" se agrega en Fase 4 — aquí solo placeholder deshabilitado o ausente), estado de filtro, composición de subcomponentes.
-- [ ] `src/components/polizas/PolizaFilter.tsx` — segmentos Todas / Ingresos / Egresos / Diario + buscador por folio numérico y concepto (case-insensitive).
-- [ ] `src/components/polizas/PolizaList.tsx` + `PolizaCard.tsx` — tarjetas con: folio formateado (`formatPolizaFolio`), tipo con distintivo de color, fecha, concepto, totales debe/haber, y desglose de partidas (código — cuenta — concepto — debe — haber). Acciones: Editar, Eliminar (vía `ConfirmDeleteModal` existente), Imprimir.
-- [ ] `src/components/polizas/PolizaForm.tsx` — modal de captura:
+- [x] `src/components/polizas/PolizaView.tsx` — contenedor: toolbar (Nueva Póliza; "Importar Excel" se agrega en Fase 4 — quedó AUSENTE en esta fase), estado de filtro, composición de subcomponentes.
+- [x] `src/components/polizas/PolizaFilter.tsx` — segmentos Todas / Ingresos / Egresos / Diario + buscador por folio numérico y concepto (case-insensitive).
+- [x] `src/components/polizas/PolizaList.tsx` + `PolizaCard.tsx` — tarjetas con: folio formateado (`formatPolizaFolio`), tipo con distintivo de color, fecha, concepto, totales debe/haber, y desglose de partidas (código — cuenta — concepto — debe — haber). Acciones: Editar, Eliminar (vía `ConfirmDeleteModal` existente), Imprimir.
+- [x] `src/components/polizas/PolizaForm.tsx` — modal de captura:
   - seleccionar `tipo` (DISABLED en edición — D-8), fecha (default hoy), concepto general, `elaboro`, `autorizo`,
-  - tabla dinámica de partidas con `AccountPicker` (reutilizado de `components/journal/AccountPicker.tsx` sin mover), monto, concepto por partida y (modo fiscal) `uuidCFDI`/`rfcTercero`,
+  - tabla dinámica de partidas con `AccountPicker` (reutilizado de `components/journal/AccountPicker.tsx` sin mover), monto, concepto por partida y (modo fiscal) `uuidCFDI`/`rfcTercero` (incluye lectura de XML CFDI con modal de discrepancia, patrón de `EntryForm`),
   - validación visual EN VIVO (bandera de cuadre con `difference`),
   - botón Guardar deshabilitado si: `partidas < 2` || no balanceada (D-9; el hook re-valida igualmente),
-  - alta desde creación: `createPoliza`; edición: `updatePoliza`.
-- [ ] `src/components/polizas/PolizaPrintModal.tsx` — formato físico: encabezado (folio, tipo, fecha, elaboró/autorizó), cuerpo de partidas, línea "SUMAS IGUALES" con `totalDebe === totalHaber`, y tres renglones de firma (Elaboró / Revisó / Autorizó). Botón Imprimir → `window.print()` con estilos `@media print` que aíslan la hoja.
-- [ ] `src/lib/navigation.ts` + `src/App.tsx` según §6.5 (DEFAULT_TAB, pestaña primera, redirección, extraer `BASIC_NAV_TABS`).
-- [ ] Tests:
-  - `src/components/polizas/PolizaForm.test.tsx`: bloquea 0/0 y desbalance; diferencia visible en vivo; mínimo 2 partidas; tipo congelado al editar; campos CFDI solo en modo fiscal (patrón de `EntryForm.test.tsx`).
-  - `src/lib/navigation.test.ts` (nuevo, trivial): `DEFAULT_TAB === 'polizas'`, pestaña primera es `polizas`, fiscales al final.
-- [ ] Retirar `src/components/journal/EntryForm.test.tsx` SOLO si la captura del diario quedó desechada en esta fase — NO: en esta fase el diario sigue vivo (coexistencia). Tests antiguos intactos.
-- [ ] `ARCHITECTURE.md`: §2 árbol (carpeta `polizas/`), §10 (guía "¿dónde cambio X?").
+  - alta desde creación: `createPoliza`; edición: `updatePoliza`. El `PolizaInput` incluye `partidas` con ids (los nuevos via `crypto.randomUUID`; los de edición se preservan).
+- [x] `src/components/polizas/PolizaPrintModal.tsx` — formato físico: encabezado (folio, tipo, fecha, elaboró/autorizó), cuerpo de partidas, línea "SUMAS IGUALES" con `totalDebe === totalHaber`, y tres renglones de firma (Elaboró / Revisó / Autorizó). Botón Imprimir → `window.print()` con estilos `@media print` que aíslan la hoja.
+- [x] `src/lib/navigation.ts` + `src/App.tsx` según §6.5 (DEFAULT_TAB, pestaña primera, redirección, extraer `BASIC_NAV_TABS`).
+- [x] Tests:
+  - `src/components/polizas/PolizaForm.test.tsx`: bloquea 0/0 y desbalance; diferencia visible en vivo; mínimo 2 partidas; tipo congelado al editar; campos CFDI solo en modo fiscal (patrón de `EntryForm.test.tsx`). +9 casos.
+  - `src/lib/navigation.test.ts` (nuevo, trivial): `DEFAULT_TAB === 'polizas'`, pestaña primera es `polizas`, fiscales al final. +4 casos.
+- [x] Retirar `src/components/journal/EntryForm.test.tsx` NO corresponde: el Diario sigue vivo (coexistencia). Tests antiguos intactos.
+- [x] `ARCHITECTURE.md`: §2 árbol (carpeta `polizas/`), §3 flujo (ventana de coexistencia), §9 red de pruebas, §10 (guía "¿dónde cambio X?").
+- Extra de la fase: `ConfirmDeleteData` gana el tipo `'poliza'` (rama en `handleConfirmDelete` de App). Ver §11.
 
 **Estado intermedio aceptado (documentar en PR):** coexistencia. La captura nueva nace en Pólizas; el Diario aún muestra solo diarios legacy. Pólizas creadas NO aparecen en el Diario hasta Fase 4.
 
@@ -546,7 +547,7 @@ Cada fase termina con: gate verde (`npm run lint && npm run test && npm run buil
 |------|--------|-------|-----------------|
 | 1 — Tipos + lógica pura | Completada | 2026-10-19 | 99 tests en verde (85 + 14 nuevos); lint y build limpios. Sin cambios de UI. Sugerencia de commit: `feat: tipos y lógica pura de pólizas contables` |
 | 2 — Hook + migración | Completada | 2026-10-19 | 121 tests en verde (99 + 22 nuevos: migración, hook, hidratación); lint/build limpios. Migración ONE-SHOT activa al primer arranque. Sugerencia de commit: `feat: usePolizas con migración one-shot de diarios legacy` |
-| 3 — Módulo Pólizas + navegación | Pendiente | — | |
+| 3 — Módulo Pólizas + navegación | Completada | 2026-10-19 | 134 tests en verde (121 + 13 nuevos: PolizaForm 9, navigation 4); lint/build limpios; escaneo anti-CJK limpio. Tab inicial = `polizas` (DEFAULT_TAB); coexistencia: reportes aún derivan de diarios. `ConfirmDeleteData` gana tipo `'poliza'`. Sugerencia de commit: `feat: módulo de Pólizas contables con UI de captura e impresión` |
 | 4 — Cutover reportes + Diario read-only | Pendiente | — | |
 | 5 — Compatibilidad + limpieza legacy | Pendiente | — | |
 | 6 — SAT por pólizas | Pendiente | — | |
