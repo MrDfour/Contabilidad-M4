@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Account, INITIAL_ACCOUNTS } from '../types';
 import { saveToStorage } from '../services/storageService';
 import type { ModalInfo } from '../components/modals/GlobalInfoModal';
@@ -81,9 +81,18 @@ export function useCatalog({
     setAccounts([...finalGlobals, ...nextLocalAccounts]);
   };
 
-  // Persistencia con debounce (idéntico al original; puerta hasLoaded → canSave).
+  // Persistencia con debounce (idéntico al original; puerta hasLoaded → canSave)
+  // + guard de transición de cliente (C-4, mismas razones que usePolizas: al
+  // cambiar de cliente este efecto corre con la clave NUEVA y el catálogo aún
+  // del ANTERIOR; si persistiera (aunque sea diferido), contaminaría la clave
+  // destino. Se salta en la transición; la recarga traerá el estado propio).
+  const claveSincronizadaRef = useRef<string | null>(storageKey);
   useEffect(() => {
     if (!canSave || !storageKey) return;
+    if (claveSincronizadaRef.current !== storageKey) {
+      claveSincronizadaRef.current = storageKey;
+      return;
+    }
     const timeoutId = window.setTimeout(() => {
       saveToStorage(storageKey, accounts).catch((error) => {
         console.error('Failed to save accounts:', error);

@@ -22,7 +22,11 @@ const setup = (overrides: Partial<Parameters<typeof useCatalog>[0]> = {}) => {
     empresaId: 'e1' // cliente de prueba: compone la clave (C-2 de PLAN_MULTI_CLIENTE.md)
   }, overrides) as Parameters<typeof useCatalog>[0];
 
-  const rendered = renderHook(() => useCatalog(props));
+  // El callback recibe las props entrantes de rerender(newProps) — sin esto,
+  // rerender usaría el objeto cerrado y la empresa NO cambiaría de verdad.
+  const rendered = renderHook(
+    (incoming?: Parameters<typeof useCatalog>[0]) => useCatalog(incoming ?? props)
+  );
   return { ...rendered, props };
 };
 
@@ -127,6 +131,31 @@ describe('useCatalog (catálogo por cliente — sin híbrido, heredero de D-12)'
     act(() => { vi.advanceTimersByTime(300); });
 
     expect(onSaveError).not.toHaveBeenCalled();
+  });
+
+  it('C-4 regresión: al cambiar de cliente NO escribe el catálogo del cliente anterior en la clave del nuevo', () => {
+    vi.useFakeTimers();
+    const { result, rerender } = setup({ empresaId: 'e1' });
+
+    // E1 con una cuenta local persistida
+    const custom = [local('l1', '8888')];
+    act(() => { result.current.setAccounts(custom); });
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(JSON.parse(localStorage.getItem('contasis_accounts_e1') as string)).toEqual(custom);
+
+    // Cambio de cliente e1 → e2: el efecto corre en el mismo commit con la
+    // clave NUEVA y el catálogo aún de E1 (canSave todavía true en App) → el
+    // guard de transición debe saltar la escritura contaminante.
+    rerender({ canSave: true, onSaveError: vi.fn(), empresaId: 'e2' });
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(localStorage.getItem('contasis_accounts_e2')).toBeNull();
+
+    // La recarga orquestada define el estado del cliente destino → ahí sí persiste
+    act(() => { result.current.setAccounts([]); });
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(JSON.parse(localStorage.getItem('contasis_accounts_e2') as string)).toEqual([]);
+    // E1 conserva su catálogo intacto
+    expect(JSON.parse(localStorage.getItem('contasis_accounts_e1') as string)).toEqual(custom);
   });
 
   it('hydrateEmpresa escribe la clave del cliente destino y toca la RAM solo si es el activo', async () => {

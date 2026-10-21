@@ -97,8 +97,16 @@ export default function App() {
   const { finalInventories, setFinalInventories, finalInventory, handleSetFinalInventory, hydrateFromRemote } = inventoriesState;
 
   // activos fijos permanecen en App (dueño del dominio): clave POR CLIENTE + puerta canSave (C-4)
+  // + guard de transición de cliente (mismo race que usePolizas/useCatalog: al cambiar
+  // de cliente este efecto corre con el activaId NUEVO y los activos aún del ANTERIOR;
+  // si persistiera, contaminaría la clave destino. Se salta; la recarga traerá los propios).
+  const claveAssetsSincRef = useRef<string | null>(activaId);
   useEffect(() => {
     if (!hasLoaded || !activaId) return;
+    if (claveAssetsSincRef.current !== activaId) {
+      claveAssetsSincRef.current = activaId;
+      return;
+    }
     saveToStorage(clavePorEmpresa('contasis_fixed_assets', activaId), fixedAssets).catch(console.error);
   }, [fixedAssets, hasLoaded, activaId]);
   // Escritura de la clave de activos de UN cliente concreto (boot-migración / respaldo; anti-R1: App es dueña).

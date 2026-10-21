@@ -55,6 +55,36 @@ describe('usePolizas (dominio contasis_polizas_e1 — clave por cliente, regla a
     expect(localStorage.getItem('contasis_polizas_e1')).toBeNull(); // …pero no en storage
   });
 
+  it('C-4 regresión: en el cambio de cliente NO escribe el estado del cliente anterior en la clave del nuevo', async () => {
+    const E2 = 'e2';
+    const { result, rerender } = renderHook(
+      ({ empresaId }) => usePolizas({ canSave: true, empresaId }),
+      { initialProps: { empresaId: E1 } }
+    );
+
+    // Cliente E1 con una póliza persistida
+    act(() => { result.current.createPoliza(inputCuadrada()); });
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem('contasis_polizas_e1')!)).toHaveLength(1)
+    );
+
+    // Cambio de cliente: storageKey cambia con el estado en RAM AÚN de E1
+    // (en App, el efecto de persistencia corre antes de que useAppData apague canSave)
+    rerender({ empresaId: E2 });
+
+    // Transición: la clave del cliente E2 NO debe recibir datos de E1
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(localStorage.getItem('contasis_polizas_e2')).toBeNull();
+
+    // La recarga orquestada trae el estado del cliente destino → ahí sí persiste
+    act(() => { result.current.setPolizas([]); });
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem('contasis_polizas_e2')!)).toEqual([])
+    );
+    // Y el cliente E1 conserva SU contenido intacto
+    expect(JSON.parse(localStorage.getItem('contasis_polizas_e1')!)).toHaveLength(1);
+  });
+
   it('createPoliza: asigna folio 1, id generado y recalcula totales (D-7/D-9/Folio D-4)', () => {
     const { result } = renderHook(() => usePolizas({ canSave: true, empresaId: E1 }));
     let creada!: Poliza;

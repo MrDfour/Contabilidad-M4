@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Poliza } from '../types';
 import { saveToStorage } from '../services/storageService';
 import { validatePolizaBalance, nextPolizaFolio, asignarFoliosPendientes as aplicarAsignacionFolios } from '../lib/accounting';
@@ -35,9 +35,25 @@ export function usePolizas({ canSave, empresaId }: { canSave: boolean; empresaId
   /** Clave del cliente activo (null antes del boot: el efecto no escribe). */
   const storageKey = empresaId ? clavePorEmpresa(POLIZAS_KEY, empresaId) : null;
 
-  // Persistencia con puerta canSave (ver JSDoc del hook). Persiste incluso [].
+  /**
+   * Clave con la que el estado EN RAM actual "cuadra". Protege la transición
+   * de cliente (C-4): al cambiar `activaId`, este efecto corre en el mismo
+   * commit ANTES de que useAppData apague `canSave`, con la clave del cliente
+   * NUEVO y el estado en RAM del ANTERIOR → si persistiera, contaminaría la
+   * clave destino con datos ajenos (y la recarga posterior los re-leería:
+   * el switch parecía "no hacer nada" y se perdía el contenido real).
+   * En la transición se salta la escritura; el siguiente cambio de `polizas`
+   * (la recarga traída por el orquestador) ya persiste normal.
+   */
+  const claveSincronizadaRef = useRef<string | null>(storageKey);
+
+  // Persistencia con puerta canSave + guard de transición (ver arriba). Persiste incluso [].
   useEffect(() => {
     if (!canSave || !storageKey) return;
+    if (claveSincronizadaRef.current !== storageKey) {
+      claveSincronizadaRef.current = storageKey;
+      return;
+    }
     saveToStorage(storageKey, polizas).catch(console.error);
   }, [polizas, canSave, storageKey]);
 
