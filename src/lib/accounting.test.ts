@@ -16,7 +16,8 @@ import {
   asignarFoliosPendientes,
   formatPolizaFolio,
   entryToPolizaInput,
-  entriesToPolizasDiarias
+  entriesToPolizasDiarias,
+  consolidarPolizasDiaria
 } from './accounting';
 import type { Account, FixedAsset, JournalEntry, Movement, Poliza, PartidaPoliza } from '../types';
 
@@ -435,5 +436,101 @@ describe('entriesToPolizasDiarias (D-11 importación Excel)', () => {
 
     expect(debeGenerado).toBe(balance.totalDebe);
     expect(haberGenerado).toBe(balance.totalHaber);
+  });
+});
+
+describe('consolidarPolizasDiaria (póliza diaria de impresión)', () => {
+  it('agrega por cuenta y lado: dos cargos a la misma cuenta salen en un renglón con el total del día', () => {
+    const dia = [
+      poliza({
+        id: 'p1', folio: 1, tipo: 'ingreso', fecha: '2024-03-01',
+        concepto: 'Cobro A',
+        partidas: [
+          partida({ id: 'p1-0', accountId: 'caja', accountCode: '1101', accountName: 'Caja', debit: 1222 }),
+          partida({ id: 'p1-1', accountId: 'clie', accountCode: '1105', accountName: 'Clientes', credit: 1222 })
+        ],
+        totalDebe: 1222, totalHaber: 1222
+      }),
+      poliza({
+        id: 'p2', folio: 2, tipo: 'ingreso', fecha: '2024-03-01',
+        concepto: 'Cobro B',
+        partidas: [
+          partida({ id: 'p2-0', accountId: 'caja', accountCode: '1101', accountName: 'Caja', debit: 1000 }),
+          partida({ id: 'p2-1', accountId: 'banc', accountCode: '1102', accountName: 'Bancos', credit: 1000 })
+        ],
+        totalDebe: 1000, totalHaber: 1000
+      })
+    ];
+
+    const consolidado = consolidarPolizasDiaria('2024-03-01', dia);
+    expect(consolidado).not.toBeNull();
+    expect(consolidado!.tipo).toBe('diario');
+    expect(consolidado!.fecha).toBe('2024-03-01');
+    // Caja aparece UNA sola vez con el total del día (1222 + 1000)
+    expect(consolidado!.partidas).toHaveLength(3);
+    expect(consolidado!.partidas[0]).toMatchObject({
+      accountId: 'caja', accountCode: '1101', debit: 2222, credit: 0
+    });
+    // El consolidado del día cuadra (cada póliza cuadra → el día cuadra)
+    expect(consolidado!.totalDebe).toBe(2222);
+    expect(consolidado!.totalHaber).toBe(2222);
+    // El concepto lista las pólizas incluidas
+    expect(consolidado!.concepto).toContain('Póliza diaria del');
+    expect(consolidado!.concepto).toContain('Cobro A');
+    expect(consolidado!.concepto).toContain('Cobro B');
+  });
+
+  it('misma cuenta cargada Y abonada en el día: conserva dos renglones (cargo y abono)', () => {
+    const dia = [
+      poliza({
+        partidas: [
+          partida({ accountId: 'caja', debit: 500 }),
+          partida({ accountId: 'banc', credit: 500 })
+        ],
+        totalDebe: 500, totalHaber: 500
+      }),
+      poliza({
+        partidas: [
+          partida({ accountId: 'banc', debit: 300 }),
+          partida({ accountId: 'caja', credit: 300 })
+        ],
+        totalDebe: 300, totalHaber: 300
+      })
+    ];
+    const consolidado = consolidarPolizasDiaria('2024-03-01', dia)!;
+    const caja = consolidado.partidas.filter(p => p.accountId === 'caja');
+    expect(caja).toHaveLength(2);
+    expect(caja[0].debit).toBe(500);
+    expect(caja[1].credit).toBe(300);
+    expect(consolidado.totalDebe).toBe(800);
+    expect(consolidado.totalHaber).toBe(800);
+  });
+
+  it('une las glosas únicas de las partidas agregadas con " · "', () => {
+    const dia = [
+      poliza({
+        partidas: [
+          partida({ accountId: 'caja', debit: 100, concept: 'Recibo 1' }),
+          partida({ accountId: 'banc', credit: 100 })
+        ],
+        totalDebe: 100, totalHaber: 100
+      }),
+      poliza({
+        partidas: [
+          partida({ accountId: 'caja', debit: 200, concept: 'Recibo 2' }),
+          partida({ accountId: 'banc', credit: 200 })
+        ],
+        totalDebe: 200, totalHaber: 200
+      })
+    ];
+    const consolidado = consolidarPolizasDiaria('2024-03-01', dia)!;
+    expect(consolidado.partidas[0].concept).toBe('Recibo 1 · Recibo 2');
+  });
+
+  it('día sin partidas con monto → null', () => {
+    expect(consolidarPolizasDiaria('2024-03-01', [
+      poliza({ partidas: [partida({ accountId: 'a1', debit: 0, credit: 0 })] })
+    ])).toBeNull();
+    expect(consolidarPolizasDiaria('2024-03-01', [])).toBeNull();
   });
 });

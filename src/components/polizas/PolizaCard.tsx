@@ -56,10 +56,13 @@ export function PolizaCard({
             <time className="text-xs text-slate-400">{fecha}</time>
           </div>
           <p className="text-sm text-slate-200">{poliza.concepto}</p>
-          {(poliza.elaboro || poliza.autorizo) && (
+          {(poliza.elaboro || poliza.reviso || poliza.autorizo) && (
             <div className="flex gap-4 pt-1 text-[10px] text-slate-500">
               {poliza.elaboro && (
                 <span className="inline-flex items-center gap-1"><UserPen className="w-3 h-3" /> Elaboró: {poliza.elaboro}</span>
+              )}
+              {poliza.reviso && (
+                <span>Revisó: {poliza.reviso}</span>
               )}
               {poliza.autorizo && (
                 <span className="inline-flex items-center gap-1"><UserCheck className="w-3 h-3" /> Autorizó: {poliza.autorizo}</span>

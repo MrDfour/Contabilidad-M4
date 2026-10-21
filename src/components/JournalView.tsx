@@ -3,17 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Info,
   FileText,
   Download,
-  BookOpen
+  BookOpen,
+  Printer
 } from 'lucide-react';
 import { exportToExcel, exportTableToPDF, cn } from '../lib/utils';
 import { formatCurrency, normalizeAmount } from '../lib/format';
 import { formatPolizaFolio } from '../lib/accounting';
 import type { Poliza, TipoPoliza } from '../types';
+import { DiarioPrintModal } from './polizas/DiarioPrintModal';
 
 /**
  * Vista del Libro Diario (Fase 4 de PLAN_POLIZAS.md): REPORT de solo lectura.
@@ -78,6 +80,16 @@ export function JournalView({
   onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void
 }) {
   const [isExporting, setIsExporting] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
+
+  // Orden cronológico garantizado para la impresión (fecha → folio → captura).
+  const polizasOrdenadas = useMemo(
+    () => [...polizas].sort((a, b) =>
+      a.fecha.localeCompare(b.fecha) ||
+      a.folio - b.folio ||
+      (a.capturadoEn ?? '').localeCompare(b.capturadoEn ?? '')),
+    [polizas]
+  );
 
   const filas = construirFilas(polizas);
   const totalDebe = normalizeAmount(filas.reduce((s, f) => s + f.debe, 0));
@@ -165,6 +177,14 @@ export function JournalView({
           >
             <FileText className="w-4 h-4" /> PDF
           </button>
+          <button
+            onClick={() => setPrintOpen(true)}
+            disabled={polizas.length === 0}
+            title="Imprimir las pólizas del período en formato papel"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-indigo-600/10 border border-indigo-500/20 rounded-lg hover:bg-indigo-600/20 transition-colors text-xs md:text-sm text-indigo-300 disabled:opacity-50"
+          >
+            <Printer className="w-4 h-4" /> Imprimir Pólizas
+          </button>
         </div>
       </div>
 
@@ -232,6 +252,11 @@ export function JournalView({
             </table>
           </div>
         </div>
+      )}
+
+      {/* Impresión por día/período en formato papel */}
+      {printOpen && (
+        <DiarioPrintModal polizas={polizasOrdenadas} onClose={() => setPrintOpen(false)} />
       )}
     </div>
   );

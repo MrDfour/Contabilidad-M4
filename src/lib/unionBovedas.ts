@@ -122,6 +122,7 @@ const contenidoEstable = (p: Poliza): string =>
     p.totalHaber,
     p.uuidSat ?? null,
     p.elaboro ?? null,
+    p.reviso ?? null,
     p.autorizo ?? null,
   ]);
 

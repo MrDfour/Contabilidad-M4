@@ -16,7 +16,7 @@ import { readExcel, exportToExcel } from '../../lib/utils';
 import { parseJournalImport } from '../../lib/importEntriesFromExcel';
 import { PolizaFilter, type FiltroTipo } from './PolizaFilter';
 import { PolizaList } from './PolizaList';
-import { PolizaForm } from './PolizaForm';
+import { PolizaForm, type ModoCaptura } from './PolizaForm';
 import { PolizaPrintModal } from './PolizaPrintModal';
 import { AsignarFoliosPendientesModal } from './AsignarFoliosPendientesModal';
 
@@ -31,6 +31,17 @@ const esFolioBuscado = (termino: string, poliza: Poliza) => {
   const limpio = termino.trim();
   if (/^\d+$/.test(limpio)) return String(poliza.folio) === limpio;
   return formatPolizaFolio(poliza).toLowerCase().includes(limpio.toLowerCase());
+};
+
+/** Preferencia de estilo de captura (global, no por empresa: es gusto del usuario). */
+const CLAVE_MODO_CAPTURA = 'contasis_modo_captura';
+
+const leerModoCaptura = (): ModoCaptura => {
+  try {
+    return localStorage.getItem(CLAVE_MODO_CAPTURA) === 'papel' ? 'papel' : 'clasica';
+  } catch {
+    return 'clasica';
+  }
 };
 
 export function PolizaView({
@@ -64,6 +75,17 @@ export function PolizaView({
   const [editingPoliza, setEditingPoliza] = useState<Poliza | null>(null);
   const [printPoliza, setPrintPoliza] = useState<Poliza | null>(null);
   const [modalFoliosOpen, setModalFoliosOpen] = useState(false);
+  const [modoCaptura, setModoCaptura] = useState<ModoCaptura>(leerModoCaptura);
+
+  /** Cambia y persiste el estilo de captura (Clásica | Papel). */
+  const cambiarModoCaptura = (m: ModoCaptura) => {
+    setModoCaptura(m);
+    try {
+      localStorage.setItem(CLAVE_MODO_CAPTURA, m);
+    } catch {
+      // Sin persistencia disponible: el modo vive solo en esta sesión.
+    }
+  };
 
   /** Centinela folio 0 = pendiente del merge (F-2); la acción SOLO existe si hay. */
   const pendientesFolio = polizas.filter(p => esFolioPendiente(p));
@@ -253,6 +275,8 @@ export function PolizaView({
         <PolizaForm
           accounts={accounts}
           appMode={appMode}
+          modo={modoCaptura}
+          onModoChange={cambiarModoCaptura}
           initialData={editingPoliza ?? undefined}
           onSave={handleSavePoliza}
           onCancel={closeForm}

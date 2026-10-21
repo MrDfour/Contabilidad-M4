@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type ChangeEvent, type FormEvent, useMemo, useState } from 'react';
+import { type ChangeEvent, Fragment, type FormEvent, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, FileScan, Plus, Trash2, X } from 'lucide-react';
 import type { Account, Poliza, PartidaPoliza, TipoPoliza } from '../../types';
@@ -28,6 +28,11 @@ import { SearchableAccountSelect } from '../account/AccountPicker';
  * UUID/RFC/Total desde un XML CFDI por partida (con resolución de discrepancias,
  * patrón de EntryForm).
  *
+ * Dos estilos de captura (`modo`, ver ModoCaptura): 'clasica' (columna única con
+ * selector Debe/Haber) y 'papel' (grid tipo póliza física mexicana con columnas
+ * DEBE/HABER y franja SUMAS IGUALES). Ambos comparten el mismo estado y reglas;
+ * solo cambia la presentación. La preferencia la persiste PolizaView.
+ *
  * El folio y los totales los asigna el hook (usePolizas): aquí solo se compone
  * el `PolizaInput`.
  */
@@ -51,15 +56,29 @@ const nuevaFila = (accountId: string, side: 'debit' | 'credit'): DraftPartida =>
   concept: ''
 });
 
+/**
+ * Modo de captura de partidas:
+ * - 'clasica': columna única de monto + selector Debe/Haber (la actual).
+ * - 'papel': grid tipo póliza física mexicana (importes escritos directo en
+ *   las columnas DEBE/HABER, footer de SUMAS IGUALES y franja de firmas).
+ */
+export type ModoCaptura = 'clasica' | 'papel';
+
 export function PolizaForm({
   accounts,
   appMode,
+  modo = 'clasica',
+  onModoChange,
   initialData,
   onSave,
   onCancel
 }: {
   accounts: Account[],
   appMode: AppMode,
+  /** Estilo de captura; la preferencia vive en PolizaView (localStorage). */
+  modo?: ModoCaptura,
+  /** Presente solo si el dueño puede persistir el modo → muestra el selector. */
+  onModoChange?: (m: ModoCaptura) => void,
   /** Presente SOLO en edición: bloquea el tipo (D-8) y precarga todos los campos. */
   initialData?: Poliza,
   onSave: (data: PolizaInput) => void,
@@ -69,6 +88,7 @@ export function PolizaForm({
   const [fecha, setFecha] = useState(initialData?.fecha ?? new Date().toISOString().split('T')[0]);
   const [concepto, setConcepto] = useState(initialData?.concepto ?? '');
   const [elaboro, setElaboro] = useState(initialData?.elaboro ?? '');
+  const [reviso, setReviso] = useState(initialData?.reviso ?? '');
   const [autorizo, setAutorizo] = useState(initialData?.autorizo ?? '');
   const [rows, setRows] = useState<DraftPartida[]>(
     initialData
@@ -200,6 +220,21 @@ export function PolizaForm({
     setAmountInputs([...amountInputs, '']);
   };
 
+  // --- Modo PAPEL: importes escritos directo en la columna DEBE o HABER ---
+  // El valor visible de cada columna sale del lado activo de la fila; teclear
+  // en una columna mueve el importe a ese lado (equivalente al papel, donde el
+  // importe "pertenece" a la columna en la que se escribe).
+  const valorPapel = (idx: number, col: 'debit' | 'credit') =>
+    rows[idx].side === col ? (amountInputs[idx] ?? '') : '';
+
+  const cambiarImportePapel = (idx: number, col: 'debit' | 'credit', raw: string) => {
+    const formatted = formatAmountInput(raw);
+    const numeric = parseFormattedAmount(formatted);
+    setAmountInputs(amountInputs.map((val, i) => i === idx ? formatted : val));
+    setRows(rows.map((r, i) => i !== idx ? r : { ...r, side: col, amount: numeric }));
+  };
+
+
   const removeRow = (idx: number) => {
     setRows(rows.filter((_, i) => i !== idx));
     setAmountInputs(amountInputs.filter((_, i) => i !== idx));
@@ -215,6 +250,7 @@ export function PolizaForm({
       concepto: concepto.trim(),
       partidas: partidasFinales,
       elaboro: elaboro.trim() || undefined,
+      reviso: reviso.trim() || undefined,
       autorizo: autorizo.trim() || undefined
     });
   };
@@ -231,10 +267,43 @@ export function PolizaForm({
           <h3 className="font-semibold text-white">
             {initialData ? 'Editar Póliza' : 'Nueva Póliza Contable'}
           </h3>
-          <button type="button" onClick={onCancel} aria-label="Cerrar formulario"
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            {onModoChange && (
+              <div className="hidden md:flex items-center gap-1 p-1 rounded-lg bg-white/5 border border-white/10">
+                <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Captura</span>
+                <button
+                  type="button"
+                  aria-pressed={modo === 'clasica'}
+                  onClick={() => onModoChange('clasica')}
+                  className={
+                    'px-3 py-1 rounded-md text-xs font-bold transition-colors ' +
+                    (modo === 'clasica'
+                      ? 'bg-indigo-600 text-white shadow shadow-indigo-500/30'
+                      : 'text-slate-400 hover:text-white')
+                  }
+                >
+                  Clásica
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={modo === 'papel'}
+                  onClick={() => onModoChange('papel')}
+                  className={
+                    'px-3 py-1 rounded-md text-xs font-bold transition-colors ' +
+                    (modo === 'papel'
+                      ? 'bg-indigo-600 text-white shadow shadow-indigo-500/30'
+                      : 'text-slate-400 hover:text-white')
+                  }
+                >
+                  Papel
+                </button>
+              </div>
+            )}
+            <button type="button" onClick={onCancel} aria-label="Cerrar formulario"
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
@@ -287,6 +356,16 @@ export function PolizaForm({
               />
             </div>
             <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Revisó</label>
+              <input
+                type="text"
+                aria-label="Revisó"
+                value={reviso}
+                onChange={e => setReviso(e.target.value)}
+                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-white"
+              />
+            </div>
+            <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Autorizó</label>
               <input
                 type="text"
@@ -324,7 +403,7 @@ export function PolizaForm({
               </button>
             </div>
 
-            {rows.map((r, idx) => (
+            {modo === 'clasica' && rows.map((r, idx) => (
               <div key={r.uid} className="grid grid-cols-12 gap-4 items-end animate-in fade-in slide-in-from-left-2 transition-all">
                 <div className="col-span-12 md:col-span-3 space-y-1">
                   <label className="text-[9px] uppercase font-bold text-slate-500">Cuenta contable</label>
@@ -430,28 +509,167 @@ export function PolizaForm({
                 )}
               </div>
             ))}
+
+            {/* Modo PAPEL: póliza física mexicana — importes directos en DEBE/HABER */}
+            {modo === 'papel' && (
+              <div className="border border-white/10 rounded-xl overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-white/5 text-[10px] uppercase tracking-wider text-slate-400 border-b border-white/10">
+                      <th className="text-left px-4 py-2 w-64 font-bold">Cta / Scta</th>
+                      <th className="text-right px-4 py-2 w-36 font-bold text-emerald-400">Debe</th>
+                      <th className="text-right px-4 py-2 w-36 font-bold text-rose-400">Haber</th>
+                      <th className="text-left px-3 py-2 font-bold">Concepto</th>
+                      <th className="w-12" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, idx) => (
+                      <Fragment key={r.uid}>
+                        <tr className="border-b border-white/5">
+                          <td className="px-3 py-2">
+                            <SearchableAccountSelect
+                              accounts={accounts}
+                              value={r.accountId}
+                              onChange={(newId) => updateRow(idx, { accountId: newId })}
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              aria-label={`Debe de partida ${idx + 1}`}
+                              value={valorPapel(idx, 'debit')}
+                              onChange={e => cambiarImportePapel(idx, 'debit', e.target.value)}
+                              onWheel={(e) => e.currentTarget.blur()}
+                              onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
+                              placeholder="0.00"
+                              className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-right outline-none font-mono text-emerald-300 placeholder-slate-700"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              aria-label={`Haber de partida ${idx + 1}`}
+                              value={valorPapel(idx, 'credit')}
+                              onChange={e => cambiarImportePapel(idx, 'credit', e.target.value)}
+                              onWheel={(e) => e.currentTarget.blur()}
+                              onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
+                              placeholder="0.00"
+                              className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-right outline-none font-mono text-rose-300 placeholder-slate-700"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              placeholder="Opcional"
+                              value={r.concept}
+                              onChange={e => updateRow(idx, { concept: e.target.value })}
+                              className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg outline-none text-white placeholder-slate-600"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => removeRow(idx)}
+                              disabled={partidasFinales.length < 2}
+                              aria-label={`Eliminar partida ${idx + 1}`}
+                              className="p-2 text-slate-500 hover:text-rose-400 disabled:opacity-30"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                        {appMode === 'fiscal' && (
+                          <tr className="border-b border-white/5 bg-white/[0.02]">
+                            <td colSpan={5} className="px-3 py-2">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <div className="flex items-center gap-2">
+                                  <label className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:bg-indigo-500/20 cursor-pointer transition-colors text-[10px] font-semibold uppercase tracking-wide">
+                                    <FileScan className="w-3.5 h-3.5" />
+                                    Leer XML
+                                    <input
+                                      type="file"
+                                      accept=".xml,text/xml,application/xml"
+                                      onChange={(e) => handleCFDIUpload(idx, e)}
+                                      className="hidden"
+                                    />
+                                  </label>
+                                  <input
+                                    type="text"
+                                    maxLength={36}
+                                    placeholder="UUID CFDI: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+                                    value={r.uuidCFDI || ''}
+                                    onChange={e => updateRow(idx, { uuidCFDI: e.target.value })}
+                                    onBlur={e => updateRow(idx, { uuidCFDI: e.target.value.trim() })}
+                                    className="flex-1 min-w-0 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg outline-none text-white placeholder-slate-600 text-xs"
+                                  />
+                                </div>
+                                <input
+                                  type="text"
+                                  maxLength={13}
+                                  placeholder="RFC Tercero (XAXX010101000)"
+                                  value={r.rfcTercero || ''}
+                                  onChange={e => updateRow(idx, { rfcTercero: e.target.value })}
+                                  onBlur={e => updateRow(idx, { rfcTercero: e.target.value.toUpperCase().trim() })}
+                                  className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg outline-none text-white placeholder-slate-600 text-xs"
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Totales en vivo + guardado */}
           <div className="flex flex-col md:flex-row items-center justify-between pt-6 border-t border-white/10 gap-6">
-            <div className="flex gap-8 text-sm">
-              <div className="flex flex-col">
-                <span className="text-[10px] text-slate-400 uppercase font-bold">Total Debe</span>
-                <span className="font-mono text-lg text-emerald-400">{formatCurrency(balance.totalDebe)}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[10px] text-slate-400 uppercase font-bold">Total Haber</span>
-                <span className="font-mono text-lg text-rose-400">{formatCurrency(balance.totalHaber)}</span>
-              </div>
-              {isDeshabilitado && (
-                <div className="flex items-center gap-2 text-rose-400 italic animate-pulse text-sm">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>
-                  {motivoDeshabilitado}
-                </span>
+            {modo === 'papel' ? (
+              <div className="flex items-center gap-6 text-sm">
+                <span className="px-3 py-1.5 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-[10px] font-bold uppercase tracking-widest text-indigo-300">Sumas iguales</span>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold">Debe</span>
+                  <span className="font-mono text-lg text-emerald-400">{formatCurrency(balance.totalDebe)}</span>
                 </div>
-              )}
-            </div>
+                <span className={'font-mono text-xl ' + (balance.isBalanced ? 'text-emerald-400' : 'text-rose-400')}>
+                  {balance.isBalanced ? '=' : '≠'}
+                </span>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold">Haber</span>
+                  <span className="font-mono text-lg text-rose-400">{formatCurrency(balance.totalHaber)}</span>
+                </div>
+                {isDeshabilitado && (
+                  <div className="flex items-center gap-2 text-rose-400 italic animate-pulse text-sm">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{motivoDeshabilitado}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex gap-8 text-sm">
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold">Total Debe</span>
+                  <span className="font-mono text-lg text-emerald-400">{formatCurrency(balance.totalDebe)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold">Total Haber</span>
+                  <span className="font-mono text-lg text-rose-400">{formatCurrency(balance.totalHaber)}</span>
+                </div>
+                {isDeshabilitado && (
+                  <div className="flex items-center gap-2 text-rose-400 italic animate-pulse text-sm">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>
+                    {motivoDeshabilitado}
+                  </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center gap-3 w-full md:w-auto">
               <button

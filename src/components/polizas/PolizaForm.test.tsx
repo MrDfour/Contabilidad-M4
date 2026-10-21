@@ -158,6 +158,28 @@ describe('PolizaForm (partida doble en vivo — Fase 3 PLAN_POLIZAS.md)', () => 
     expect(input.autorizo).toBe('Beto');
   });
 
+  it('reviso (opcional) viaja al PolizaInput y queda ausente si va vacío', () => {
+    const onSave = vi.fn();
+    const { unmount } = render(<PolizaForm accounts={accounts} appMode="basic" onSave={onSave} onCancel={vi.fn()} />);
+    fireEvent.change(conceptoGeneral(), { target: { value: 'Asiento inicial' } });
+    fireEvent.change(screen.getByLabelText('Revisó'), { target: { value: 'Carla' } });
+    fireEvent.change(amount(1), { target: { value: '100' } });
+    fireEvent.change(amount(2), { target: { value: '100' } });
+    fireEvent.click(submitButton());
+
+    expect((onSave.mock.calls[0][0] as PolizaInput).reviso).toBe('Carla');
+    unmount();
+
+    // Vacío → undefined (no string vacío)
+    const onSave2 = vi.fn();
+    render(<PolizaForm accounts={accounts} appMode="basic" onSave={onSave2} onCancel={vi.fn()} />);
+    fireEvent.change(conceptoGeneral(), { target: { value: 'Asiento inicial' } });
+    fireEvent.change(amount(1), { target: { value: '100' } });
+    fireEvent.change(amount(2), { target: { value: '100' } });
+    fireEvent.click(submitButton());
+    expect((onSave2.mock.calls[0][0] as PolizaInput).reviso).toBeUndefined();
+  });
+
   it('cambiar la columna de una partida mueve el monto al lado opuesto en vivo', () => {
     const onSave = vi.fn();
     render(<PolizaForm accounts={accounts} appMode="basic" onSave={onSave} onCancel={vi.fn()} />);
@@ -193,5 +215,110 @@ describe('PolizaForm (partida doble en vivo — Fase 3 PLAN_POLIZAS.md)', () => 
     );
     fireEvent.click(screen.getByText('Cancelar'));
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PolizaForm modo papel (captura tipo póliza física)', () => {
+  const debe = (idx: number) =>
+    screen.getByLabelText(`Debe de partida ${idx}`) as HTMLInputElement;
+  const haber = (idx: number) =>
+    screen.getByLabelText(`Haber de partida ${idx}`) as HTMLInputElement;
+
+  it('renderiza columnas DEBE/HABER por partida y oculta el selector de columna', () => {
+    render(
+      <PolizaForm
+        accounts={accounts}
+        appMode="basic"
+        modo="papel"
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+    expect(screen.getByLabelText('Debe de partida 1')).toBeTruthy();
+    expect(screen.getByLabelText('Haber de partida 2')).toBeTruthy();
+    // El modo clásico (selector Columna) NO existe en papel
+    expect(screen.queryByLabelText('Columna de partida 1')).toBeNull();
+    // Y el importe inicial vive en la columna del lado de la fila
+    expect(debe(1).value).toBe('');
+    expect(haber(1).value).toBe('');
+    expect(screen.getByText(/Sumas iguales/i)).toBeTruthy();
+  });
+
+  it('teclear en DEBE/HABER fija el lado de la partida y compone el mismo PolizaInput', () => {
+    const onSave = vi.fn();
+    render(
+      <PolizaForm
+        accounts={accounts}
+        appMode="basic"
+        modo="papel"
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />
+    );
+    fireEvent.change(conceptoGeneral(), { target: { value: 'Venta de contado' } });
+    fireEvent.change(debe(1), { target: { value: '2,500.50' } });
+    fireEvent.change(haber(2), { target: { value: '2500.60' } });
+    fireEvent.change(haber(2), { target: { value: '2,500.50' } });
+
+    fireEvent.click(submitButton());
+
+    const input = onSave.mock.calls[0][0] as PolizaInput;
+    expect(input.partidas[0]).toMatchObject({
+      accountId: 'a1', accountCode: '1101', accountName: 'Caja',
+      debit: 2500.5, credit: 0
+    });
+    expect(input.partidas[1]).toMatchObject({
+      accountId: 'a2', accountCode: '3101', accountName: 'Capital Social',
+      debit: 0, credit: 2500.5
+    });
+  });
+
+  it('cambiar de columna borra el importe previo y la validación sigue bloqueando el desbalance', () => {
+    const onSave = vi.fn();
+    render(
+      <PolizaForm
+        accounts={accounts}
+        appMode="basic"
+        modo="papel"
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />
+    );
+    fireEvent.change(conceptoGeneral(), { target: { value: 'Traspaso' } });
+    fireEvent.change(debe(1), { target: { value: '300' } });
+    fireEvent.change(haber(2), { target: { value: '300' } });
+    // muevo fila 2 al DEBE → desbalance
+    fireEvent.change(debe(2), { target: { value: '300' } });
+    expect(haber(2).value).toBe(''); // el importe se movió de columna
+    expect(screen.getByText(/Diferencia:/)).toBeTruthy();
+    expect(submitButton()).toBeDisabled();
+
+    // regreso fila 2 al HABER → cuadra
+    fireEvent.change(haber(2), { target: { value: '300' } });
+    expect(submitButton()).not.toBeDisabled();
+    fireEvent.click(submitButton());
+    const input = onSave.mock.calls[0][0] as PolizaInput;
+    expect(input.partidas[1]).toMatchObject({ debit: 0, credit: 300 });
+  });
+
+  it('el toggle de modo aparece solo si el dueño puede persistirlo (onModoChange)', () => {
+    const { unmount } = render(
+      <PolizaForm accounts={accounts} appMode="basic" onSave={vi.fn()} onCancel={vi.fn()} />
+    );
+    expect(screen.queryByRole('button', { name: 'Papel' })).toBeNull();
+    unmount();
+
+    render(
+      <PolizaForm
+        accounts={accounts}
+        appMode="basic"
+        modo="clasica"
+        onModoChange={vi.fn()}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('button', { name: 'Papel' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Clásica' })).toBeTruthy();
   });
 });

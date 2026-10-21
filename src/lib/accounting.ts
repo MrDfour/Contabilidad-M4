@@ -225,3 +225,64 @@ export const entriesToPolizasDiarias = (entries: JournalEntry[], accounts: Accou
     };
   });
 };
+
+/**
+ * PÓLIZA DIARIA (formato clásico mexicano): consolida TODAS las pólizas de un
+ * mismo día en una sola póliza tipo 'diario', agregando los importes por
+ * cuenta Y lado (una cuenta cargada en varias pólizas del día sale con su
+ * total del día en un solo renglón; si la misma cuenta fue cargada Y abonada
+ * conserva dos renglones, cargo y abono). Los conceptos de partida agregados
+ * se unen con " · ". El concepto general lista los conceptos de las pólizas
+ * incluidas. Devuelve null si el día no tiene partidas con monto.
+ * Solo para impresión/reportes: nunca se persiste (no entra al flujo usePolizas).
+ */
+export const consolidarPolizasDiaria = (fecha: string, polizasDelDia: Poliza[]): Poliza | null => {
+  const agregadas = new Map<string, PartidaPoliza>();
+
+  for (const p of polizasDelDia) {
+    for (const part of p.partidas) {
+      if (part.debit <= 0 && part.credit <= 0) continue;
+      const lado: 'debit' | 'credit' = part.debit > 0 ? 'debit' : 'credit';
+      const clave = `${part.accountId}|${lado}`;
+      const previa = agregadas.get(clave);
+
+      if (previa) {
+        if (lado === 'debit') previa.debit = normalizeAmount(previa.debit + part.debit);
+        else previa.credit = normalizeAmount(previa.credit + part.credit);
+        // Merge de glosas únicas (agregación de renglones con el mismo destino).
+        const glosas = new Set((previa.concept ?? '').split(' · ').filter(Boolean));
+        if (part.concept?.trim()) glosas.add(part.concept.trim());
+        previa.concept = glosas.size > 0 ? [...glosas].join(' · ') : undefined;
+      } else {
+        agregadas.set(clave, {
+          id: `diaria-${fecha}-${part.accountId}-${lado}`,
+          accountId: part.accountId,
+          accountCode: part.accountCode,
+          accountName: part.accountName,
+          debit: lado === 'debit' ? normalizeAmount(part.debit) : 0,
+          credit: lado === 'credit' ? normalizeAmount(part.credit) : 0,
+          concept: part.concept?.trim() || undefined
+        });
+      }
+    }
+  }
+
+  const partidas = [...agregadas.values()];
+  if (partidas.length === 0) return null;
+
+  const conceptos = polizasDelDia.map(p => p.concepto.trim()).filter(Boolean);
+  const fechaLarga = new Date(`${fecha}T00:00:00`).toLocaleDateString('es-MX', {
+    day: 'numeric', month: 'long', year: 'numeric'
+  });
+
+  return {
+    id: `diaria-${fecha}`,
+    folio: 0, // sin folio: es un consolidado de impresión (la franja usa folioOverride)
+    tipo: 'diario',
+    fecha,
+    concepto: `Póliza diaria del ${fechaLarga}. Incluye: ${conceptos.join(' · ')}`,
+    partidas,
+    totalDebe: normalizeAmount(partidas.reduce((s, p) => s + p.debit, 0)),
+    totalHaber: normalizeAmount(partidas.reduce((s, p) => s + p.credit, 0))
+  };
+};
