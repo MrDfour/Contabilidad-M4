@@ -73,6 +73,15 @@ describe('buildPolizasXML (constructor puro del XML SAT de Pólizas — Anexo 24
     expect(x.polizas.map(p => p.getAttribute('NumUnIdenPol'))).toEqual(['7', '13']);
   });
 
+  it('folio PENDIENTE (centinela 0 del merge, F-2 de PLAN_FUSION_BOVEDA.md) BLOQUEA el XML', () => {
+    // El esquema SAT exige NumUnIdenPol positivo y único: no se exporta con 0
+    // y no se omiten en silencio — exige la acción manual F-6 primero.
+    expect(() => buildPolizasXML('GACJ890101ABA', '2025', '03', [
+      poliza({ id: 'p1', folio: 1, tipo: 'ingreso', fecha: '2025-03-05' }, [PARTIDA_CAJA]),
+      poliza({ id: 'p2', folio: 0, tipo: 'egreso', fecha: '2025-03-06' }, [PARTIDA_CAJA])
+    ], ACCOUNTS)).toThrow(/1 póliza\(s\) con folio pendiente/);
+  });
+
   it('Concepto de transacción: usa partida.concept cuando existe, con fallback al concepto general', () => {
     const x = parseXML(buildPolizasXML('GACJ890101ABA', '2025', '03', [
       poliza({ id: 'p1', folio: 1, tipo: 'ingreso', fecha: '2025-03-05' }, [PARTIDA_CAJA, PARTIDA_VENTAS])

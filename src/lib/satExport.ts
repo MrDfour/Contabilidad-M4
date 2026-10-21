@@ -168,6 +168,18 @@ export const buildPolizasXML = (
     throw new Error('No hay pólizas registradas en el periodo seleccionado para generar el XML.');
   }
 
+  // F-2/F-6 (PLAN_FUSION_BOVEDA.md): una póliza puede quedar con folio
+  // pendiente (centinela 0) hasta que se ejecute "Asignar folios pendientes".
+  // El esquema del SAT exige NumUnIdenPol positivo y único: NO se exporta
+  // con 0 ni se omiten en silencio — se pide asignar folios primero.
+  const sinFolio = polizasPeriodo.filter(p => p.folio <= 0);
+  if (sinFolio.length > 0) {
+    throw new Error(
+      `El periodo incluye ${sinFolio.length} póliza(s) con folio pendiente. Ejecuta primero "Asignar pendientes"` +
+      ' en la vista Pólizas y vuelve a generar el XML.'
+    );
+  }
+
   const TIPO_POLIZA_SAT: Record<TipoPoliza, string> = { diario: '3', ingreso: '1', egreso: '2' };
 
   const polizasXML = polizasPeriodo.map(poliza => {

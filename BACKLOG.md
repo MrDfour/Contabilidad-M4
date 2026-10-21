@@ -30,7 +30,17 @@
 - **Contexto:** heredado de PLAN_SYNC_KV §7: hoy "desalistar" quita las credenciales del dispositivo, pero el documento remoto y su historial siguen viviendo en KV (por diseño: alguien más puede estar sincronizado). Falta el flujo "esta bóveda se disuelve": si el dispositivo fuente (creador) queda solo, borrar `vlt:<id>:actual` + historial vía un endpoint dedicado.
 - **Propuesta:** endpoint `DELETE /api/vault/<id>` controlado por el token de control de BL-1 (por eso conviene resolver BL-1 primero o conjuntamente) + opción de UI en SyncModal ("Disolver bóveda remota") con doble confirmación.
 
-## BL-6 · Fusión de bóveda por hora de captura (tercer botón del conflicto)
+## EJECUTADO/ · BL-6 · Fusión de bóveda por hora de captura (tercer botón del conflicto)
+
+> **EJECUTADO el 2026-10-20 en v0.9.9** vía `PLAN_FUSION_BOVEDA.md` (fases A–D):
+> lib pura `src/lib/unionBovedas.ts` (`analizarFusion`/`aplicarFusion`),
+> motor (`contenidoConflicto` + `aplicarSnapshotFusionado` con publicación
+> `max+1` forzada y huella anti-eco saltable), tercer botón "Fusionar ambos" en
+> `ConflictoBovedaModal` con pantalla de revisión `FusionBovedaModal`
+> (folios en disputa por elemento, duplicados con checkbox, bloqueo sin
+> decisiones) y acción manual "Asignar pendientes" en la vista de Pólizas
+> (folio 0 → siguiente disponible por captura). PENDIENTE de sesión: la
+> prueba de escena manual multi-dispositivo (PC + móvil).
 
 - **Contexto:** v0.9.8 ya estampa `capturadoEn`/`editadoEn` en cada póliza (silencio total de UI/SAT), la UI hace "conservar una" con aviso de historial y existe restauración desde historial. Falta el tercer camino: **"Fusionar ambos"** en `ConflictoBovedaModal`.
 - **REGLAS DECIDIDAS (sesión 2026-10-20):**

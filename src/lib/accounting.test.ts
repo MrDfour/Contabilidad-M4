@@ -12,6 +12,8 @@ import {
   validatePolizaBalance,
   flattenPolizasToJournalEntries,
   nextPolizaFolio,
+  esFolioPendiente,
+  asignarFoliosPendientes,
   formatPolizaFolio,
   entryToPolizaInput,
   entriesToPolizasDiarias
@@ -277,6 +279,61 @@ describe('formatPolizaFolio', () => {
 
   it('folio de 5 dígitos no se trunca', () => {
     expect(formatPolizaFolio(poliza({ tipo: 'diario', folio: 10000 }))).toBe('DIA-10000');
+  });
+
+  it('folio pendiente (centinela 0 del merge) se muestra PENDIENTE', () => {
+    expect(esFolioPendiente(poliza({ folio: 0 }))).toBe(true);
+    expect(esFolioPendiente(poliza({ folio: 1 }))).toBe(false);
+    expect(formatPolizaFolio(poliza({ tipo: 'egreso', folio: 0 }))).toBe('PENDIENTE');
+  });
+});
+
+describe('asignarFoliosPendientes (F-6 de PLAN_FUSION_BOVEDA.md)', () => {
+  it('sin pendientes: la lista sale IDÉNTICA y no hay afectadas', () => {
+    const lista = [
+      poliza({ id: '1', tipo: 'ingreso', folio: 1 }),
+      poliza({ id: '2', tipo: 'egreso', folio: 1 })
+    ];
+    const resultado = asignarFoliosPendientes(lista);
+    expect(resultado.polizas).toEqual(lista);
+    expect(resultado.afectadas).toHaveLength(0);
+  });
+
+  it('asigna el siguiente disponible de su tipo en orden capturadoEn ASCENDENTE', () => {
+    const lista: Poliza[] = [
+      // egresos: la serie local llega a 4; entrante LATE capturado después.
+      poliza({ id: 'lo-egr', tipo: 'egreso', folio: 4 }),
+      poliza({ id: 'pen-2', tipo: 'egreso', folio: 0, concepto: 'Tarde', capturadoEn: '2026-10-16T18:00:00.000Z' }),
+      poliza({ id: 'pen-1', tipo: 'egreso', folio: 0, concepto: 'Temprano', capturadoEn: '2026-10-15T09:00:00.000Z' }),
+      // ingreso: la serie llega a 2.
+      poliza({ id: 'pen-3', tipo: 'ingreso', folio: 0, concepto: 'Venta móvil', capturadoEn: '2026-10-17T12:00:00.000Z' }),
+      poliza({ id: 'lo-ing', tipo: 'ingreso', folio: 2 })
+    ];
+    const resultado = asignarFoliosPendientes(lista);
+
+    expect(resultado.afectadas.map(a => a.id)).toEqual(['pen-1', 'pen-2', 'pen-3']); // orden de captura
+    expect(resultado.afectadas.map(a => a.folio)).toEqual([5, 6, 3]); // egreso: 5 y 6; ingreso: 3
+    expect(resultado.afectadas[0].concepto).toBe('Temprano');
+    // las NO afectadas quedan intactas y todos los demás folios se conservan.
+    expect(resultado.polizas.find(p => p.id === 'lo-ing')!.folio).toBe(2);
+    expect(resultado.polizas.find(p => p.id === 'lo-egr')!.folio).toBe(4);
+    expect(resultado.polizas).toHaveLength(5);
+  });
+
+  it('el id se mantiene y SOLO cambia folio en las afectadas; sin capturadoEn va primero (fallback)', () => {
+    const lista: Poliza[] = [
+      poliza({ id: 'lo', tipo: 'diario', folio: 1 }),
+      poliza({ id: 'sin-sello', tipo: 'diario', folio: 0, concepto: 'Legado', capturadoEn: undefined }),
+      poliza({ id: 'con-sello', tipo: 'diario', folio: 0, concepto: 'Nueva', capturadoEn: '2026-10-16T10:00:00.000Z' })
+    ];
+    const resultado = asignarFoliosPendientes(lista);
+    expect(resultado.afectadas.map(a => a.id)).toEqual(['sin-sello', 'con-sello']);
+    expect(resultado.afectadas.map(a => a.folio)).toEqual([2, 3]);
+
+    const tocada = resultado.polizas.find(p => p.id === 'con-sello')!;
+    expect(tocada.concepto).toBe('Nueva');          // resto de campos intacto
+    expect(tocada.capturadoEn).toBe('2026-10-16T10:00:00.000Z');
+    expect(resultado.polizas.find(p => p.id === 'lo')!.folio).toBe(1);
   });
 });
 

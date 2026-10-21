@@ -239,6 +239,25 @@ describe('usePolizas (dominio contasis_polizas_e1 — clave por cliente, regla a
     expect(JSON.parse(localStorage.getItem('contasis_polizas_e2') as string)).toHaveLength(1); // intacto
   });
 
+  it('asignarFoliosPendientes (F-6 de PLAN_FUSION_BOVEDA.md): asigna en orden capturadoEn y devuelve las tocadas', () => {
+    const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
+    act(() => { result.current.hydrate([
+      { ...polizaCompleta('lo-egr', 'egreso', 4) },
+      { ...polizaCompleta('pend-late', 'egreso', 0), capturadoEn: '2026-10-16T18:00:00.000Z' },
+      { ...polizaCompleta('pend-early', 'egreso', 0), capturadoEn: '2026-10-15T09:00:00.000Z' }
+    ]); });
+
+    let tocadas!: Poliza[];
+    act(() => { tocadas = result.current.asignarFoliosPendientes(); });
+
+    expect(tocadas.map(p => p.id)).toEqual(['pend-early', 'pend-late']); // orden de captura
+    expect(tocadas.map(p => p.folio)).toEqual([5, 6]); // sigue la serie del egreso (max 4)
+    const porId = Object.fromEntries(result.current.polizas.map(p => [p.id, p.folio]));
+    expect(porId['pend-early']).toBe(5);
+    expect(porId['pend-late']).toBe(6);
+    expect(porId['lo-egr']).toBe(4); // la serie local se conserva
+  });
+
   it('hydrateEmpresa escribe la clave del cliente destino (anti-R1) sin tocar la RAM del activo', async () => {
     const { result } = renderHook(() => usePolizas({ canSave: false, empresaId: E1 }));
     act(() => { result.current.createPoliza(inputCuadrada('diario')); });

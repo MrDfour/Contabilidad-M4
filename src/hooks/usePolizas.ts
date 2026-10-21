@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Poliza } from '../types';
 import { saveToStorage } from '../services/storageService';
-import { validatePolizaBalance, nextPolizaFolio } from '../lib/accounting';
+import { validatePolizaBalance, nextPolizaFolio, asignarFoliosPendientes as aplicarAsignacionFolios } from '../lib/accounting';
 import { clavePorEmpresa } from '../lib/empresas';
 
 /**
@@ -97,6 +97,15 @@ export function usePolizas({ canSave, empresaId }: { canSave: boolean; empresaId
     setPolizas(prev => prev.filter(p => p.id !== id));
   };
 
+  /** F-6 (PLAN_FUSION_BOVEDA.md): asignación MANUAL de folios pendientes
+   *  (folio 0 del merge) en orden capturadoEn. Devuelve las tocadas para el
+   *  reporte del usuario. NADA automático: solo corre cuando la acción se pide. */
+  const asignarFoliosPendientes = (): Poliza[] => {
+    const { polizas: futuras, afectadas } = aplicarAsignacionFolios(polizas);
+    setPolizas(futuras);
+    return afectadas;
+  };
+
   /** Importación masiva (Excel / respaldos): folio ausente o colisionante → se reasigna por tipo.
    *  Si la póliza no trae capturadoEn se ESTIMA con su fecha contable (respaldos viejos importan
    *  de golpe; estamparlos todos "ahora" guardaría un orden falso — la fecha fiscal la conserva). */
@@ -152,6 +161,7 @@ export function usePolizas({ canSave, empresaId }: { canSave: boolean; empresaId
     createProgrammaticPoliza,
     updatePoliza,
     deletePoliza,
+    asignarFoliosPendientes,
     importPolizas,
     hydrate,
     hydrateEmpresa

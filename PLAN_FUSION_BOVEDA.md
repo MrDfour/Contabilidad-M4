@@ -206,4 +206,41 @@ manual multi-dispositivo del escenario de uso.
     dispositivo y el sync lo reenvía automáticamente).
   - 6 tests en `src/components/modals/FusionBovedaModal.test.tsx`
     (285 del proyecto). Gate limpio y escaneo anti-CJK/mojibake limpio.
-- Fase D (acción "Asignar folios pendientes") — PENDIENTE.
+- **Fase D — COMPLETADA (2026-10-20).** Acción "Asignar pendientes" (F-6):
+  - `accounting.ts`: `esFolioPendiente` (centinela `folio <= 0`) y
+    `asignarFoliosPendientes` (pura: siguiente folio disponible de su tipo vía
+    `nextPolizaFolio`, orden `capturadoEn` ASCENDENTE con fallback; regresa la
+    lista mutada y las afectadas — solo cambia `folio`). `formatPolizaFolio`
+    muestra "PENDIENTE" con folio 0: pólizas, diario e impresión ahora
+    coherentes (barrido del riesgo §3).
+  - `usePolizas.ts`: acción `asignarFoliosPendientes()` del hook dueño
+    (anti-R1), devuelve las tocadas. NADA automático: solo corre al pedirla.
+  - `AsignarFoliosPendientesModal` NUEVO: previsualización (lista pendientes
+    en orden de captura con el folio PROYECTADO en verde) + confirmación
+    ("Asignar N folios" / "Más tarde"). Botón ámbar en el header de la vista
+    de pólizas SOLO cuando hay pendientes, con contador.
+  - `satExport.ts`: `buildPolizasXML` lanza error claro si el periodo tiene
+    pólizas con folio pendiente (NumUnIdenPol SAT exige positivo y único —
+    no se exporta con 0 ni se omiten en silencio).
+  - `App.tsx` pasa la acción del hook a `PolizaView`; el toast de resultado
+    viaja por `onSetModal` (folio(s) asignado(s) en orden, máx 5 listados).
+  - 8 tests nuevos (3 lib + guard XML + hook + 2 modal = 293 del proyecto).
+    Gate limpio y escaneo anti-CJK/mojibake limpio.
+- Fase E (bump versión, docs, prueba manual del escenario) — **bump y docs
+  COMPLETADOS (2026-10-20)**:
+  - Bump: `package.json` 0.9.9 (única fuente; el CI reescribe el
+    `android/app/build.gradle` versionCode 909 / versionName 0.9.9 — se
+    reescribió en el repo también), `package-lock.json` a tono.
+  - `ARCHITECTURE.md`: cabecera v0.9.9; árbol nuevo (`lib/unionBovedas.ts`,
+    `FusionBovedaModal`, `AsignarFoliosPendientesModal`, folio "PENDIENTE" en
+    `PolizaCard`); §6 con el tercer camino del K-7 y el bullet de la fusión
+    (motor `contenidoConflicto`/`aplicarSnapshotFusionado`, reglas F-1…F-8,
+    acción F-6 y guard del XML SAT); §10 con dos filas nuevas de "¿dónde
+    cambio X?".
+  - `BACKLOG.md`: BL-6 → "EJECUTADO/" (queda pendiente de sesión solo la
+    prueba de escena manual multi-dispositivo).
+- Prueba de escena manual (solo la pareja de dispositivos del usuario):
+  PC captura el día · móvil captura un gasto sin conexión → conflicto "manos
+  sucias" → "Fusionar ambos" → revisión → aplicar → toast resumen → folios
+  continuos (ningún número repetido) → "Asignar pendientes" si eligió
+  pendientes en la revisión.

@@ -88,7 +88,7 @@ export default function App() {
   const { activaId, activa: empresaActiva, crearEmpresa, actualizarEmpresa, eliminarEmpresa, setActiva, hydrate: hydrateEmpresas, markMigrated: markEmpresasMigrated } = empresasState;
 
   const polizasState = usePolizas({ canSave: hasLoaded, empresaId: activaId });
-  const { polizas, createPoliza, updatePoliza, deletePoliza, createProgrammaticPoliza, importPolizas, setPolizas, hydrate } = polizasState;
+  const { polizas, createPoliza, updatePoliza, deletePoliza, createProgrammaticPoliza, importPolizas, asignarFoliosPendientes, setPolizas, hydrate } = polizasState;
 
   const inventoriesState = useInventories({ empresaId: activaId });
   const { finalInventories, setFinalInventories, finalInventory, handleSetFinalInventory, hydrateFromRemote } = inventoriesState;
@@ -438,6 +438,7 @@ export default function App() {
                       onCreate={createPoliza}
                       onUpdate={updatePoliza}
                       onImportPolizas={importPolizas}
+                      onAsignarFoliosPendientes={asignarFoliosPendientes}
                       onDeleteRequest={(p) => {
                         setConfirmDelete({
                           type: 'poliza',

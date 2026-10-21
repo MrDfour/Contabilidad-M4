@@ -126,8 +126,43 @@ export const nextPolizaFolio = (polizas: Poliza[], tipo: TipoPoliza): number => 
   return max + 1;
 };
 
-/** Folio para presentación: "ING-0001" | "EGR-0001" | "DIA-0001" (solo display, no storage). */
+/**
+ * Centinela de folio PENDIENTE (Fase A de PLAN_FUSION_BOVEDA.md): una póliza
+ * entrante con folio en disputa puede entrar con `folio === 0` (decisión
+ * "pendiente", F-2). `folio <= 0` no es un folio real: se muestra "PENDIENTE"
+ * y se espera a la acción manual F-6 para cerrar la serie.
+ */
+export const esFolioPendiente = (poliza: Poliza): boolean => poliza.folio <= 0;
+
+/**
+ * F-6 — asignación MANUAL de folios pendientes (pura y sin estampados): a cada
+ * póliza con `folio <= 0` le asigna el siguiente folio disponible de su tipo
+ * (nextPolizaFolio), procesadas por `capturadoEn` ASCENDENTE (el orden en que
+ * se capturaron cierra la serie cronológicamente; sin estampado, orden por
+ * defección = primero). Devuelve la lista MUTADA en folio y las afectadas
+ * (mismos ids, solo cambia `folio`) para reportarlas al usuario.
+ */
+export const asignarFoliosPendientes = (polizas: Poliza[]): {
+  polizas: Poliza[];
+  afectadas: Poliza[];
+} => {
+  const pendientes = polizas
+    .filter(esFolioPendiente)
+    .sort((a, b) => (a.capturadoEn ?? '').localeCompare(b.capturadoEn ?? ''));
+  const working = [...polizas];
+  const afectadas: Poliza[] = [];
+  for (const p of pendientes) {
+    const actualizada: Poliza = { ...p, folio: nextPolizaFolio(working, p.tipo) };
+    working[working.indexOf(p)] = actualizada;
+    afectadas.push(actualizada);
+  }
+  return { polizas: working, afectadas };
+};
+
+/** Folio para presentación: "ING-0001" | "EGR-0001" | "DIA-0001" (solo display, no storage).
+ *  Un folio pendiente (centinela folio 0 del merge, F-2) se muestra "PENDIENTE". */
 export const formatPolizaFolio = (poliza: Poliza): string => {
+  if (esFolioPendiente(poliza)) return 'PENDIENTE';
   const prefix = { ingreso: 'ING', egreso: 'EGR', diario: 'DIA' }[poliza.tipo];
   return `${prefix}-${String(poliza.folio).padStart(4, '0')}`;
 };

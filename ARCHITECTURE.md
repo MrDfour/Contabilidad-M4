@@ -12,7 +12,7 @@
 > estructura. La tabla de archivos y la sección 9 (convenciones) son las que
 > envejecen más rápido.
 
-Versión del código: v0.9.8 · Licencia: Apache-2.0 · README de usuario: `README.md`
+Versión del código: v0.9.9 · Licencia: Apache-2.0 · README de usuario: `README.md`
 
 ---
 
@@ -101,14 +101,19 @@ Contabilidad-M4/
     │   │   │                          #   Excel D-11), filtro+búsqueda, modales de captura/impresión
     │   │   ├── PolizaFilter.tsx        #   chips Todas/Ingresos/Egresos/Diario + buscador folio/concepto
     │   │   ├── PolizaList.tsx          #   listado con estados vacíos diferenciados (filtro vs sin datos)
-    │   │   ├── PolizaCard.tsx          #   tarjeta: folio ING/EGR/DIA, distintivo de tipo, desglose de
+    │   │   ├── PolizaCard.tsx          #   tarjeta: folio ING/EGR/DIA (o "PENDIENTE" con folio
+    │   │   │                          #   0 del merge), distintivo de tipo, desglose de
     │   │   │                          #   partidas con sumas iguales; editar/imprimir/eliminar
     │   │   ├── PolizaForm.tsx          #   modal de captura: partida doble EN VIVO (guardado bloqueado
     │   │   │                          #   si <2 partidas o desbalance), tipo CONGELADO al editar (D-8),
     │   │   │                          #   CFDI UUID/RFC por partida en modo fiscal (+ Lectura XML y
     │   │   │                          #   modal de discrepancia, mismo patrón que EntryForm)
-    │   │   └── PolizaPrintModal.tsx    #   formato físico imprimible (@media print): sumas iguales y
-    │   │                              #   renglones de firma Elaboró/Revisó/Autorizó
+    │   │   ├── PolizaPrintModal.tsx    #   formato físico imprimible (@media print): sumas iguales y
+    │   │   │                          #   renglones de firma Elaboró/Revisó/Autorizó
+    │   │   └── AsignarFoliosPendientesModal.tsx  # v0.9.9: previsualización y confirmación de
+    │   │                              #   la acción F-6 (PLAN_FUSION_BOVEDA.md): asigna el
+    │   │                              #   siguiente folio disponible del tipo a los folio === 0
+    │   │                              #   que dejó el merge, en orden capturadoEn (manual)
     │   ├── TAccountsView.tsx         # Cuentas T calculadas de los asientos; export PDF/Excel
     │   ├── BalanceSheetView.tsx      # Balance General (Activo/Pasivo/Capital) desde saldos Cuentas T
     │   ├── ProfitLossView.tsx        # Estado de Resultados (método analítico); inventario final manual
@@ -128,6 +133,11 @@ Contabilidad-M4/
     │       │                          #   ESTADOS estilo Mihon: Descargar → Descargando %
     │       │                          #   (via plugin nativo) → Instalar / Reintentar, changelog,
     │       │                          #   saltar versión; en web cae a Browser.open (fallback)
+    │       ├── ConflictoBovedaModal.tsx # K-7 (v0.9.8): 3 caminos desde v0.9.9 ('local' |
+    │       │                          #   'remoto' | 'fusionar'); al cancelar la fusión reaparece
+    │       ├── FusionBovedaModal.tsx    # v0.9.9: revisión PREVIA de la fusión en 3 pestañas
+    │       │                          #   (Resumen / Folios en disputa / Duplicados); "Aplicar
+    │       │                          #   fusión" bloqueado sin decisiones F-8; publica el motor
     │       ├── AboutModal.tsx          #   "Acerca de" + puente a Feedback
     │       └── DownloadProgressBar.tsx #   barra de progreso de descarga (Electron updater)
     │
@@ -142,13 +152,19 @@ Contabilidad-M4/
     │   │                        #   calculateFiscalDeduction (INPC truncado a 4 dec, Art. 31 LISR),
     │   │                        #   + pólizas: validatePolizaBalance, flattenPolizasToJournalEntries
     │   │                        #   (D-6), nextPolizaFolio/formatPolizaFolio, entryToPolizaInput
-    │   │                        #   (D-10) y entriesToPolizasDiarias (D-11)
+    │   │                        #   (D-10), entriesToPolizasDiarias (D-11) y los folios pendientes
+    │   │                        #   del merge: esFolioPendiente/asignarFoliosPendientes (F-6,
+    │   │                        #   v0.9.9; formatPolizaFolio muestra "PENDIENTE" con folio 0)
     │   ├── navigation.ts        # Tipos de navegación compartidos: AppMode, AppTab, NavigationTab,
     │   │                        #   DEFAULT_TAB ('polizas'), BASIC_NAV_TABS y FISCAL_NAV_TABS.
     │   │                        #   Consumido por App y layout/
     │   ├── empresas.ts          # ⭐ MULTI-CLIENTE (PLAN_MULTI_CLIENTE): helpers PURAS de claves
     │   │                        #   por cliente (clavePorEmpresa, arrayDe, objetoDe, BASES_POR_EMPRESA).
     │   │                        #   Toda composición de clave `<dominio>_<empresaId>` pasa por aquí.
+    │   ├── unionBovedas.ts      # ⭐ FUSIÓN DE BÓVEDA (v0.9.9, PLAN_FUSION_BOVEDA): PURA. analizarFusion
+    │   │                        #   (clasifica entrantes: directos, ediciones cruzadas F-3, colisiones
+    │   │                        #   de folio F-2, duplicados F-5, clientes faltantes F-4) y aplicarFusion
+    │   │                        #   (aplica DecisionesFusion → snapshot v3 fusionado). Sin red/storage.
     │   ├── importEntriesFromExcel.ts  # Parser PURO de la plantilla Excel (valida encabezados,
     │   │                        #   carry-forward de celdas, groupKey por ASIENTO_ID,
     │   │                        #   cuentas por nombre normalizado/código y serial de Excel para fechas);
@@ -339,8 +355,9 @@ La composición de las claves por cliente se hace SIEMPRE con el helper puro `cl
 - **Ciclo de vida** (`src/services/vaultService.ts`): credenciales por dispositivo en `contasis_vault_creds` vía `storageService`; alistamiento por **QR** (`{v,url,vaultId,secretKey}`) o **frase mnemónica determinista** de 6 palabras (la frase GENERA la misma credencial en cualquier dispositivo: `vaultId = vlt_<sha256(frase)[0..12]>`, `secretKey = SHA-256(vaultId:frase)`).
 - **Cifrado** (`src/lib/crypto.ts`): AES-GCM 256 con IV de 96 bits por blob; el relay SOLO ve blobs ilegibles. El sobre es `{ciphertext, iv, algoritmo, version}` sin salt.
 - **Motor** (`src/services/vaultSyncEngine.ts`, Fase 4): push con debounce 1.5 s + coalescing 120 s (K-5; el flush manual `publicarAhora` y la resolución de conflicto lo SALTAN, y con publicación en vuelo esperan su resultado — bugs de 0.9.6 corregidos), sondeo pasivo de 60 s con consulta barata `?version=` + WebSocket en vivo (`/ws`) con degradación natural (K-6; el sondeo corre SIEMPRE — el broadcast del WS solo alcanza al mismo runtime/isolate del worker, el sondeo es la coherencia entre runtimes). **Chequeo pre-publicación (v0.9.8)**: el PUT va precedido de un GET barato del vigente — si el remoto es más nuevo: dispositivo LIMPIO lo absorbe y publica encima; dispositivo SUCIO abre el conflicto K-7 en vez de pisar el blob con una versión colisionada. **Restaurar historial (v0.9.8)**: el SyncModal lista versiones previas (metadatos; el worker solo manda blobs con `?full=1`) y permite restaurar cualquier versión — se aplica EN PANTALLA sin retroceder `versionLocal` (el sondeo no la re-pisa) ni fijar huella (el auto-publica la sube como versión nueva para toda la bóveda). Los eventos `error` del motor suben su detalle real hasta SyncModal. Carga útil = snapshot v3 completo de TODAS las empresas (K-4); la restauración remota reusa el camino `restore` v3 (DV-C-3).
-- **Conflicto "manos sucias"** (K-7): remoto ≤ versión local → ignorar; remoto mayor y local limpio → auto-aplicar (también por el chequeo pre-publicación); ambos lados cambiaron → `ConflictoBovedaModal` ("Conservar datos locales" publica con `max+1` / "Sobrescribir con datos remotos" — avisa que el lado no conservado queda en el historial de la nube, restaurable desde el SyncModal). El que gana deja una sola versión para todos.
-- **Estampados silenciosos para el merge futuro (v0.9.8)**: `Poliza.capturadoEn` (ISO al alta; `importPolizas` lo ESTIMA con la fecha contable, no con "ahora") y `Poliza.editadoEn` (al editar). Sin UI ni presencia en XML/print; son la materia prima del plan de fusión por hora de captura (`BACKLOG.md`), que definirá re-foliación, tumbstones de borrado e inventarios.
+- **Conflicto "manos sucias"** (K-7): remoto ≤ versión local → ignorar; remoto mayor y local limpio → auto-aplicar (también por el chequeo pre-publicación); ambos lados cambiaron → `ConflictoBovedaModal` ("Conservar datos locales" publica con `max+1` / "Sobrescribir con datos remotos" — avisa que el lado no conservado queda en el historial de la nube, restaurable desde el SyncModal — / **"Fusionar ambos"**, nuevo en v0.9.9, ver el bullet siguiente). El que gana deja una sola versión para todos.
+- **Fusión por hora de captura (v0.9.9, `PLAN_FUSION_BOVEDA.md`)**: tercer camino del K-7. El motor expone `contenidoConflicto()` (descifra el remoto en conflicto SOLO-LECTURA, sin tocar nada) y `aplicarSnapshotFusionado(snapshot)` (restaura en pantalla y publica FORZADO `max(vigente, conflicto)+1` sin chequeo remoto F-7, con `ignorarHuella` para que la huella anti-eco K-11 no silencie el envío del merge; si el PUT falla, el contenido queda aplicado aquí y el sync lo reenvía). La decisión pura vive en `lib/unionBovedas.ts` (`analizarFusion`/`aplicarFusion`, F-1…F-8): entrantes sin colisión conservan folio; ediciones del mismo `id` ganan por `editadoEn` (reportadas); colisiones de folio se deciden POR ELEMENTO con 3 opciones (re-foliar por captura / pendiente folio 0 / final consecutivo); duplicados tipo+fecha+concepto van excluidos por defecto con checkbox; inventarios/catálogo de clientes quedan del dispositivo que dispara; cuentas/activos se unen por `id` con gana local; nada se aplica sin decisiones completas (F-8) vía `FusionBovedaModal`. El fusionado solo suma ALTAS del snapshot v3 (sin tumbstones); el conflicto queda DE PIE en el motor durante la revisión (cancelar lo devuelve intacto). Los entrantes que el usuario deja "pendientes" llegan con `folio === 0` ("PENDIENTE" en pantalla) y se cierran a mano: acción **"Asignar pendientes"** en la vista de Pólizas (`usePolizas.asignarFoliosPendientes` + `AsignarFoliosPendientesModal`, orden `capturadoEn`; `satExport` NO genera la polización SAT si el periodo tiene pendientes).
+- **Estampados silenciosos para el merge (v0.9.8, ya en uso)**: `Poliza.capturadoEn` (ISO al alta; `importPolizas` lo ESTIMA con la fecha contable, no con "ahora") y `Poliza.editadoEn` (al editar). Sin UI ni presencia en XML/print; son la materia prima de la fusión por hora de captura (`PLAN_FUSION_BOVEDA.md`, ejecutada).
 - **Historial** (K-8): `vlt:<id>:hist:<n>` máx 5, TTL 30 d; consultable en el modal (solo metadatos).
 - **Cuota** (K-5, DV-K-1): por push − 1 `put()` + hasta 5 `put()` de historial; sondeo = 1 `get()`, y con WebSocket conectado sondeo suspendido. Presupuesto ajustado al free tier de KV (1 000 escrituras/día, 100 000 lecturas/día).
 - **Indicador**: punto en el botón Sync del `AppHeader` (gris sin bóveda / verde al día / naranja pendiente / rojo conflicto o error).
@@ -440,6 +457,8 @@ El `npm run build` genera además del `dist/` clásico: `manifest.webmanifest`, 
 | Cambiar XML/TXT SAT o DIOT | `src/lib/satExport.ts` (el XML de Pólizas consume PÓLIZAS reales desde ContabilidadElectronicaView: folio real = NumUnIdenPol, Fase 6) |
 | Cambiar reglas de persistencia | `src/services/storageService.ts` (+ IPC en `electron/main.js`) |
 | Cambiar lógica de sync | `src/services/vaultSyncEngine.ts` (motor) · `SyncModal.tsx` / `ConflictoBovedaModal.tsx` (UI) · `src/services/vaultService.ts` (credenciales/opera) |
+| Cambiar la fusión de bóveda (K-7 "Fusionar ambos") | `src/lib/unionBovedas.ts` (reglas puras F-1…F-8) · `vaultSyncEngine.ts` (`contenidoConflicto`, `aplicarSnapshotFusionado`) · `components/modals/FusionBovedaModal.tsx` (revisión) |
+| Cambiar la asignación de folios pendientes (F-6) | `src/lib/accounting.ts` (`asignarFoliosPendientes`/`esFolioPendiente`) · `src/hooks/usePolizas.ts` (acción dueña) · `components/polizas/AsignarFoliosPendientesModal.tsx` + `PolizaView.tsx` (UI) · `src/lib/satExport.ts` (guard XML) |
 | Cambiar el updater in-app de Android | plugin nativo `android/app/src/main/java/…/AppUpdaterPlugin.java` (descarga/instalación) · `src/services/appUpdater.ts` (puente JS) · `src/components/modals/UpdateAvailableModal.tsx` (UX máquina de estados) |
 | Cambiar la build/distribución (desktop · APK · PWA) | `.github/workflows/electron-release.yml` (desktop + APK + release) · manifest/PWA en `vite.config.ts` (`VitePWA`) |
 | Agregar una vista/nueva pantalla | Nuevo componente + switch en `App.tsx` |

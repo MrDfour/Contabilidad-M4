@@ -5,19 +5,20 @@
 
 import { useState, type ChangeEvent } from 'react';
 import { motion } from 'motion/react';
-import { Plus, Upload, FileUp } from 'lucide-react';
+import { Plus, Upload, FileUp, Hash } from 'lucide-react';
 import type { Account, Poliza } from '../../types';
 import type { PolizaInput } from '../../hooks/usePolizas';
 import type { AppMode } from '../../lib/navigation';
 import type { ModalInfo } from '../modals/GlobalInfoModal';
 import { normalizeString } from '../../lib/format';
-import { formatPolizaFolio, entriesToPolizasDiarias } from '../../lib/accounting';
+import { formatPolizaFolio, entriesToPolizasDiarias, esFolioPendiente } from '../../lib/accounting';
 import { readExcel, exportToExcel } from '../../lib/utils';
 import { parseJournalImport } from '../../lib/importEntriesFromExcel';
 import { PolizaFilter, type FiltroTipo } from './PolizaFilter';
 import { PolizaList } from './PolizaList';
 import { PolizaForm } from './PolizaForm';
 import { PolizaPrintModal } from './PolizaPrintModal';
+import { AsignarFoliosPendientesModal } from './AsignarFoliosPendientesModal';
 
 /**
  * Contenedor del módulo de Pólizas Contables (Fase 3 de PLAN_POLIZAS.md):
@@ -39,6 +40,7 @@ export function PolizaView({
   onCreate,
   onUpdate,
   onImportPolizas,
+  onAsignarFoliosPendientes,
   onDeleteRequest,
   onSetModal
 }: {
@@ -50,6 +52,8 @@ export function PolizaView({
   onUpdate: (id: string, data: PolizaInput) => void,
   /** Importación Excel (D-11): el hook asigna folios ausentes/colisionantes. */
   onImportPolizas: (nuevas: Poliza[]) => void,
+  /** F-6: asigna folios pendientes (folio 0 del merge) y devuelve las tocadas. */
+  onAsignarFoliosPendientes: () => Poliza[],
   /** Pide confirmación a App (ConfirmDeleteModal); no elimina directo. */
   onDeleteRequest: (p: Poliza) => void,
   onSetModal: (m: ModalInfo) => void
@@ -59,6 +63,10 @@ export function PolizaView({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPoliza, setEditingPoliza] = useState<Poliza | null>(null);
   const [printPoliza, setPrintPoliza] = useState<Poliza | null>(null);
+  const [modalFoliosOpen, setModalFoliosOpen] = useState(false);
+
+  /** Centinela folio 0 = pendiente del merge (F-2); la acción SOLO existe si hay. */
+  const pendientesFolio = polizas.filter(p => esFolioPendiente(p));
 
   const termino = normalizeString(busqueda);
   // Los conteos de los chips salen de la lista filtrada SOLO por búsqueda
@@ -101,6 +109,24 @@ export function PolizaView({
   const openEditar = (p: Poliza) => {
     setEditingPoliza(p);
     setIsFormOpen(true);
+  };
+
+  /** F-6 confirmado: el hook dueño asigna y reportamos las tocadas (toast). */
+  const handleConfirmarFolios = () => {
+    const afectadas = onAsignarFoliosPendientes();
+    setModalFoliosOpen(false);
+    if (afectadas.length === 0) {
+      onSetModal({ type: 'error', title: 'Nada por asignar', message: 'No hay pólizas con folio pendiente.' });
+      return;
+    }
+    const folios = afectadas.map(p => formatPolizaFolio(p));
+    const visibles = folios.slice(0, 5).join(', ');
+    const resto = afectadas.length > 5 ? ` y ${afectadas.length - 5} más` : '';
+    onSetModal({
+      type: 'success',
+      title: 'Folios asignados',
+      message: `Asignamos folio a ${afectadas.length} póliza(s) en orden de captura: ${visibles}${resto}.`
+    });
   };
 
   const closeForm = () => {
@@ -187,6 +213,16 @@ export function PolizaView({
               <Upload className="w-4 h-4" /> Importar Excel
             </button>
           </div>
+          {pendientesFolio.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setModalFoliosOpen(true)}
+              title="Asignar el siguiente folio disponible a las pólizas que quedaron pendientes del merge"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20 transition-colors text-sm font-medium"
+            >
+              <Hash className="w-4 h-4" /> Asignar pendientes ({pendientesFolio.length})
+            </button>
+          )}
           <button
             type="button"
             onClick={openNueva}
@@ -224,6 +260,16 @@ export function PolizaView({
       )}
 
       <PolizaPrintModal poliza={printPoliza} onClose={() => setPrintPoliza(null)} />
+
+      {/* F-6 (PLAN_FUSION_BOVEDA.md): acción manual SOLO cuando hay pendientes; */}
+      {/* la asignación en sí la ejecuta el hook dueño (App) y el toast viaja por App. */}
+      {modalFoliosOpen && (
+        <AsignarFoliosPendientesModal
+          polizas={polizas}
+          onConfirmar={handleConfirmarFolios}
+          onClose={() => setModalFoliosOpen(false)}
+        />
+      )}
     </div>
   );
 }
