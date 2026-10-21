@@ -26,7 +26,7 @@ App de gestión contable (español, dominio fiscal mexicano) que funciona en **t
 | Escritorio | Electron (instaladores con `electron-builder`) | `electron/main.js` |
 | Android | Capacitor (`capacitor.config.ts`, proyecto `android/` committeado) | `MainActivity` (plugin `AppUpdater`) |
 
-Módulos funcionales: Pólizas Contables (captura principal: Ingreso/Egreso/Diario), Multi-Cliente (contador con varios clientes: cada cliente = workspace con catálogo/activos/inventario/pólizas/RFC propios), Libro Diario (reporte consolidado de solo lectura), Cuentas T, Balance General, Estado de Resultados, Catálogo de Cuentas, Activos Fijos con depreciación, Contabilidad Electrónica SAT (Anexo 24) y sincronización Escritorio ↔ Móvil.
+Módulos funcionales: Pólizas Contables (captura principal: Ingreso/Egreso/Diario, en pantalla Clásica o en formato papel mexicano), Multi-Cliente (contador con varios clientes: cada cliente = workspace con catálogo/activos/inventario/pólizas/RFC propios), Libro Diario (reporte consolidado de solo lectura, con impresión por día/rango en formato papel), Cuentas T, Balance General, Estado de Resultados, Catálogo de Cuentas, Activos Fijos con depreciación, Contabilidad Electrónica SAT (Anexo 24) y sincronización Escritorio ↔ Móvil.
 
 **Stack:** React 19 + TypeScript strict + Vite + Tailwind CSS v4 (sin componentes de UI externos; la UI es propia). Exportación con ExcelJS / jsPDF / html2canvas-pro. Sincronización con relay propio en Cloudflare Workers + KV (bóveda E2EE, §6). PWA con `vite-plugin-pwa` (autoUpdate).
 
@@ -75,7 +75,8 @@ Contabilidad-M4/
     │                           #   `Movement` SOLO sobreviven como formatos legacy: migración one-shot,
     │                           #   respaldos v1 y sync remoto viejo.
     ├── App.tsx                 # ⭐ ORQUESTADOR: composición de hooks de dominio (activos fijos viven
-    │                           #   aquí con clave POR CLIENTE), cambio de cliente activo, navegación
+    │                           #   aquí con clave POR CLIENTE y guard de transición de cliente),
+    │                           #   cambio de cliente activo, navegación
     │                           #   (appMode/activeTab), modales de UI, orquestadores multi-dominio
     │                           #   (sync remoto, restauración de respaldo v1/v2/v3); shell en layout/
     │
@@ -107,9 +108,30 @@ Contabilidad-M4/
     │   │   ├── PolizaForm.tsx          #   modal de captura: partida doble EN VIVO (guardado bloqueado
     │   │   │                          #   si <2 partidas o desbalance), tipo CONGELADO al editar (D-8),
     │   │   │                          #   CFDI UUID/RFC por partida en modo fiscal (+ Lectura XML y
-    │   │   │                          #   modal de discrepancia, mismo patrón que EntryForm)
-    │   │   ├── PolizaPrintModal.tsx    #   formato físico imprimible (@media print): sumas iguales y
-    │   │   │                          #   renglones de firma Elaboró/Revisó/Autorizó
+    │   │   │                          #   modal de discrepancia, mismo patrón que EntryForm);
+    │   │   │                          #   toggle de vista "Clásica | Papel": el modo papel captura
+    │   │   │                          #   directo a la hoja clásica mexicana (grid DEBE/HABER con
+    │   │   │                          #   SUMAS IGUALES en vivo + campo Revisó); solo cambia la
+    │   │   │                          #   presentación (misma validación/captura compartida), el
+    │   │   │                          #   modo se persiste en localStorage `contasis_modo_captura`
+    │   │   ├── PolizaSheet.tsx         #   hoja de póliza en FORMATO PAPEL compartida
+    │   │   │                          #   (PolizaPapelSheet: columnas Cta/Scta/Nombre/Parcial/
+    │   │   │                          #   Debe/Haber, cuadro CONCEPTO, franja Control/Hecho por/
+    │   │   │                          #   Revisado/Autorizado/Diario, Fecha/Nº póliza; renglones
+    │   │   │                          #   por parámetro con RENGLONES_BASE=10 y overrides de
+    │   │   │                          #   título/folio para los impresos consolidados; la consumen
+    │   │   │                          #   la impresión individual Y el diario)
+    │   │   ├── PolizaPrintModal.tsx    #   impresión individual (@media print, @page A4 margen 12mm):
+    │   │   │                          #   renderiza PolizaPapelSheet; celdas de firma
+    │   │   │                          #   Elaboró/Revisó quedan en blanco si no hay captura
+    │   │   │                          #   (se firman a mano en el impreso)
+    │   │   ├── DiarioPrintModal.tsx    #   impresión del LIBRO DIARIO (botón "Imprimir Pólizas" en
+    │   │   │                          #   JournalView): filtro por día o rango Desde/Hasta con
+    │   │   │                          #   presets Hoy/Este mes y 3 formatos (hoja por póliza /
+    │   │   │                          #   póliza diaria consolidada / libro continuo); el formato
+    │   │   │                          #   elegido se persiste en localStorage
+    │   │   │                          #   `contasis_diario_formato`; los consolidados se arman
+    │   │   │                          #   en RAM con consolidarPolizasDiaria (folioOverride)
     │   │   └── AsignarFoliosPendientesModal.tsx  # v0.9.9: previsualización y confirmación de
     │   │                              #   la acción F-6 (PLAN_FUSION_BOVEDA.md): asigna el
     │   │                              #   siguiente folio disponible del tipo a los folio === 0
@@ -156,7 +178,10 @@ Contabilidad-M4/
     │   │                        #   (D-6), nextPolizaFolio/formatPolizaFolio, entryToPolizaInput
     │   │                        #   (D-10), entriesToPolizasDiarias (D-11) y los folios pendientes
     │   │                        #   del merge: esFolioPendiente/asignarFoliosPendientes (F-6,
-    │   │                        #   v0.9.9; formatPolizaFolio muestra "PENDIENTE" con folio 0)
+    │   │                        #   v0.9.9; formatPolizaFolio muestra "PENDIENTE" con folio 0);
+    │   │                        #   consolidarPolizasDiaria (PURAMENTE de impresión: agrega TODAS
+    │   │                        #   las pólizas de un día por cuenta+lado en una sola póliza
+    │   │                        #   diaria con glosas unidas — nunca persiste ni gasta folio)
     │   ├── navigation.ts        # Tipos de navegación compartidos: AppMode, AppTab, NavigationTab,
     │   │                        #   DEFAULT_TAB ('polizas'), BASIC_NAV_TABS y FISCAL_NAV_TABS.
     │   │                        #   Consumido por App y layout/
@@ -192,15 +217,20 @@ Contabilidad-M4/
     │                            #   `buildPolizasXML` puro (Fase 6: folios reales, Concepto por
     │                            #   partida) + wrapper `exportPolizasXML` (DV-4)
     │
-    │   # ⭐ Red de pruebas: cada .test.ts(x) COLOCADO junto a lo que prueba,
-    │   #    descubierto por src/**/*.test.{ts,tsx} (ver sección 9, "Red de pruebas"):
-    │   ├── lib/accounting.test.ts · lib/format.test.ts · lib/export.test.ts
-    │   ├── lib/empresas.test.ts · lib/migrateJournalsToPolizas.test.ts · lib/migrateCatalogToGlobal.test.ts
-    │   ├── lib/navigation.test.ts · lib/satExport.test.ts
-    │   ├── hooks/useEmpresas.test.ts · useCatalog.test.ts · useAppData.test.ts
-    │   │     · useBackup.test.ts · useInventories.test.ts · usePolizas.test.ts
-    │   ├── components/polizas/PolizaForm.test.tsx · components/JournalView.test.tsx
-    │   ├── components/EmpresasModal.test.tsx
+    │   # ⭐ Red de pruebas: cada .test.ts(x) COLOCADO junto a lo que prueba (src/**),
+    │   #    descubierto por vitest; la misma pasada `npm run test` incluye el test
+    │   #    del relay en worker/tests/ (ver sección 9, "Red de pruebas"):
+    │   ├── lib/accounting.test.ts · format.test.ts · export.test.ts · empresas.test.ts
+    │   │    · navigation.test.ts · satExport.test.ts · unionBovedas.test.ts
+    │   │    · mnemonic.test.ts · crypto.test.ts
+    │   ├── lib/migrateJournalsToPolizas.test.ts · lib/migrateCatalogToGlobal.test.ts
+    │   ├── hooks/usePolizas.test.ts · useCatalog.test.ts · useAppData.test.ts
+    │   │    · useEmpresas.test.ts · useBackup.test.ts · useInventories.test.ts · useTemaApp.test.ts
+    │   ├── services/vaultService.test.ts · services/vaultSyncEngine.test.ts
+    │   ├── components/EmpresasModal.test.tsx · SyncModal.test.tsx · JournalView.test.tsx
+    │   ├── components/polizas/PolizaForm.test.tsx · DiarioPrintModal.test.tsx
+    │   │    · AsignarFoliosPendientesModal.test.tsx
+    │   ├── components/modals/FusionBovedaModal.test.tsx
     │   └── test/setup.ts        # Setup global: limpieza entre tests + polyfills jsdom
     │
     ├── services/
@@ -239,11 +269,14 @@ Contabilidad-M4/
         │                            #   borrado con partida doble VALIDADA (D-9, lanza), folios por
         │                            #   TIPO Y POR CLIENTE (nextPolizaFolio), hydrate (activo) +
         │                            #   hydrateEmpresa (cualquier cliente, escribe SU clave),
-        │                            #   persistencia incluso [] con puerta canSave
+        │                            #   persistencia incluso [] con puerta canSave +
+        │                            #   guard de transición de cliente (salta 1 escritura
+        │                            #   cuando la clave acaba de cambiar: anti-race C-4)
         ├── useCatalog.ts            # ⭐ Dueño de `contasis_accounts_<empresaId>`: catálogo POR
         │                            #   CLIENTE (heredero del global D-12), auto-recuperación
         │                            #   quirúrgica de cuentas base por cliente, hydrateEmpresa,
-        │                            #   guardado con debounce 300ms gated por canSave
+        │                            #   guardado con debounce 300ms gated por canSave +
+        │                            #   guard de transición de cliente (anti-race, C-4)
         ├── useInventories.ts        # ⭐ Dueño de `contasis_final_inventories_<empresaId>`: mapa con
         │                            #   clave fija 'general' (D-13, migración vía
         │                            #   inventoriesToGeneral), hydrateFromRemote + hydrateEmpresa,
@@ -266,13 +299,15 @@ Usuario → PolizasView (captura PRINCIPAL: manual + importación Excel D-11) �
         → App.tsx: proyección = flattenPolizasToJournalEntries(pólizas ordenadas fecha+folio)
         → TAccountsView / BalanceSheetView / ProfitLossView / CatalogView (consumen la proyección, NO los diarios)
         → Cont. Electrónica: CT/BN/DIOT consumen la proyección; el XML PL consume PÓLIZAS reales (Fase 6)
-        → JournalView (REPORT de solo lectura sobre las mismas pólizas cronológicas)
+        → JournalView (REPORT de solo lectura sobre las mismas pólizas cronológicas;
+          su impresión por día/rango arma los documentos con polizas/DiarioPrintModal)
         → ProfitLossView/FixedAssetsView (capturas programáticas) → createProgrammaticPoliza (D-10) → usePolizas
 ```
 
 - `App.tsx` es el orquestador: retiene navegación (`appMode`, `activeTab`), modales y el panel de ACTIVOS FIJOS (su dominio no vive en hook: `App` es dueño de la clave `contasis_fixed_assets_<empresaId>`, C-2) y compone los hooks de dominio. Desde Fase 5 NO existe dominio Journal en RAM.
-- **MULTI-CLIENTE (D-17/F-17 de `PLAN_MULTI_CLIENTE.md`):** la captura y todos los reportes operan SIEMPRE sobre el CLIENTE ACTIVO. `contasis_empresas` (dueño: `useEmpresas`) guarda la lista y el `activaId`; los 4 dominios de datos viven en claves por cliente (`contasis_<dominio>_<empresaId>`, C-2) y el cambio de cliente es una recarga orquestada por `useAppData` con `canSave` bajado durante la transición (C-4). Los folios de póliza son consecutivos POR TIPO Y POR CLIENTE. El RFC de la exportación SAT es `Empresa.rfc` (C-7): se precarga en Cont. Electrónica y se persiste tras exportar.
-- **Cutover de reportes (Fase 4) / Desmantelamiento Journal (Fase 5) de `PLAN_POLIZAS.md`:** Cuentas T, Balance, Estado de Resultados, Catálogo (guard de cuentas en uso) y Cont. Electrónica se derivan de la PROYECCIÓN de pólizas (orden cronológico: fecha + folio). El Libro Diario es un reporte de solo lectura con las MISMAS pólizas. Las capturas programáticas pasan por `createProgrammaticPoliza` (adaptación `entryToPolizaInput` en App). Los badges de encabezado de Balance/P&L/Cuentas T muestran el literal fijo "Consolidado".
+- **MULTI-CLIENTE (D-17/F-17 de `PLAN_MULTI_CLIENTE.md`):** la captura y todos los reportes operan SIEMPRE sobre el CLIENTE ACTIVO. `contasis_empresas` (dueño: `useEmpresas`) guarda la lista y el `activaId`; los 4 dominios de datos viven en claves por cliente (`contasis_<dominio>_<empresaId>`, C-2) y el cambio de cliente es una recarga orquestada por `useAppData` con `canSave` bajado durante la transición (C-4). COMPLEMENTO del C-4 (guard anti-race): la puerta `canSave` entra DEMASIADO TARDE en el commit del cambio de cliente (los efectos de persistencia de dominio corren antes que el de `useAppData`, por orden de declaración en App), así que CADA efecto de persistencia automática (`usePolizas`, `useCatalog` y el efecto de activos fijos en App) lleva un **guard de transición**: si la clave de storage acaba de cambiar, salta UNA escritura — sin él se escribia el estado en RAM del cliente ANTERIOR en la clave del NUEVO (contaminaba y destruyó los datos destino: el switch parecía "no hacer nada"). Los inventarios están a salvo (solo persisten por escritura explícita). Los folios de póliza son consecutivos POR TIPO Y POR CLIENTE. El RFC de la exportación SAT es `Empresa.rfc` (C-7): se precarga en Cont. Electrónica y se persiste tras exportar.
+- **Cutover de reportes (Fase 4) / Desmantelamiento Journal (Fase 5) de `PLAN_POLIZAS.md`:** Cuentas T, Balance, Estado de Resultados, Catálogo (guard de cuentas en uso) y Cont. Electrónica se derivan de la PROYECCIÓN de pólizas (orden cronológico: fecha + folio). El Libro Diario es un reporte de solo lectura con las MISMAS pólizas — y su impresión por día/rango en 3 formatos de papel vive en `polizas/DiarioPrintModal.tsx`; los consolidados tipo "póliza diaria" son artefactos SOLO de impresión que nunca persisten ni gastan folio. Las capturas programáticas pasan por `createProgrammaticPoliza` (adaptación `entryToPolizaInput` en App). Los badges de encabezado de Balance/P&L/Cuentas T muestran el literal fijo "Consolidado".
+- **Captura/impresión en FORMATO PAPEL:** la captura puede hacerse en pantalla Clásica o en la hoja clásica mexicana (toggle "Clásica | Papel" en `polizas/PolizaForm.tsx`, persistido en `contasis_modo_captura`; comparte captura/validación con el modo clásico, solo cambia la presentación). El impreso físico vive en `polizas/PolizaSheet.tsx` (`PolizaPapelSheet`, compartido por la impresión individual `PolizaPrintModal` y el diario `DiarioPrintModal`); las celdas de firma Elaboró/Revisó quedan en blanco si no hay captura (se firman a mano).
 - Los saldos de Cuentas T, Balance y Estado de Resultados **no se almacenan**: se recalculan en cada render a partir de la proyección de pólizas (vía `lib/accounting.ts`).
 - `useAppData` carga los dominios del cliente activo y ejecuta la migración ONE-SHOT a clientes (C-2): al no existir el flag `contasis_empresas_migrated`, copia los contenidos históricos de las claves GLOBALES (sin sufijo) a las claves por cliente de la empresa por defecto "Mi Empresa"; las claves globales quedan como ARCHIVO (nunca se borran). El flag `contasis_polizas_migrated` heredado se lee y respeta dentro de esa migración; esos flags ya no gobiernan el boot normal.
 
@@ -305,7 +340,7 @@ Usuario → PolizasView (captura PRINCIPAL: manual + importación Excel D-11) �
 | `JournalEntry` | Asiento (id, fecha, descripción, `movements[]`, `policyType?: 'diario'&#124;'ingreso'&#124;'egreso'`). **Formato LEGACY (Fase 5):** ya no se captura en la app; vive para la migración one-shot, respaldos v1 y sync remoto viejo |
 | `TipoPoliza` | Tipo de póliza contable: `'ingreso' \| 'egreso' \| 'diario'` (mapea a TipoPoliza SAT 1/2/3 en el XML Anexo 24) |
 | `PartidaPoliza` | Línea de una póliza de un solo lado (`accountId`, snapshot `accountCode`/`accountName`, `debit ≥ 0`, `credit ≥ 0`, `concept?`, `uuidCFDI?`, `rfcTercero?`). Regla: si `debit > 0` entonces es cargo, si no, es abono en `credit` — nunca ambos |
-| `Poliza` | Póliza contable formal (id, `folio` consecutivo INDEPENDIENTE por tipo y por CLIENTE, `tipo: TipoPoliza`, fecha, concepto, `partidas[]`, `totalDebe`/`totalHaber` recalculados al guardar con `normalizeAmount`, `elaboro?`, `autorizo?`). Unidad de captura del módulo de Pólizas (ver `PLAN_POLIZAS.md`) |
+| `Poliza` | Póliza contable formal (id, `folio` consecutivo INDEPENDIENTE por tipo y por CLIENTE, `tipo: TipoPoliza`, fecha, concepto, `partidas[]`, `totalDebe`/`totalHaber` recalculados al guardar con `normalizeAmount`, `elaboro?`, `reviso?`, `autorizo?`). Unidad de captura del módulo de Pólizas (ver `PLAN_POLIZAS.md`) |
 | `Empresa` | Cliente del contador (C-1 de `PLAN_MULTI_CLIENTE.md`): `{ id` (uuid estable; compone las claves de storage por cliente)`, nombre, rfc? }` — el RFC es el que llevan los XML SAT (C-7) |
 | `EstadoEmpresas` | Metadatos de clientes: `{ activaId: string \| null, empresas: Empresa[] }`; clave `contasis_empresas`, dueño `useEmpresas` |
 | `Journal` | Libro diario (id, nombre, `entries[]`, `subAccounts?`). **Formato LEGACY (Fase 5):** ya no existe estado RAM de diarios; el tipo sobrevive por migración/respaldo v1/sync viejo |
@@ -432,12 +467,13 @@ El `npm run build` genera además del `dist/` clásico: `manifest.webmanifest`, 
 
 - Stack: `vitest` + `@testing-library/react` + `jest-dom`, **solo devDependencies**. Config en `vitest.config.ts` (espeja el `define __APP_VERSION__` de Vite); setup global en `src/test/setup.ts` (limpieza de DOM/storage entre tests + polyfills de jsdom: `crypto.randomUUID`, `URL.createObjectURL`).
 - **Ubicación:** cada `.test.ts(x)` vive COLOCADO junto al código que prueba (`lib/`, `hooks/`, `components/`). Vitest descubre `src/**/*.test.{ts,tsx}`.
-- **Niveles cubiertos (22 archivos / 249 tests):**
-  1. Unitarias puras: `lib/accounting.test.ts` (Cuentas T, saldos por naturaleza, depreciación, INPC truncado + validación/flatten/folios/entrada-a-póliza), `lib/format.test.ts` (normalización, parseo de importaciones, sanitización de input y contrato de `parseJournalImport`), `lib/satExport.test.ts` (XML PL re-parseado: folios reales, tipos 1/2/3, CompNal, escaping, filename) y `lib/empresas.test.ts` (C-2: composición de claves por cliente + normalizadores `arrayDe`/`objetoDe`).
+- **Niveles cubiertos (28 archivos / 322 tests — 27 colocados en `src/` + `worker/tests/relay.test.ts`, que la misma pasada `npm run test` incluye):**
+  1. Unitarias puras: `lib/accounting.test.ts` (Cuentas T, saldos por naturaleza, depreciación, INPC truncado + validación/flatten/folios/entrada-a-póliza + `consolidarPolizasDiaria`), `lib/format.test.ts` (normalización, parseo de importaciones, sanitización de input y contrato de `parseJournalImport`), `lib/satExport.test.ts` (XML PL re-parseado: folios reales, tipos 1/2/3, CompNal, escaping, filename), `lib/empresas.test.ts` (C-2: composición de claves por cliente + normalizadores `arrayDe`/`objetoDe`), `lib/navigation.test.ts` (DEFAULT_TAB = polizas, composición de pestañas), `lib/unionBovedas.test.ts` (fusión F-1…F-8: análisis de entrantes y aplicación del snapshot fusionado), `lib/mnemonic.test.ts` (frase → credencial determinista) y `lib/crypto.test.ts` (AES-GCM del sobre E2EE).
   2. Funcional: `lib/export.test.ts` — el workbook Excel se RELEE con ExcelJS (solo `file-saver` mockeado) y el PDF se valida por firma `%PDF-` real.
   3. Migraciones: `lib/migrateJournalsToPolizas.test.ts` (determinismo congelado: folios por tipo, ids, CFDI/RFC) y `lib/migrateCatalogToGlobal.test.ts` (D-12: dedup por código, idempotencia, orden).
-  4. Hooks: `hooks/usePolizas` (CRUD de pólizas, folios por tipo, tipo congelado en edición, hydrate persistente + `hydrateEmpresa` por cliente, puerta `canSave`), `useEmpresas` (CRUD de clientes, guarda de último cliente C-8, hydrate, flag own), `useCatalog` (catálogo por cliente: recuperación de base, dedup por `code`, debounce gated por `canSave`, `hydrateEmpresa`), `useAppData` (boot multi-cliente: migración one-shot C-2, carga del activo, recarga por cambio de cliente C-4, fallback de metadatos corruptos SIN escribir claves), `useBackup` (respaldo v3 con todas las empresas, import v3/v2/v1, vigía 7 días, import corrupto NO restaura), `useInventories` (clave 'general' D-13, helper `inventoriesToGeneral`, `hydrateEmpresa`, sin auto-guardado), `lib/navigation.test.ts` (DEFAULT_TAB = polizas, composición de pestañas).
-  5. Render: `components/polizas/PolizaForm.test.tsx` (partida doble en vivo, tipo congelado D-8), `components/JournalView.test.tsx` (contrato de solo lectura) y `components/EmpresasModal.test.tsx` (gestor de clientes C-1/C-8: switch, alta recortada, edición nombre+RFC mayúsculas, baja con confirmación, último cliente deshabilitado).
+  4. Servicios de bóveda: `services/vaultService.test.ts` (alistamiento QR/frase, credenciales, verificación de relay) y `services/vaultSyncEngine.test.ts` (motor: debounce/coalescing K-5, chequeo pre-publicación, conflicto K-7, huella anti-eco K-11).
+  5. Hooks: `hooks/usePolizas` (CRUD de pólizas, folios por tipo, tipo congelado en edición, hydrate persistente + `hydrateEmpresa` por cliente, puerta `canSave`, guard de transición C-4), `useEmpresas` (CRUD de clientes, guarda de último cliente C-8, hydrate, flag own), `useCatalog` (catálogo por cliente: recuperación de base, dedup por `code`, debounce gated por `canSave`, `hydrateEmpresa`, guard de transición C-4), `useAppData` (boot multi-cliente: migración one-shot C-2, carga del activo, recarga por cambio de cliente C-4, fallback de metadatos corruptos SIN escribir claves), `useBackup` (respaldo v3 con todas las empresas, import v3/v2/v1, vigía 7 días, import corrupto NO restaura), `useInventories` (clave 'general' D-13, helper `inventoriesToGeneral`, `hydrateEmpresa`, sin auto-guardado), `useTemaApp` (tema → data-theme/meta theme-color).
+  6. Render: `components/polizas/PolizaForm.test.tsx` (partida doble en vivo, tipo congelado D-8 + modo papel), `components/polizas/DiarioPrintModal.test.tsx` (rango/presets y los 3 formatos del diario), `components/polizas/AsignarFoliosPendientesModal.test.tsx` (F-6), `components/JournalView.test.tsx` (contrato de solo lectura), `components/SyncModal.test.tsx` (rol dual web v0.9.9, emparejamiento), `components/EmpresasModal.test.tsx` (gestor de clientes C-1/C-8: switch, alta recortada, edición nombre+RFC mayúsculas, baja con confirmación, último cliente deshabilitado) y `components/modals/FusionBovedaModal.test.tsx` (revisión de fusión, decisiones F-8).
 - **Regla de oro:** cualquier cambio en `lib/accounting.ts`, `lib/format.ts`, `lib/importEntriesFromExcel.ts`, `lib/migrateCatalogToGlobal.ts` o los hooks de dominio DEBE dejar `npm run lint && npm run test` en verde antes de commitear; si el cambio es intencional de comportamiento, se actualiza el test en el MISMO commit.
 - *Quirk de entorno documentado:* Node 22+ trae un `localStorage` global nativo que en Windows puede instalarse sin ruta válida; `setup.ts` rebindea al de jsdom (o memoria) si hace falta. No afecta navegador/Electron.
 - Cobertura deliberadamente FUERA de alcance: render completo de `App` (requiere mock de sync/Upstash; `isDesktopRuntime` impide probar el rol escritorio en browser — mejora futura documentada en §6), el rechazo de duplicados de `CatalogView` en render (mismo aserto ya cubierto a nivel de hook en `handleCombinedAccountsUpdate`) y los tests retirados junto al dominio Journal (`useJournals.test.ts` se eliminó con su hook en Fase 5, registro de retiros en `PLAN_POLIZAS.md`).
@@ -455,6 +491,7 @@ El `npm run build` genera además del `dist/` clásico: `manifest.webmanifest`, 
 | Cambiar formato de reportes Excel/PDF | `src/lib/utils.ts` |
 | Cambiar parseo/formato del Excel de IMPORTACIÓN | `src/lib/importEntriesFromExcel.ts` (lógica) · `polizas/PolizaView.tsx` (modales, D-11) · `lib/accounting.ts` (`entriesToPolizasDiarias`) |
 | Capturar/editar/imprimir pólizas contables | `src/components/polizas/` (UI) · `src/hooks/usePolizas.ts` (reglas: folios por tipo y cliente, validación, tipo congelado) · `src/lib/accounting.ts` (validación partida doble, folio formateado) |
+| Cambiar la captura/impresión en FORMATO PAPEL (hoja clásica o diario impreso) | `polizas/PolizaForm.tsx` (toggle Clásica/Papel, `contasis_modo_captura`) · `polizas/PolizaSheet.tsx` (hoja compartida `PolizaPapelSheet`) · `polizas/PolizaPrintModal.tsx` (impresión individual) · `polizas/DiarioPrintModal.tsx` + `JournalView.tsx` (diario: día/rango y 3 formatos, `contasis_diario_formato`) · `lib/accounting.ts` (`consolidarPolizasDiaria`) |
 | Gestionar clientes (switch/alta/renombre/RFC/baja) | `src/components/EmpresasModal.tsx` (UI) · `src/hooks/useEmpresas.ts` (CRUD + activaId) · botón del header en `layout/AppHeader.tsx` |
 | Cambiar/añadir temas de UI | `src/temas.css` (remapeo por tema; alfa blanco con selectores escapados) · `src/lib/temas.ts` (catálogo/persistencia clave contasis_tema) · `src/hooks/useTemaApp.ts` (data-theme + meta theme-color) · `layout/TemaMenu.tsx` (header) + `MobileMenu.tsx` (sección Tema) · `index.html` (boot anti-salto en web) · OJO: la hoja imprimible usa `neutral-*` a propósito (sin remapeo) |
 | Cambiar cómo se cargan/cambian los clientes | `src/hooks/useAppData.ts` (boot + recarga C-4) |
