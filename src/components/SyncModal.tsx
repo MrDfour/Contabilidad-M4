@@ -43,7 +43,11 @@ import {
 interface SyncModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** TRUE en escritorio (crea/muestra bóveda); FALSE en móvil (alinea este dispositivo). */
+  /** TRUE en escritorio NATIVO (crea/muestra bóveda); FALSE en móvil nativo (alinea este
+   *  dispositivo). En WEB (PWA) es FALSE y SyncModal ofrece el ROL DUAL (v0.9.9): estado
+   *  inicial sugerido por `sugerirRolWeb` (UA) + toggle manual — la PWA puede actuar como
+   *  Escritorio (genera QR/frase, crea bóveda) o como Móvil (alinea pegando; sin escaneo
+   *  nativo, ese solo existe en el APK). Nativos NO ven el toggle (rol fijo). */
   isDesktop: boolean;
   /** Publicación forzada del snapshot (motor de auto-sync, Fase 4/5). Opcional. */
   onPublicar?: () => Promise<boolean>;
@@ -61,6 +65,20 @@ interface EntradaHistorialVista {
   deviceLabel: string;
   blob?: string; // presente solo al pedir el historial con `?full=1` (restauración)
 }
+
+/** Rol de un dispositivo WEB (PWA) en el emparejamiento dual (v0.9.9). */
+export type RolWeb = 'escritorio' | 'movil';
+
+/**
+ * Sugerencia de rol SOLO para el estado inicial de la PWA (pivot web dual);
+ * el toggle del usuario manda después. Detecta móviles/tabletas por UA
+ * (Android/iPhone/iPad/IEMobile/o la palabra Mobile); el resto (PC de
+ * escritorio/navegador de computadora) sugiere Escritorio: es el caso
+ * "Web + Móvil" natural. Con UA vacío (algunos WebView/jsdom) → Escritorio
+ * (navegador de escritorio es lo más probable según detecta la plataforma).
+ */
+export const sugerirRolWeb = (userAgent: string): RolWeb =>
+  /Android|iPhone|iPad|IEMobile|Mobile/i.test(userAgent) ? 'movil' : 'escritorio';
 
 /** Lee la lista de versiones del relay. Por defecto SOLO metadatos (listado
  *  barato, K-8); con `conBlobs` (restauración) pide `?full=1` al worker y trae
@@ -101,7 +119,14 @@ export default function SyncModal({
   /** Versión cuya restauración está esperando el segundo clic (estilo desalistar). */
   const [restaurarPendiente, setRestaurarPendiente] = useState<number | null>(null);
 
-  const etiqueta = isDesktop ? ETIQUETA_DESKTOP : ETIQUETA_MOVIL;
+  // ROL DUAL solo en WEB (v0.9.9): estado inicial por UA + toggle manual. Los
+  // nativos NO llegan aquí (Electron entra con isDesktop=true fijo; el APK es
+  // plataforma nativa → esWeb=false) — cero cambios de comportamiento nativo.
+  const [rolWeb, setRolWeb] = useState<RolWeb>(() => sugerirRolWeb(navigator.userAgent));
+  const esWeb = !isDesktop && Capacitor.getPlatform() === 'web';
+  const esDesk = isDesktop || (esWeb && rolWeb === 'escritorio');
+
+  const etiqueta = esDesk ? ETIQUETA_DESKTOP : ETIQUETA_MOVIL;
   const relayUrl = obtenerRelayUrl();
 
   const refrescar = useCallback(async () => {
@@ -309,12 +334,12 @@ export default function SyncModal({
             <div className="flex items-center justify-between p-5 border-b border-white/10">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center">
-                  {isDesktop ? <QrCode className="w-5 h-5" /> : <ScanLine className="w-5 h-5" />}
+                  {esDesk ? <QrCode className="w-5 h-5" /> : <ScanLine className="w-5 h-5" />}
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-white">Sincronización con bóveda</h3>
                   <p className="text-xs text-slate-400">
-                    {isDesktop ? 'Modo Escritorio' : 'Modo Móvil'} • cifrado AES-GCM de extremo a extremo
+                    {esDesk ? 'Modo Escritorio' : 'Modo Móvil'} • cifrado AES-GCM de extremo a extremo
                   </p>
                 </div>
               </div>
@@ -343,8 +368,40 @@ export default function SyncModal({
                 </div>
               )}
 
+              {/* ROL DUAL solo web (v0.9.9): la PWA junte Web↔Móvil o Web↔Escritorio.
+                  El escaneo nativo existe SOLO en el APK; el lado Escritorio genera
+                  QR/frase y puede crear la bóveda. No visible nunca en nativos. */}
+              {esWeb && (
+                <div className="bg-white/5 border border-white/10 rounded-xl p-3 space-y-2">
+                  <p className="text-xs uppercase tracking-wider font-bold text-slate-400">Este dispositivo actúa como</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setRolWeb('escritorio')}
+                      className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                        esDesk ? 'bg-indigo-600 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 border border-white/10'
+                      }`}
+                    >
+                      Escritorio — genera el QR
+                    </button>
+                    <button
+                      onClick={() => setRolWeb('movil')}
+                      className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                        !esDesk ? 'bg-indigo-600 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 border border-white/10'
+                      }`}
+                    >
+                      Móvil — escanea o pega
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    El lado «Escritorio» crea/abre la bóveda y muestra QR y frase de respaldo; el
+                    lado «Móvil» se alinea pegando el QR o la frase (el escaneo con cámara solo
+                    existe en la app Android).
+                  </p>
+                </div>
+              )}
+
               {/* --- Escritorio --- */}
-              {isDesktop && (
+              {esDesk && (
                 credenciales ? (
                   <div className="space-y-4">
                     <div className="bg-white/5 border border-white/10 rounded-xl p-4">
@@ -513,7 +570,7 @@ export default function SyncModal({
               )}
 
               {/* --- Móvil --- */}
-              {!isDesktop && (
+              {!esDesk && (
                 <div className="space-y-3">
                   {credenciales ? (
                     <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center space-y-2">
@@ -536,15 +593,19 @@ export default function SyncModal({
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-1 gap-2">
-                        <button
-                          onClick={alistarConQrEscaneado}
-                          disabled={ocupado}
-                          className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/30 transition-colors text-sm font-medium disabled:opacity-60"
-                        >
-                          <ScanLine className="w-4 h-4" /> Escanear QR de la bóveda
-                        </button>
-                      </div>
+                      {/* El escáner con cámara es plugin NATIVO del APK; en web el
+                          botón escondía un error — aquí solo queda pegar/frase. */}
+                      {Capacitor.getPlatform() !== 'web' && (
+                        <div className="grid grid-cols-1 gap-2">
+                          <button
+                            onClick={alistarConQrEscaneado}
+                            disabled={ocupado}
+                            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/30 transition-colors text-sm font-medium disabled:opacity-60"
+                          >
+                            <ScanLine className="w-4 h-4" /> Escanear QR de la bóveda
+                          </button>
+                        </div>
+                      )}
                       <div className="space-y-2">
                         <label className="text-xs uppercase tracking-wider font-bold text-slate-400">
                           Pegar contenido del QR o la frase de 6 palabras
