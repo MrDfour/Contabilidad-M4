@@ -36,6 +36,7 @@ import { useCatalog } from './hooks/useCatalog';
 import { useInventories, inventoriesToGeneral } from './hooks/useInventories';
 import { useEmpresas } from './hooks/useEmpresas';
 import { useBackup } from './hooks/useBackup';
+import { useTemaApp } from './hooks/useTemaApp';
 import { migrateJournalsToPolizas } from './lib/migrateJournalsToPolizas';
 import { migrateCatalogToGlobal } from './lib/migrateCatalogToGlobal';
 import { BASIC_NAV_TABS, DEFAULT_TAB, FISCAL_NAV_TABS, type AppMode, type AppTab, type NavigationTab } from './lib/navigation';
@@ -69,6 +70,8 @@ export default function App() {
   const downloadPercent = useUpdateProgress();
   const isDesktopRuntime = typeof window !== 'undefined' && ('electronAPI' in window || navigator.userAgent.toLowerCase().includes('electron'));
   const modalInfoRef = useRef<ModalInfo | null>(null);
+  // Tema de la UI: carga/persistencia por dispositivo + data-theme en <html> (src/temas.css).
+  const { tema, setTema } = useTemaApp();
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
@@ -384,9 +387,9 @@ export default function App() {
   const activeMobileTabLabel = navigationTabs.find(tab => tab.id === activeTab)?.shortLabel ?? 'Pólizas';
 
   return (
-    <div className="min-h-screen bg-[#0a0f1d] text-slate-100 font-sans selection:bg-indigo-500 selection:text-white relative overflow-x-hidden">
-      {/* Background Gradients */}
-      <div className="fixed inset-0 bg-[radial-gradient(circle_at_20%_30%,#1e293b_0%,transparent_50%),radial-gradient(circle_at_80%_70%,#334155_0%,transparent_50%)] pointer-events-none"></div>
+    <div className="min-h-screen bg-noche text-slate-100 font-sans selection:bg-indigo-500 selection:text-white relative overflow-x-hidden">
+      {/* Background Gradients (clase temática: se redefine en cada tema, src/temas.css) */}
+      <div className="fixed inset-0 fondo-ambiental pointer-events-none"></div>
 
       {/* Mobile Menu Overlay */}
       <MobileMenu
@@ -397,6 +400,8 @@ export default function App() {
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         onShowAbout={() => setShowAbout(true)}
+        tema={tema}
+        onSetTema={setTema}
       />
 
       <div className="flex h-screen overflow-hidden relative z-10">
@@ -419,6 +424,8 @@ export default function App() {
             empresaActivaNombre={empresaActiva?.nombre ?? null}
             onOpenEmpresas={() => setShowEmpresas(true)}
             indicadorBoveda={indicadorBoveda}
+            tema={tema}
+            onSetTema={setTema}
           />
 
           <main className="flex-1 overflow-y-auto pt-3">

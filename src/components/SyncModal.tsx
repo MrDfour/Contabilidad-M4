@@ -323,7 +323,7 @@ export default function SyncModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[145] flex items-center justify-center p-4 bg-[#0a0f1d]/85 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[145] flex items-center justify-center p-4 bg-noche/85 backdrop-blur-sm">
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}

@@ -220,7 +220,7 @@ export function PolizaForm({
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-start justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-[110] flex items-start justify-center p-4 bg-noche/80 backdrop-blur-sm overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -249,9 +249,9 @@ export function PolizaForm({
                 aria-label="Tipo de Póliza"
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-white appearance-none disabled:opacity-50"
               >
-                <option value="diario" className="bg-[#1e293b]">Diario</option>
-                <option value="ingreso" className="bg-[#1e293b]">Ingreso</option>
-                <option value="egreso" className="bg-[#1e293b]">Egreso</option>
+                <option value="diario" className="bg-slate-800">Diario</option>
+                <option value="ingreso" className="bg-slate-800">Ingreso</option>
+                <option value="egreso" className="bg-slate-800">Egreso</option>
               </select>
             </div>
             <div className="space-y-1.5">
@@ -342,8 +342,8 @@ export function PolizaForm({
                     aria-label={`Columna de partida ${idx + 1}`}
                     className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm outline-none text-white appearance-none"
                   >
-                    <option value="debit" className="bg-[#1e293b]">Debe</option>
-                    <option value="credit" className="bg-[#1e293b]">Haber</option>
+                    <option value="debit" className="bg-slate-800">Debe</option>
+                    <option value="credit" className="bg-slate-800">Haber</option>
                   </select>
                 </div>
                 <div className="col-span-5 md:col-span-2 space-y-1">
@@ -480,7 +480,7 @@ export function PolizaForm({
         {/* Resolución de discrepancia CFDI (patrón de EntryForm) */}
         <AnimatePresence>
           {cfdiDiscrepancia && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm">
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-noche/80 backdrop-blur-sm">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}

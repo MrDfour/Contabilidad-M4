@@ -151,7 +151,7 @@ export function CatalogView({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1">
             <label className="text-[10px] uppercase font-bold text-slate-500">Cuenta Padre (Obligatorio)</label>
-            <select required value={parentId} onChange={e => setParentId(e.target.value)} className="w-full bg-[#1e293b] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
+            <select required value={parentId} onChange={e => setParentId(e.target.value)} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
               <option value="">-- Selecciona Cuenta Mayor --</option>
               {parentAccounts.map(a => (
                 <option key={a.id} value={a.id}>{a.code} - {a.name} ({a.type})</option>

@@ -9,6 +9,8 @@ import { BarChart3, Menu, Shield, Smartphone, Users } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { APP_VERSION } from '../../lib/appMeta';
 import type { AppMode } from '../../lib/navigation';
+import type { TemaApp } from '../../lib/temas';
+import { TemaMenu } from './TemaMenu';
 
 interface AppHeaderProps {
   appMode: AppMode;
@@ -23,6 +25,9 @@ interface AppHeaderProps {
   onOpenEmpresas: () => void;
   /** Estado de la bóveda para el punto del botón Sync (Fase 5 de PLAN_SYNC_KV.md). */
   indicadorBoveda?: 'sin' | 'ok' | 'pendiente' | 'conflicto' | 'error';
+  /** Tema de la UI (v0.9.9) + setter (persistente por dispositivo). */
+  tema: TemaApp;
+  onSetTema: (t: TemaApp) => void;
 }
 
 export function AppHeader({
@@ -34,7 +39,9 @@ export function AppHeader({
   activeMobileTabLabel,
   empresaActivaNombre,
   onOpenEmpresas,
-  indicadorBoveda = 'sin'
+  indicadorBoveda = 'sin',
+  tema,
+  onSetTema
 }: AppHeaderProps) {
   return (
     <header className="relative overflow-visible border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top))' }}>
@@ -136,6 +143,7 @@ export function AppHeader({
               {activeMobileTabLabel}
             </div>
           )}
+          <TemaMenu tema={tema} onSetTema={onSetTema} />
         </div>
       </div>
     </header>

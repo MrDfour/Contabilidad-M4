@@ -180,6 +180,10 @@ Contabilidad-M4/
     │   │                        #   (D-12, PURA: dedup por code, isReadOnly false en nuevas,
     │   │                        #   idempotente). La goberna el flag `contasis_catalog_migrated`
     │   ├── appMeta.ts           # APP_VERSION (única fuente del número de versión mostrado en UI)
+    │   ├── temas.ts            # v0.9.9: catálogo de TEMAS de la UI (oscuro/claro/HC-oscuro/HC-claro),
+    │   │                       #   clave global `contasis_tema`, temaValido, COLOR_BARRA_TEMA.
+    │   │                       #   Colores en src/temas.css (remapeo var(--color-*) de Tailwind v4;
+    │   │                       #   NINGÚN componente cambia clase — el switch es data-theme en <html>).
     │   ├── utils.ts             # Exportaciones y utilidades: exportToExcel, exportTAccountsStyleToExcel,
     │   │                        #   exportToPDF (captura HTML→PDF), exportTableToPDF (autotable), readExcel,
     │   │                        #   cn (clases), calculateMonthlyDepreciation,
@@ -452,6 +456,7 @@ El `npm run build` genera además del `dist/` clásico: `manifest.webmanifest`, 
 | Cambiar parseo/formato del Excel de IMPORTACIÓN | `src/lib/importEntriesFromExcel.ts` (lógica) · `polizas/PolizaView.tsx` (modales, D-11) · `lib/accounting.ts` (`entriesToPolizasDiarias`) |
 | Capturar/editar/imprimir pólizas contables | `src/components/polizas/` (UI) · `src/hooks/usePolizas.ts` (reglas: folios por tipo y cliente, validación, tipo congelado) · `src/lib/accounting.ts` (validación partida doble, folio formateado) |
 | Gestionar clientes (switch/alta/renombre/RFC/baja) | `src/components/EmpresasModal.tsx` (UI) · `src/hooks/useEmpresas.ts` (CRUD + activaId) · botón del header en `layout/AppHeader.tsx` |
+| Cambiar/añadir temas de UI | `src/temas.css` (remapeo por tema; alfa blanco con selectores escapados) · `src/lib/temas.ts` (catálogo/persistencia clave contasis_tema) · `src/hooks/useTemaApp.ts` (data-theme + meta theme-color) · `layout/TemaMenu.tsx` (header) + `MobileMenu.tsx` (sección Tema) · `index.html` (boot anti-salto en web) · OJO: la hoja imprimible usa `neutral-*` a propósito (sin remapeo) |
 | Cambiar cómo se cargan/cambian los clientes | `src/hooks/useAppData.ts` (boot + recarga C-4) |
 | Modificar migraciones legacy | `useAppData.ts` (migración one-shot a cliente por defecto C-2, que respeta los flags heredados) · `src/lib/migrateJournalsToPolizas.ts` · `src/lib/migrateCatalogToGlobal.ts` (D-12) · `inventoriesToGeneral` en `hooks/useInventories.ts` (D-13) |
 | Ajustar el reporte del Libro Diario (solo lectura y sus exports) | `src/components/JournalView.tsx` (fecha/folio/tipo/cuenta/concepto/debe/haber) |

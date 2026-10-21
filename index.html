@@ -8,6 +8,20 @@
     <!-- Sets the Android status bar / browser theme colour to the app background -->
     <meta name="theme-color" content="#0a0f1d" />
     <title>Contabilidad M4 Pro</title>
+    <!-- Tema de la UI ANTES del primer render (web: contasis_tema vive en
+         localStorage; Electron/Android lo aplican en useEffect). Evita el
+         salto visual oscuro→claro en el arranque de la PWA. -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('contasis_tema');
+          var tema = raw ? JSON.parse(raw) : 'oscuro';
+          var validos = ['oscuro', 'claro', 'contrasteOscuro', 'contrasteClaro'];
+          if (validos.indexOf(tema) === -1) tema = 'oscuro';
+          document.documentElement.setAttribute('data-theme', tema);
+        } catch (e) { /* tema de defecto: oscuro */ }
+      })();
+    </script>
     <!-- PWA: icono en pantalla de inicio de iOS y comportamiento standalone -->
     <link rel="apple-touch-icon" href="./icon-192.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

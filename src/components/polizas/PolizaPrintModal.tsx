@@ -31,7 +31,7 @@ export function PolizaPrintModal({
   return (
     <AnimatePresence>
       {poliza && (
-        <div className="fixed inset-0 z-[115] flex items-start justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm overflow-y-auto">
+        <div className="fixed inset-0 z-[115] flex items-start justify-center p-4 bg-noche/80 backdrop-blur-sm overflow-y-auto">
           <style>{`
             @media print {
               body * { visibility: hidden !important; }
@@ -54,19 +54,19 @@ export function PolizaPrintModal({
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
-            className="w-full max-w-3xl my-8 bg-white text-slate-900 rounded-2xl shadow-2xl poliza-print-sheet"
+            className="w-full max-w-3xl my-8 bg-white text-neutral-900 rounded-2xl shadow-2xl poliza-print-sheet"
           >
             {/* Encabezado */}
-            <div className="flex items-start justify-between border-b-2 border-slate-800 px-8 pt-6 pb-4">
+            <div className="flex items-start justify-between border-b-2 border-neutral-800 px-8 pt-6 pb-4">
               <div>
                 <h3 className="text-xl font-bold tracking-tight">
                   Póliza de {TIPO_LABEL[poliza.tipo]}
                 </h3>
-                <p className="text-sm text-slate-500">Contabilidad M4 Pro</p>
+                <p className="text-sm text-neutral-500">Contabilidad M4 Pro</p>
               </div>
               <div className="text-right">
                 <p className="font-mono font-bold text-lg">{formatPolizaFolio(poliza)}</p>
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-neutral-600">
                   {new Date(`${poliza.fecha}T00:00:00`).toLocaleDateString('es-MX', {
                     day: '2-digit', month: 'long', year: 'numeric'
                   })}
@@ -77,11 +77,11 @@ export function PolizaPrintModal({
             {/* Datos generales */}
             <div className="px-8 py-4 space-y-1 text-sm">
               <p>
-                <span className="font-semibold uppercase text-[10px] text-slate-500 mr-2">Concepto:</span>
+                <span className="font-semibold uppercase text-[10px] text-neutral-500 mr-2">Concepto:</span>
                 {poliza.concepto}
               </p>
               {(poliza.elaboro || poliza.autorizo) && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-neutral-500">
                   {poliza.elaboro && <span className="mr-4">Elaboró: {poliza.elaboro}</span>}
                   {poliza.autorizo && <span>Autorizó: {poliza.autorizo}</span>}
                 </p>
@@ -91,7 +91,7 @@ export function PolizaPrintModal({
             {/* Cuerpo de cuentas */}
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-y border-slate-300 text-[10px] uppercase text-slate-600">
+                <tr className="border-y border-neutral-300 text-[10px] uppercase text-neutral-600">
                   <th className="text-left px-8 py-2 w-16 font-bold tracking-wider">Cta</th>
                   <th className="text-left px-3 py-2 font-bold tracking-wider">Nombre de cuenta</th>
                   <th className="text-left px-3 py-2 font-bold tracking-wider">Concepto</th>
@@ -101,15 +101,15 @@ export function PolizaPrintModal({
               </thead>
               <tbody>
                 {poliza.partidas.map(p => (
-                  <tr key={p.id} className="border-b border-slate-100">
+                  <tr key={p.id} className="border-b border-neutral-100">
                     <td className="px-8 py-2 font-mono text-xs">{p.accountCode}</td>
                     <td className="px-3 py-2">{p.accountName}</td>
-                    <td className="px-3 py-2 text-slate-500">{p.concept}</td>
+                    <td className="px-3 py-2 text-neutral-500">{p.concept}</td>
                     <td className="px-3 py-2 text-right font-mono">{p.debit > 0 ? formatCurrency(p.debit) : ''}</td>
                     <td className="px-8 py-2 text-right font-mono">{p.credit > 0 ? formatCurrency(p.credit) : ''}</td>
                   </tr>
                 ))}
-                <tr className="border-t-2 border-slate-800 font-bold bg-slate-50">
+                <tr className="border-t-2 border-neutral-800 font-bold bg-neutral-50">
                   <td colSpan={3} className="px-8 py-3 text-right text-xs uppercase tracking-widest">
                     Sumas iguales
                   </td>
@@ -120,10 +120,10 @@ export function PolizaPrintModal({
             </table>
 
             {/* Renglones de firma */}
-            <div className="grid grid-cols-3 gap-8 px-8 pt-16 pb-10 text-center text-xs text-slate-600">
+            <div className="grid grid-cols-3 gap-8 px-8 pt-16 pb-10 text-center text-xs text-neutral-600">
               {['Elaboró', 'Revisó', 'Autorizó'].map(firma => (
                 <div key={firma} className="space-y-1">
-                  <div className="border-t border-slate-400 mx-4" />
+                  <div className="border-t border-neutral-400 mx-4" />
                   <p className="pt-1">{firma}</p>
                 </div>
               ))}

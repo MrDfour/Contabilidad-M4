@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
+@import './temas.css';
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -8,7 +9,7 @@
 
 @layer base {
   body {
-    @apply antialiased bg-[#0a0f1d] text-slate-100;
+    @apply antialiased bg-noche text-slate-100;
   }
 
   /* Remove spinner arrows from number inputs */

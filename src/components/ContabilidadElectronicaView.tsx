@@ -149,7 +149,7 @@ export function ContabilidadElectronicaView({
             <select
               value={mes}
               onChange={e => setMes(e.target.value)}
-              className="w-full bg-[#0a0f1d] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              className="w-full bg-noche border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
             >
               {meses.map(m => (
                 <option key={m.value} value={m.value}>{m.label}</option>

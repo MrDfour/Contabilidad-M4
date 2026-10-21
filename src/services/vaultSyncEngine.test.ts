@@ -906,14 +906,14 @@ describe('vaultSyncEngine: fusión del conflicto (contenidoConflicto + aplicarSn
     expect(motor.getSucio()).toBe(true); // marcado para reenvío
     expect(puestas).toBe(1); // solo el intento que falló
 
-    // El reintento natural (schedule + debounce) SÍ publica el contenido
-    // fusionado: la huella se limpió y el conflicto informa max(local, conflicto)+1.
+    // El reintento natural (debounce) SÍ publica el contenido fusionado:
+    // la huella se limpió y el conflicto informa max(local, conflicto)+1.
+    // Bombeo robusto: avanzar en pasos del debounce hasta observar el SEGUNDO
+    // PUT y la versión nueva (la condicion vieja `versionLocal === null` sola
+    // dejaba el bombeo corto bajo carga — flake de suite completa).
     motor.schedulePublicacion();
-    await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
-    // El reintento corre dentro de los timers falsos: bombear timers/microtareas
-    // hasta el desenlace (vi.waitFor con timers falsos no siempre bombea aquí).
-    for (let i = 0; i < 200 && motor.getVersionLocal() === null; i += 1) {
-      await vi.advanceTimersByTimeAsync(100);
+    for (let i = 0; i < 120 && (puestas < 2 || motor.getVersionLocal() === null); i += 1) {
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_PUBLICACION_MS);
     }
     expect(puestas).toBe(2);
     expect(motor.getVersionLocal()).toBe(6);

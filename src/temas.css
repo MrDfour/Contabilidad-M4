@@ -1,0 +1,267 @@
+/*
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * TEMAS de la UI (v0.9.9) — remapeo de variables de Tailwind v4.
+ *
+ * El proyecto usa clases Tailwind (slate-*, white/5...) en TODOS los
+ * componentes; en v4 cada utilidad compila a var(--color-*), así que se
+ * cambia de tema SIN tocar componentes: cada tema redefine las variables
+ * bajo html[data-theme] + unas pocas sobres-escrituras de utilidades con
+ * alfa (bg-white/5...) que compilan con la var --color-white (esa NUNCA se
+ * remapea: el texto blanco sobre botones de color y el QR deben seguir
+ * siendo blancos en los 4 temas).
+ *
+ * Reglas para añadir otro tema: rampa slate_* + acentos a tintes de
+ * TEXTO legibles + color de 'noche' + los overrides de utilidades alfa.
+ */
+
+/* El fondo nocturno histórico como variable con tema (antes: hex duro en 20 archivos). */
+@theme {
+  --color-noche: #0a0f1d;
+}
+
+/* Gradiente ambiental del App (clase temática, App.tsx). */
+.fondo-ambiental {
+  background-image: radial-gradient(circle at 20% 30%, rgb(30 41 59 / 0.9) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgb(51 65 85 / 0.9) 0%, transparent 50%);
+}
+
+/* ============================================================ */
+/* TEMA CLARO — superficies blancas, tinta slate-900              */
+/* ============================================================ */
+[data-theme='claro'] {
+  --color-noche: #f1f5f9;
+
+  /* Tinta: las sombras CLARAS del dark pasan a tener texto fuerte. */
+  --color-slate-100: #0f172a;
+  --color-slate-200: #1e293b;
+  --color-slate-300: #334155;
+  --color-slate-400: #475569;
+  --color-slate-500: #64748b;
+  --color-slate-600: #64748b;
+
+  /* Superficies: las de FONDO del dark pasan a papel casi blanco. */
+  --color-slate-700: #e2e8f0;   /* hover de botones secundarios */
+  --color-slate-800: #ffffff;
+  --color-slate-900: #ffffff;   /* modales */
+  --color-slate-950: #f8fafc;   /* inputs (bg-slate-950/60) */
+  --color-slate-50: #f8fafc;
+
+  /* Acentos: en claro los tonos vivos del dark pierden contraste como
+     TEXTO, así que los 300/400 se llevan a tintes oscuros equivalentes.
+     (Los fondos de color con alfa se quedan como están.) */
+  --color-indigo-300: #4f46e5;
+  --color-indigo-400: #4338ca;
+  --color-emerald-300: #059669;
+  --color-emerald-400: #047857;
+  --color-amber-300: #b45309;
+  --color-amber-400: #b45309;
+  --color-rose-300: #be123c;
+  --color-rose-400: #be123c;
+  --color-sky-300: #0369a1;
+  --color-sky-400: #0284c7;
+  --color-teal-300: #0f766e;
+  --color-teal-400: #0f766e;
+  --color-blue-300: #1d4ed8;
+  --color-blue-400: #2563eb;
+
+  /* Tonos 100/200 de acento (badges suaves) pierden todo contraste en papel. */
+  --color-indigo-200: #4f46e5;
+  --color-rose-200: #be123c;
+  --color-amber-200: #b45309;
+}
+
+[data-theme='claro'] .fondo-ambiental {
+  background-image: radial-gradient(circle at 20% 30%, rgb(148 163 184 / 0.18) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgb(129 140 248 / 0.12) 0%, transparent 50%);
+}
+
+/* Alfa blanco → alfa tinta (el blanco con % no existe en papel). */
+[data-theme='claro'] .bg-white\/5 { background-color: rgb(15 23 42 / 0.04); }
+[data-theme='claro'] .bg-white\/10 { background-color: rgb(15 23 42 / 0.07); }
+[data-theme='claro'] .bg-white\/15 { background-color: rgb(15 23 42 / 0.09); }
+[data-theme='claro'] .bg-white\/20 { background-color: rgb(15 23 42 / 0.12); }
+[data-theme='claro'] .bg-white\/30 { background-color: rgb(15 23 42 / 0.18); }
+[data-theme='claro'] .hover\:bg-white\/5:hover { background-color: rgb(15 23 42 / 0.07); }
+[data-theme='claro'] .hover\:bg-white\/10:hover { background-color: rgb(15 23 42 / 0.12); }
+[data-theme='claro'] .hover\:bg-white\/20:hover { background-color: rgb(15 23 42 / 0.2); }
+[data-theme='claro'] .border-white\/5 { border-color: rgb(15 23 42 / 0.1); }
+[data-theme='claro'] .border-white\/10 { border-color: rgb(15 23 42 / 0.14); }
+[data-theme='claro'] .border-white\/15 { border-color: rgb(15 23 42 / 0.18); }
+[data-theme='claro'] .border-white\/20 { border-color: rgb(15 23 42 / 0.22); }
+[data-theme='claro'] .border-white\/30 { border-color: rgb(15 23 42 / 0.3); }
+[data-theme='claro'] .hover\:border-white\/20:hover { border-color: rgb(15 23 42 / 0.35); }
+[data-theme='claro'] .divide-white\/5 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(15 23 42 / 0.1); }
+[data-theme='claro'] .divide-white\/10 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(15 23 42 / 0.14); }
+[data-theme='claro'] .divide-white\/20 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(15 23 42 / 0.22); }
+
+/* text-white como TEXTO: en claro la tinta es oscura. Los botones de color
+   reclaman su blanco de vuelta más abajo (selectores compuestos). */
+[data-theme='claro'] .text-white { color: #0f172a; }
+[data-theme='claro'] .hover\:text-white:hover { color: #0f172a; }
+
+/* Botones de color: el texto blanco SÍ sigue blanco (clases en el mismo
+   elemento). Mantener al día con los combos bg-{color}-600 text-white. */
+[data-theme='claro'] .text-white.bg-indigo-600,
+[data-theme='claro'] .text-white.bg-indigo-600\/80,
+[data-theme='claro'] .text-white.bg-emerald-600,
+[data-theme='claro'] .text-white.bg-amber-600,
+[data-theme='claro'] .text-white.bg-amber-600\/80,
+[data-theme='claro'] .text-white.bg-rose-600 { color: #ffffff; }
+
+/* Logo de la app: icono blanco DENTRO del cuadro indigo (padre-hijo). */
+[data-theme='claro'] .bg-indigo-600 .text-white { color: #ffffff; }
+
+/* ============================================================ */
+/* TEMA ALTO CONTRASTE OSCURO — negro puro, texto blanco puro     */
+/* ============================================================ */
+[data-theme='contrasteOscuro'] {
+  --color-noche: #000000;
+
+  --color-slate-100: #ffffff;
+  --color-slate-200: #ffffff;
+  --color-slate-300: #ffffff;
+  --color-slate-400: #e2e8f0;
+  --color-slate-500: #cbd5e1;
+  --color-slate-600: #e2e8f0;
+  --color-slate-700: #171717;
+  --color-slate-800: #0f0f0f;
+  --color-slate-900: #000000;
+  --color-slate-950: #050505;
+  --color-slate-50: #171717;
+
+  --color-indigo-300: #a5b4fc;
+  --color-indigo-400: #a5b4fc;
+  --color-emerald-300: #4ade80;
+  --color-emerald-400: #4ade80;
+  --color-amber-300: #fde047;
+  --color-amber-400: #facc15;
+  --color-rose-300: #fb7185;
+  --color-rose-400: #fb7185;
+  --color-sky-300: #38bdf8;
+  --color-sky-400: #38bdf8;
+  --color-teal-300: #2dd4bf;
+  --color-teal-400: #2dd4bf;
+  --color-blue-300: #60a5fa;
+  --color-blue-400: #60a5fa;
+
+  /* Tonos 200 de acento: al máximo aprovechable sobre negro puro. */
+  --color-indigo-200: #a5b4fc;
+  --color-rose-200: #fb7185;
+  --color-amber-200: #fde047;
+}
+
+[data-theme='contrasteOscuro'] .fondo-ambiental {
+  background-image: radial-gradient(circle at 20% 30%, rgb(255 255 255 / 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgb(165 180 252 / 0.1) 0%, transparent 50%);
+}
+
+[data-theme='contrasteOscuro'] .bg-white\/5 { background-color: rgb(255 255 255 / 0.16); }
+[data-theme='contrasteOscuro'] .bg-white\/10 { background-color: rgb(255 255 255 / 0.2); }
+[data-theme='contrasteOscuro'] .bg-white\/15 { background-color: rgb(255 255 255 / 0.24); }
+[data-theme='contrasteOscuro'] .bg-white\/20 { background-color: rgb(255 255 255 / 0.28); }
+[data-theme='contrasteOscuro'] .bg-white\/30 { background-color: rgb(255 255 255 / 0.35); }
+[data-theme='contrasteOscuro'] .hover\:bg-white\/5:hover { background-color: rgb(255 255 255 / 0.24); }
+[data-theme='contrasteOscuro'] .hover\:bg-white\/10:hover { background-color: rgb(255 255 255 / 0.28); }
+[data-theme='contrasteOscuro'] .hover\:bg-white\/20:hover { background-color: rgb(255 255 255 / 0.34); }
+[data-theme='contrasteOscuro'] .border-white\/5 { border-color: rgb(255 255 255 / 0.5); }
+[data-theme='contrasteOscuro'] .border-white\/10 { border-color: rgb(255 255 255 / 0.55); }
+[data-theme='contrasteOscuro'] .border-white\/15 { border-color: rgb(255 255 255 / 0.6); }
+[data-theme='contrasteOscuro'] .border-white\/20 { border-color: rgb(255 255 255 / 0.65); }
+[data-theme='contrasteOscuro'] .border-white\/30 { border-color: rgb(255 255 255 / 0.75); }
+[data-theme='contrasteOscuro'] .hover\:border-white\/20:hover { border-color: rgb(255 255 255 / 0.85); }
+[data-theme='contrasteOscuro'] .divide-white\/5 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(255 255 255 / 0.5); }
+[data-theme='contrasteOscuro'] .divide-white\/10 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(255 255 255 / 0.55); }
+[data-theme='contrasteOscuro'] .divide-white\/20 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(255 255 255 / 0.65); }
+
+/* FOCUS visible y declarado: la firma de a11y del tema HC. */
+[data-theme='contrasteOscuro'] :focus-visible {
+  outline: 2px solid #fde047;
+  outline-offset: 1px;
+}
+
+/* ============================================================ */
+/* TEMA ALTO CONTRASTE CLARO — blanco puro, texto negro puro      */
+/* ============================================================ */
+[data-theme='contrasteClaro'] {
+  --color-noche: #ffffff;
+
+  --color-slate-100: #000000;
+  --color-slate-200: #000000;
+  --color-slate-300: #111827;
+  --color-slate-400: #1f2937;
+  --color-slate-500: #374151;
+  --color-slate-600: #374151;
+  --color-slate-700: #ececec;
+  --color-slate-800: #fafafa;
+  --color-slate-900: #ffffff;
+  --color-slate-950: #f7f7f7;
+  --color-slate-50: #f7f7f7;
+
+  --color-indigo-300: #312e81;
+  --color-indigo-400: #312e81;
+  --color-emerald-300: #065f46;
+  --color-emerald-400: #065f46;
+  --color-amber-300: #92400e;
+  --color-amber-400: #92400e;
+  --color-rose-300: #881337;
+  --color-rose-400: #881337;
+  --color-sky-300: #0c4a6e;
+  --color-sky-400: #0c4a6e;
+  --color-teal-300: #134e4a;
+  --color-teal-400: #134e4a;
+  --color-blue-300: #1e3a8a;
+  --color-blue-400: #1e3a8a;
+
+  /* Tonos 100/200 de acento (badges suaves): tinta oscura al máximo. */
+  --color-indigo-200: #312e81;
+  --color-rose-200: #881337;
+  --color-amber-200: #92400e;
+}
+
+[data-theme='contrasteClaro'] .fondo-ambiental {
+  background-image: radial-gradient(circle at 20% 30%, rgb(0 0 0 / 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgb(79 70 229 / 0.05) 0%, transparent 50%);
+}
+
+[data-theme='contrasteClaro'] .bg-white\/5 { background-color: rgb(0 0 0 / 0.06); }
+[data-theme='contrasteClaro'] .bg-white\/10 { background-color: rgb(0 0 0 / 0.09); }
+[data-theme='contrasteClaro'] .bg-white\/15 { background-color: rgb(0 0 0 / 0.11); }
+[data-theme='contrasteClaro'] .bg-white\/20 { background-color: rgb(0 0 0 / 0.14); }
+[data-theme='contrasteClaro'] .bg-white\/30 { background-color: rgb(0 0 0 / 0.2); }
+[data-theme='contrasteClaro'] .hover\:bg-white\/5:hover { background-color: rgb(0 0 0 / 0.1); }
+[data-theme='contrasteClaro'] .hover\:bg-white\/10:hover { background-color: rgb(0 0 0 / 0.14); }
+[data-theme='contrasteClaro'] .hover\:bg-white\/20:hover { background-color: rgb(0 0 0 / 0.2); }
+[data-theme='contrasteClaro'] .border-white\/5 { border-color: rgb(0 0 0 / 0.7); }
+[data-theme='contrasteClaro'] .border-white\/10 { border-color: rgb(0 0 0 / 0.75); }
+[data-theme='contrasteClaro'] .border-white\/15 { border-color: rgb(0 0 0 / 0.8); }
+[data-theme='contrasteClaro'] .border-white\/20 { border-color: rgb(0 0 0 / 0.85); }
+[data-theme='contrasteClaro'] .border-white\/30 { border-color: rgb(0 0 0 / 0.9); }
+[data-theme='contrasteClaro'] .hover\:border-white\/20:hover { border-color: rgb(0 0 0 / 1); }
+[data-theme='contrasteClaro'] .divide-white\/5 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(0 0 0 / 0.7); }
+[data-theme='contrasteClaro'] .divide-white\/10 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(0 0 0 / 0.75); }
+[data-theme='contrasteClaro'] .divide-white\/20 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(0 0 0 / 0.85); }
+
+/* text-white como TEXTO: negro puro. Botones de color y logo reclaman su blanco. */
+[data-theme='contrasteClaro'] .text-white { color: #000000; }
+[data-theme='contrasteClaro'] .hover\:text-white:hover { color: #000000; }
+
+/* Botones de color: el texto blanco SÍ sigue blanco (clases en el mismo
+   elemento). Mantener al día con los combos bg-{color}-600 text-white. */
+[data-theme='contrasteClaro'] .text-white.bg-indigo-600,
+[data-theme='contrasteClaro'] .text-white.bg-indigo-600\/80,
+[data-theme='contrasteClaro'] .text-white.bg-emerald-600,
+[data-theme='contrasteClaro'] .text-white.bg-amber-600,
+[data-theme='contrasteClaro'] .text-white.bg-amber-600\/80,
+[data-theme='contrasteClaro'] .text-white.bg-rose-600 { color: #ffffff; }
+
+/* Logo de la app: icono blanco DENTRO del cuadro indigo (padre-hijo). */
+[data-theme='contrasteClaro'] .bg-indigo-600 .text-white { color: #ffffff; }
+
+[data-theme='contrasteClaro'] :focus-visible {
+  outline: 2px solid #000000;
+  outline-offset: 1px;
+}

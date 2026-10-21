@@ -304,9 +304,9 @@ export function FixedAssetsView({
               onChange={e => setSelectedFiscalAssetId(e.target.value)}
               className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white outline-none"
             >
-              <option value="" className="bg-[#1e293b]">Selecciona un activo</option>
+              <option value="" className="bg-slate-800">Selecciona un activo</option>
               {fixedAssets.map(asset => (
-                <option key={asset.id} value={asset.id} className="bg-[#1e293b]">{asset.name}</option>
+                <option key={asset.id} value={asset.id} className="bg-slate-800">{asset.name}</option>
               ))}
             </select>
           </div>
@@ -343,7 +343,7 @@ export function FixedAssetsView({
 
       <AnimatePresence>
         {showDepreciationModal && (
-          <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-[#0a0f1d]/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-noche/80 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}

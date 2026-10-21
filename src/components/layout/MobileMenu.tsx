@@ -5,10 +5,19 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertCircle, BarChart3 } from 'lucide-react';
+import { AlertCircle, BarChart3, Contrast, Moon, Sun } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { APP_VERSION } from '../../lib/appMeta';
 import type { AppTab, NavigationTab } from '../../lib/navigation';
+import { TEMAS_APP, type TemaApp } from '../../lib/temas';
+
+/** Icono por tema (MobileMenu lista las 4 opciones de TEMAS_APP). */
+const ICONO_TEMA: Record<TemaApp, React.ReactNode> = {
+  oscuro: <Moon className="w-5 h-5" />,
+  claro: <Sun className="w-5 h-5" />,
+  contrasteOscuro: <Contrast className="w-5 h-5" />,
+  contrasteClaro: <Contrast className="w-5 h-5" />
+};
 
 interface MobileNavItemProps {
   /** `key` lo extrae el runtime de React; se declara solo para satisfacer tsc. */
@@ -47,6 +56,9 @@ interface MobileMenuProps {
   activeTab: AppTab;
   onSelectTab: (tab: AppTab) => void;
   onShowAbout: () => void;
+  /** Tema de la UI (v0.9.9) + setter (persistente por dispositivo). */
+  tema: TemaApp;
+  onSetTema: (t: TemaApp) => void;
 }
 
 export function MobileMenu({
@@ -56,7 +68,9 @@ export function MobileMenu({
   navigationTabs,
   activeTab,
   onSelectTab,
-  onShowAbout
+  onShowAbout,
+  tema,
+  onSetTema
 }: MobileMenuProps) {
   return (
     <AnimatePresence>
@@ -74,7 +88,7 @@ export function MobileMenu({
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed inset-y-0 left-0 w-72 bg-[#0a0f1d] border-r border-white/10 z-[70] p-6 flex flex-col gap-8 shadow-2xl"
+            className="fixed inset-y-0 left-0 w-72 bg-noche border-r border-white/10 z-[70] p-6 flex flex-col gap-8 shadow-2xl"
             style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)' }}
           >
             <div className="flex items-center gap-3">
@@ -94,6 +108,19 @@ export function MobileMenu({
                   onClick={() => { onSelectTab(tab.id); onClose(); }}
                   icon={React.createElement(tab.icon, { className: 'w-5 h-5' })}
                   label={tab.label}
+                />
+              ))}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-[10px] uppercase font-bold text-slate-500 mb-2 pl-1 tracking-widest">Tema de la interfaz</p>
+              {TEMAS_APP.map(opcion => (
+                <MobileNavItem
+                  key={opcion.id}
+                  active={tema === opcion.id}
+                  onClick={() => { onSetTema(opcion.id); onClose(); }}
+                  icon={ICONO_TEMA[opcion.id]}
+                  label={opcion.etiqueta}
                 />
               ))}
             </div>
