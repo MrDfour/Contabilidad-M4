@@ -5,15 +5,19 @@
 
 import { ScrollText } from 'lucide-react';
 import type { Poliza } from '../../types';
-import { PolizaCard } from './PolizaCard';/** Listado de pólizas (desplegado de PolizaCard) con estados vacíos diferenciados. */
+import { PolizaCard } from './PolizaCard';
+/** Listado de pólizas (desplegado de PolizaCard) con estados vacíos diferenciados. */
 export function PolizaList({
   polizas,
+  empresaId,
   hayFiltroActivo,
   onEdit,
   onDelete,
   onPrint
 }: {
   polizas: Poliza[],
+  /** Contexto del anexo de cheques (Fase 4 PLAN_CHEQUES.md). */
+  empresaId: string | null,
   hayFiltroActivo: boolean,
   onEdit: (p: Poliza) => void,
   onDelete: (p: Poliza) => void,
@@ -41,7 +45,7 @@ export function PolizaList({
   return (
     <div className="space-y-4">
       {polizas.map(p => (
-        <PolizaCard key={p.id} poliza={p} onEdit={onEdit} onDelete={onDelete} onPrint={onPrint} />
+        <PolizaCard key={p.id} poliza={p} empresaId={empresaId} onEdit={onEdit} onDelete={onDelete} onPrint={onPrint} />
       ))}
     </div>
   );

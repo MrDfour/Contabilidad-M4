@@ -1,6 +1,6 @@
 # Contabilidad M4 Pro
 
-Contabilidad M4 Pro es una app de gestión contable para escritorio y móvil. Su captura principal son las **Pólizas Contables** (ingreso, egreso y diario con partida doble validada), a partir de las cuales se generan automáticamente el **Libro Diario** (reporte consolidado), las **Cuentas T**, el **Balance General** y el **Estado de Resultados**. Diseñada para contadores externos, la app admite **varios Clientes**: cada cliente tiene su propio catálogo, activos fijos, inventario, pólizas y RFC para los archivos SAT.
+Contabilidad M4 Pro es una app de gestión contable para escritorio y móvil. Su captura principal son las **Pólizas Contables** (ingreso, egreso, diario y cheque, con partida doble validada), a partir de las cuales se generan automáticamente el **Libro Diario** (reporte consolidado), las **Cuentas T**, el **Balance General** y el **Estado de Resultados**. Diseñada para contadores externos, la app admite **varios Clientes**: cada cliente tiene su propio catálogo, activos fijos, inventario, pólizas y RFC para los archivos SAT.
 
 > Versión actual: **v0.8.0** · Autor: Fernando Martinez · Licencia: Apache-2.0
 
@@ -85,14 +85,23 @@ Las **Pólizas Contables** son la unidad de captura principal de la aplicación 
 #### Crear una póliza
 1. Haz clic en **"Nueva Póliza"** (esquina superior derecha del módulo).
 2. Completa los campos:
-   - **Tipo** – Ingreso (1), Egreso (2) o Diario (3) según el Anexo 24 del SAT. El folio se asigna automáticamente y es **consecutivo por tipo** (ING 1, 2, 3… / EGR 1, 2, 3… / DIA 1, 2, 3…).
+   - **Formato** – elige la hoja: Ingreso (1), Egreso (2), Diario (3) o **Cheque** según el Anexo 24 del SAT (el cheque se exporta a SAT como egreso, tipo 2). El folio se asigna automáticamente y es **consecutivo por tipo** (ING 1, 2, 3… / EGR 1, 2, 3… / DIA 1, 2, 3… / CHE 1, 2, 3…). La captura abre en **formato papel** (hoja printable); el enlace "usar captura clásica (campos)" cambia al modo de columnas.
    - **Fecha** y **Concepto** de la operación.
    - **Partidas** – cada fila es un lado del asiento: cuenta, cargo (Debe) o abono (Haber), monto y concepto opcional.
 3. La **partida doble se valida en vivo**: el guardado solo se habilita cuando las sumas del Debe y del Haber coinciden ("Sumas iguales") y hay al menos 2 partidas.
 4. En **Modo Fiscal** cada partida admite **CFDI**: UUID leído directo de un XML (botón "Leer CFDI") y RFC del tercero, usados por el XML SAT de Pólizas y la DIOT.
 
+#### Póliza de Cheque (con imagen del cheque)
+
+Además del asiento contable, la póliza de cheque lleva sus **datos propios**: Nº de cheque (el folio bancario, distinto del folio contable CHE), Banco y Beneficiario.
+
+- **Imagen del cheque**: puedes adjuntar una foto/escaneo al crear la póliza; la app la comprime automáticamente para que pese poco (objetivo ~150 KB) sin perder legibilidad. La imagen se ve como **miniatura en la tarjeta** (clic la agranda).
+- **La imagen vive solo en tu equipo**: no viaja por la sincronización ni en los respaldos (esos llevan sus datos: peso, fecha y huella). En otro dispositivo verás el aviso *"solo en su equipo"* en lugar de la foto.
+- **Limpieza automática**: si guardaste una imagen y la póliza no llegó a crearse, la app te avisa durante un día para que la rescates (descargarla a tu dispositivo) o la descartes; al quinto día se borra sola.
+- **Impresión**: el botón Imprimir saca la **hoja de póliza de cheque** con espacio en blanco para calcar la imagen a mano, los datos del cheque y una línea de firma de recibido.
+
 #### Filtrado y búsqueda
-- Chips **Todas / Ingresos / Egresos / Diario** con conteo por tipo.
+- Chips **Todas / Ingresos / Egresos / Diario / Cheques** con conteo por tipo.
 - Buscador por folio numérico o concepto.
 - Pólizas se listan con su folio formateado (ej. `ING 0005`), desglose de partidas y las sumas del Debe/Haber.
 
@@ -101,7 +110,7 @@ Las **Pólizas Contables** son la unidad de captura principal de la aplicación 
 - La papelera pide confirmación antes de eliminar.
 
 #### Imprimir formato físico
-- Botón "Imprimir" → formato imprimible con distintivo del tipo, desglose de partidas, sumas iguales y renglones de firma **Elaboró / Revisó / Autorizó**.
+- Botón "Imprimir" → hoja imprimible según el tipo (póliza de cheque con su hoja propia) con distintivo del tipo, desglose de partidas, sumas iguales y renglones de firma **Elaboró / Revisó / Autorizó**.
 
 #### Importar desde Excel
 1. Descarga la **Plantilla** para conocer el formato. Las columnas son:
@@ -125,6 +134,7 @@ Las **Pólizas Contables** son la unidad de captura principal de la aplicación 
 El Libro Diario ya no captura movimientos: es un **reporte consolidado de solo lectura** que refleja todas las pólizas ordenadas cronológicamente (fecha + folio).
 
 - Tabla clarina **FECHA / FOLIO / TIPO / CUENTA / CONCEPTO / DEBE / HABER**, con las sumas iguales al final.
+- **Toggle "Incluir cheques"**: decide si las pólizas de cheque entran al libro impreso completo (encendido por defecto). Con él apagado, el aviso te dice cuántos cheques se excluyeron.
 - Exportación a **Excel** y **PDF** (`Libro_Diario_Consolidado`) con cabecera y firmas.
 - Todas las capturas (manual, importación, cierre y depreciación de activos) son automáticas desde Pólizas.
 
@@ -296,7 +306,7 @@ La app sincroniza datos entre dispositivos con una **bóveda personal end-to-end
 - **Relay propio en Cloudflare Workers + KV** (sin costo en el plan gratuito) con WebSocket en vivo y degradación a sondeo.
 - **Cifrado extremo a extremo (AES-GCM 256)**: el relay solo ve blobs ilegibles; las claves nacen en tu dispositivo.
 - **Alistamiento**: el escritorio crea la bóveda y comparte la credencial con la app móvil mediante **QR** (data GET) o **frase mnemónica determinista de 6 palabras** (la frase genera la misma bóveda en cualquier dispositivo; guárdala EN PAPEL).
-- **Auto-sync completo multi-cliente**: la bóveda transporta un respaldo v3 de TODAS las empresas; restaurar remoto reusa exactamente el camino de "Restaurar respaldo".
+- **Auto-sync completo multi-cliente**: la bóveda transporta un respaldo v3 de TODAS las empresas; restaurar remoto reusa exactamente el camino de "Restaurar respaldo". **Las imágenes de cheques NO viajan** (el respaldo/bóveda lleva sus metadatos: peso, fecha y huella; la foto vive solo en el equipo original).
 - **Debounce de publicación (1.5 s) + coalescing (120 s)** para respetar la cuota gratuita de KV; "Publicar ahora" fuerza el envío.
 - **Regla de conflicto** ("manos sucias"): si solo un lado cambió, se aplica automáticamente; si ambos cambiaron, eliges **Conservar datos locales** o **Sobrescribir con datos remotos**; la versión ganadora queda vigente para todos los dispositivos.
 - **Historial** (máximo 5 estados) con TTL de 30 días, consultable desde el modal como metadatos de versión, fecha y dispositivo.
@@ -423,6 +433,7 @@ Los datos se almacenan localmente. Con multi-cliente, los datos de cada cliente 
 - `contasis_accounts_<id>` – catálogo de cuentas del cliente (base readonly + propias).
 - `contasis_final_inventories_<id>` – mapa `{ general: inventarioFinal }` del cliente.
 - `contasis_fixed_assets_<id>` – activos fijos del cliente.
+- `contasis_anexos_<id>` – registro de metadatos de las imágenes de cheques (peso, fecha y huella; **la imagen en sí** vive aparte en el almacenamiento local del dispositivo: IndexedDB en web, archivos internos en Android/Escritorio).
 - `contasis_journals` – histórico de diarios legacy (si venías de una versión anterior; solo lectura, no se elimina desde la app).
 - Claves sin sufijo (`contasis_polizas`, `contasis_accounts`, etc.) – archivo histórico de tu contabilidad previa a clientes; la migración las copió al primer cliente y no se vuelven a usar.
 

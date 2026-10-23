@@ -452,4 +452,50 @@ describe('PolizaForm CH-8 de PLAN_CHEQUES.md (FORMATO, hoja recordada, cheque)',
     fireEvent.click(submitButton());
     expect((onSave.mock.calls[0][0] as PolizaInput).cheque).toBeUndefined();
   });
+
+  it('anexo (regresión de la carrera 2026-10-23): el archivo LLEGA a onSave como 2º argumento SÍNCRONO', () => {
+    // Antes: onAnexoPendiente avisaba por un useState del dueño, que React
+    // actualiza DESPUÉS del evento; al guardar el anexo todavía era null y
+    // la imagen nunca se procesaba. Ahora viaja junto al PolizaInput.
+    const onSave = vi.fn();
+    const { container } = render(
+      <PolizaForm accounts={accounts} appMode="basic" modo="clasica" onSave={onSave} onCancel={vi.fn()} />
+    );
+    fireEvent.change(tipoSelect(), { target: { value: 'cheque' } });
+    fireEvent.change(conceptoGeneral(), { target: { value: 'Pago con cheque' } });
+    fireEvent.change(amount(1), { target: { value: '100' } });
+    fireEvent.change(amount(2), { target: { value: '100' } });
+
+    const archivo = new File(['foto-del-cheque'], 'cheque-foto.jpg', { type: 'image/jpeg' });
+    const picker = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(picker, 'files', { value: [archivo] });
+    fireEvent.change(picker);
+    fireEvent.click(submitButton());
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const [input, transportado] = onSave.mock.calls[0];
+    expect(input.tipo).toBe('cheque');
+    expect(transportado).toBe(archivo);
+    expect(transportado.name).toBe('cheque-foto.jpg');
+  });
+
+  it('anexo: si el usuario abandona el tipo cheque, el archivo NO viaja al guardado', () => {
+    const onSave = vi.fn();
+    const { container } = render(
+      <PolizaForm accounts={accounts} appMode="basic" modo="clasica" onSave={onSave} onCancel={vi.fn()} />
+    );
+    fireEvent.change(tipoSelect(), { target: { value: 'cheque' } });
+    const archivo = new File(['foto'], 'cheque.jpg', { type: 'image/jpeg' });
+    const picker = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(picker, 'files', { value: [archivo] });
+    fireEvent.change(picker);
+    fireEvent.change(tipoSelect(), { target: { value: 'diario' } });
+    fireEvent.change(conceptoGeneral(), { target: { value: 'Asiento simple' } });
+    fireEvent.change(amount(1), { target: { value: '100' } });
+    fireEvent.change(amount(2), { target: { value: '100' } });
+    fireEvent.click(submitButton());
+    const [input, transportado] = onSave.mock.calls[0];
+    expect(input.tipo).toBe('diario');
+    expect(transportado).toBeUndefined();
+  });
 });

@@ -3,17 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Pencil, Printer, Trash2, UserCheck, UserPen } from 'lucide-react';
-import type { Poliza, TipoPoliza } from '../../types';
+import { ImageOff, Pencil, Printer, Trash2, UserCheck, UserPen } from 'lucide-react';
+import type { ChequeAnexo, Poliza, TipoPoliza } from '../../types';
 import { formatCurrency } from '../../lib/format';
 import { formatPolizaFolio } from '../../lib/accounting';
+import { cargarAnexo } from '../../services/attachmentService';
+import { VisorImagen } from './VisorImagen';
 
 /** `key` lo extrae el runtime de React; se declara solo para satisfacer tsc (patrón de EntryCard). */
 interface PolizaCardProps {
   key?: React.Key;
   poliza: Poliza;
+  /** Contexto del anexo (attachmentService es dueño del binario local). */
+  empresaId: string | null;
   onEdit: (p: Poliza) => void;
   onDelete: (p: Poliza) => void;
   onPrint: (p: Poliza) => void;
@@ -26,9 +30,81 @@ const TIPO_STYLES: Record<TipoPoliza, { label: string; badge: string }> = {
   cheque: { label: 'Cheque', badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30' }
 };
 
+/**
+ * Miniatura del anexo del cheque en la TARJETA (decisión 2026-10-23):
+ * imagen compacta (~64 px) a la derecha del encabezado; clic la abre grande.
+ * Si este equipo NO tiene el binario (CH-11: la imagen no viaja), se enseña
+ * el placeholder "solo en el equipo original" con pista de bytes/fecha.
+ * La URL del objeto se revoca al quitar/desmontar (sin fugas).
+ */
+function MiniaturaAnexo({ empresaId, anexo }: { empresaId: string | null; anexo: ChequeAnexo }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [grande, setGrande] = useState(false);
+  const [busco, setBusco] = useState(false);
+
+  useEffect(() => {
+    let propia = true;
+    let objectUrl: string | null = null;
+    const descargar = async () => {
+      const blob = await cargarAnexo(empresaId ?? '', anexo.sha256);
+      if (!propia) return;
+      setBusco(true);
+      if (blob) {
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      } else {
+        setUrl(null);
+      }
+    };
+    descargar();
+    return () => {
+      propia = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [empresaId, anexo.sha256]);
+
+  const pista = `Anexo del cheque · ${(anexo.bytes / 1024).toFixed(0)} KB · ${new Date(anexo.capturadoEn).toLocaleDateString('es-MX')}`;
+
+  return (
+    <>
+      {url ? (
+        <button
+          type="button"
+          aria-label="Ver imagen del cheque"
+          onClick={() => setGrande(true)}
+          className="shrink-0 rounded-lg overflow-hidden border border-amber-500/30 hover:border-amber-400/60 transition-colors"
+        >
+          <img
+            src={url}
+            alt={pista}
+            className="w-16 h-16 object-cover"
+          />
+        </button>
+      ) : (
+        busco && (
+          <span
+            title="La imagen anexa vive SOLO en el equipo original — la sincronización de imágenes no está incluida (CH-11)."
+            className="shrink-0 inline-flex items-center gap-1 w-16 h-16 rounded-lg border border-dashed border-slate-600 text-slate-500 text-[8px] leading-tight text-center px-1 items-center justify-center"
+          >
+            <ImageOff className="w-4 h-4 mx-auto" />
+            solo en su equipo
+          </span>
+        )
+      )}
+      {/* Visor en grande vía PORTAL (VisorImagen): a nivel de página para que el
+          `fixed` ancle SIEMPRE al viewport — sin él vivía dentro de un ancestro
+          con transformes (motion) y quedaba recortado a la tarjeta. */}
+      {grande && url && (
+        <VisorImagen url={url} titulo="Imagen del cheque" onCerrar={() => setGrande(false)} />
+      )}
+    </>
+  );
+}
+
 /** Tarjeta individual de póliza con desglose de partidas y acciones (editar/imprimir/eliminar). */
 export function PolizaCard({
   poliza,
+  empresaId,
   onEdit,
   onDelete,
   onPrint
@@ -64,6 +140,11 @@ export function PolizaCard({
               {poliza.cheque.beneficiario ? ` · ${poliza.cheque.beneficiario}` : ''}
             </p>
           )}
+          {/* Fase 4 de PLAN_CHEQUES.md: miniatura compacta del anexo (CH-16: la lista
+              da 1 imagen por póliza en esta fase; se muestra la primera). */}
+          {poliza.tipo === 'cheque' && poliza.cheque?.anexos?.length
+            ? <div className="pt-1"><MiniaturaAnexo empresaId={empresaId} anexo={poliza.cheque.anexos[0]} /></div>
+            : null}
           {(poliza.elaboro || poliza.reviso || poliza.autorizo) && (
             <div className="flex gap-4 pt-1 text-[10px] text-slate-500">
               {poliza.elaboro && (

@@ -30,6 +30,7 @@ import { FixedAssetsView } from './components/FixedAssetsView';
 import { ContabilidadElectronicaView } from './components/ContabilidadElectronicaView';
 import { CatalogView } from './components/CatalogView';
 import { saveToStorage, loadFromStorage } from './services/storageService';
+import { borrarAnexosHuerfanosDePoliza } from './services/attachmentService';
 import { useAppData } from './hooks/useAppData';
 import { usePolizas } from './hooks/usePolizas';
 import { useCatalog } from './hooks/useCatalog';
@@ -351,7 +352,18 @@ export default function App() {
   const handleConfirmDelete = () => {
     if (!confirmDelete) return;
     if (confirmDelete.type === 'poliza') {
+      /* Cascada de anexos (Fase 4 PLAN_CHEQUES.md): el binario de los anexos
+       * SOLO se borra si la póliza eliminada era su ÚLTIMA referencia (dedupe
+       * CH-10 puede compartir el archivo con otras pólizas). best-effort. */
+      const polizaEliminada = polizas.find(p => p.id === confirmDelete.id);
       deletePoliza(confirmDelete.id);
+      if (activaId && polizaEliminada) {
+        borrarAnexosHuerfanosDePoliza(
+          activaId,
+          polizaEliminada,
+          polizas.filter(p => p.id !== polizaEliminada.id)
+        ).catch(console.error);
+      }
     } else if (confirmDelete.type === 'empresa') {
       // C-8: el hook prohíbe eliminar el último cliente (defensa extra en UI).
       const eliminada = eliminarEmpresa(confirmDelete.id);
@@ -450,6 +462,7 @@ export default function App() {
                       polizas={polizas}
                       accounts={combinedAccounts}
                       appMode={appMode}
+                      empresaId={activaId}
                       onCreate={createPoliza}
                       onUpdate={updatePoliza}
                       onImportPolizas={importPolizas}

@@ -156,3 +156,51 @@ ipcMain.handle('load-data', async (event, key) => {
   }
   return null;
 });
+
+/* ============================================================
+ * Anexos de cheques (Fase 4 PLAN_CHEQUES.md): binarios 100%
+ * locales en `userData/attachments/` (base64 por IPC). Clave:
+ * `<empresaId>_<sha256>` — el archivo queda junto a su registro
+ * de metadatos JSON (contasis_anexos_<empresaId>.json), que sí
+ * viaja por el circuito normal de datos.
+ * ============================================================ */
+const ANEXOS_DIR = () => path.join(app.getPath('userData'), 'attachments');
+
+/** Defensa: el nombre del binario solo trae caracteres del dedupe seguro. */
+const rutaAnexo = (nombre) => {
+  if (!/^[A-Za-z0-9_.-]+$/.test(nombre)) {
+    throw new Error('Nombre de anexo inválido');
+  }
+  return path.join(ANEXOS_DIR(), nombre);
+};
+
+ipcMain.handle('save-attachment', async (event, nombre, base64) => {
+  try {
+    fs.mkdirSync(ANEXOS_DIR(), { recursive: true });
+    fs.writeFileSync(rutaAnexo(nombre), Buffer.from(base64, 'base64'));
+  } catch (err) {
+    log.error('save-attachment error:', err);
+    throw err;
+  }
+});
+
+ipcMain.handle('load-attachment', async (event, nombre) => {
+  try {
+    const filePath = rutaAnexo(nombre);
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath).toString('base64');
+    }
+  } catch (err) {
+    log.error('load-attachment error:', err);
+  }
+  return null;
+});
+
+ipcMain.handle('delete-attachment', async (event, nombre) => {
+  try {
+    const filePath = rutaAnexo(nombre);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch (err) {
+    log.error('delete-attachment error:', err);
+  }
+});

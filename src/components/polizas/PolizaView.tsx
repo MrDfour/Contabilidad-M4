@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, type ChangeEvent } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { motion } from 'motion/react';
-import { Plus, Upload, FileUp, Hash } from 'lucide-react';
-import type { Account, Poliza } from '../../types';
+import { Plus, Save, TriangleAlert, Upload, FileUp, Hash } from 'lucide-react';
+import type { Account, ChequeAnexo, Poliza } from '../../types';
 import type { PolizaInput } from '../../hooks/usePolizas';
 import type { AppMode } from '../../lib/navigation';
 import type { ModalInfo } from '../modals/GlobalInfoModal';
@@ -14,11 +14,21 @@ import { normalizeString } from '../../lib/format';
 import { formatPolizaFolio, entriesToPolizasDiarias, esFolioPendiente } from '../../lib/accounting';
 import { readExcel, exportToExcel } from '../../lib/utils';
 import { parseJournalImport } from '../../lib/importEntriesFromExcel';
+import {
+  borrarAnexo,
+  borrarHuerfanosAntiguos,
+  cargarAnexo,
+  diasDesdeCaptura,
+  descargarAnexo,
+  guardarAnexo,
+  listarHuerfanos
+} from '../../services/attachmentService';
 import { PolizaFilter, type FiltroTipo } from './PolizaFilter';
 import { PolizaList } from './PolizaList';
 import { PolizaForm, type ModoCaptura } from './PolizaForm';
 import { PolizaPrintModal } from './PolizaPrintModal';
 import { AsignarFoliosPendientesModal } from './AsignarFoliosPendientesModal';
+import { VisorImagen } from './VisorImagen';
 
 /**
  * Contenedor del módulo de Pólizas Contables (Fase 3 de PLAN_POLIZAS.md):
@@ -45,10 +55,95 @@ const leerModoCaptura = (): ModoCaptura => {
   }
 };
 
+/**
+ * Aviso del día 4 (CH-14): los binarios sin póliza que los referencie se
+ * borran MAÑANA (la purga del día 5 corre al montar este módulo). Aviso que
+ * solo se ve si el usuario abre la app (sin notificaciones push) — caveat
+ * honesto ya decido en el plan.
+ */
+function BannerHuerfanos({
+  empresaId,
+  huerfanos,
+  onDescartar
+}: {
+  empresaId: string | null,
+  huerfanos: ChequeAnexo[],
+  onDescartar: () => void
+}) {
+  const [verSha, setVerSha] = useState<string | null>(null);
+  /** Lector del binario para "Ver" (con revocación al cerrar). */
+  const [urlVer, setUrlVer] = useState<string | null>(null);
+
+  useEffect(() => {
+    let propia = true;
+    let objectUrl: string | null = null;
+    (async () => {
+      if (!verSha) { setUrlVer(null); return; }
+      const blob = await cargarAnexo(empresaId ?? '', verSha);
+      if (!propia) return;
+      if (blob) { objectUrl = URL.createObjectURL(blob); setUrlVer(objectUrl); }
+    })();
+    return () => {
+      propia = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [empresaId, verSha]);
+
+  const guardarEnMiDispositivo = async () => {
+    let ok = 0;
+    for (const a of huerfanos) {
+      if (await descargarAnexo(empresaId ?? '', a)) ok++;
+    }
+    if (ok === 0) {
+      window.alert('Este equipo no tiene esas imágenes (viven solo en el equipo original, CH-11).');
+    }
+  };
+
+  return (
+    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex flex-wrap items-center gap-3 text-sm text-amber-200">
+      <TriangleAlert className="w-5 h-5 shrink-0" />
+      <p className="flex-1 min-w-[14rem]">
+        {huerfanos.length === 1 ? '1 imagen de cheque sin asignar se borrará mañana' : `${huerfanos.length} imagen(es) de cheque sin asignar se borrarán mañana`}
+        <span className="text-slate-400 text-xs"> — se guardaron pero ninguna póliza las incluye.</span>
+      </p>
+      <button
+        type="button"
+        onClick={guardarEnMiDispositivo}
+        className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-bold hover:bg-white/10 transition-colors"
+      >
+        <Save className="w-3.5 h-3.5 inline mr-1" />Guardar en mi dispositivo
+      </button>
+      <button
+        type="button"
+        onClick={() => setVerSha(huerfanos[0]?.sha256 ?? null)}
+        className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-bold hover:bg-white/10 transition-colors"
+      >
+        Ver
+      </button>
+      <button
+        type="button"
+        onClick={onDescartar}
+        className="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs font-bold hover:bg-rose-500/20 transition-colors"
+      >
+        Descartar ya
+      </button>
+      {/* Visor EN GRANDE vía PORTAL (VisorImagen): overlay a nivel de página. */}
+      {verSha && urlVer && (
+        <VisorImagen
+          url={urlVer}
+          titulo="Imagen de cheque sin asignar"
+          onCerrar={() => setVerSha(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 export function PolizaView({
   polizas,
   accounts,
   appMode,
+  empresaId,
   onCreate,
   onUpdate,
   onImportPolizas,
@@ -59,6 +154,8 @@ export function PolizaView({
   polizas: Poliza[],
   accounts: Account[],
   appMode: AppMode,
+  /** Contexto del anexo de cheques (attachmentService, Fase 4 PLAN_CHEQUES.md). */
+  empresaId: string | null,
   onCreate: (data: PolizaInput) => void,
   /** Recibe (id, datos) — el folio y tipo los preserva el hook (D-8). */
   onUpdate: (id: string, data: PolizaInput) => void,
@@ -77,6 +174,35 @@ export function PolizaView({
   const [printPoliza, setPrintPoliza] = useState<Poliza | null>(null);
   const [modalFoliosOpen, setModalFoliosOpen] = useState(false);
   const [modoCaptura, setModoCaptura] = useState<ModoCaptura>(leerModoCaptura);
+  /** Huérfanos del día 4 (aviso CH-14): edad ≥ 4 días y 0 referencias. */
+  const [avisoHuerfanos, setAvisoHuerfanos] = useState<ChequeAnexo[]>([]);
+
+  /** Purga del día 5 al montar + recálculo del aviso del día 4 (CH-14). Idempotente. */
+  useEffect(() => {
+    if (!empresaId) return;
+    let vigente = true;
+    (async () => {
+      try {
+        await borrarHuerfanosAntiguos(empresaId, polizas);
+      } catch {
+        // Purga best-effort: la siguiente visita reintenta; nunca bloquea la app.
+      }
+      try {
+        const lista = await listarHuerfanos(empresaId, polizas);
+        if (vigente) setAvisoHuerfanos(lista.filter(a => diasDesdeCaptura(a.capturadoEn) >= 4));
+      } catch {
+        // Sin registro disponible: no hay aviso que mostrar.
+      }
+    })();
+    return () => { vigente = false; };
+  }, [empresaId, polizas]);
+
+  /** Descartar ya (banner CH-14): borra binario + registro de los avisados. */
+  const descartarHuerfanos = async () => {
+    if (!empresaId) return;
+    for (const a of avisoHuerfanos) await borrarAnexo(empresaId, a.sha256);
+    setAvisoHuerfanos([]);
+  };
 
   /** Cambia y persiste el estilo de captura (Clásica | Papel). */
   const cambiarModoCaptura = (m: ModoCaptura) => {
@@ -110,10 +236,27 @@ export function PolizaView({
     cheque: conBusqueda.filter(p => p.tipo === 'cheque').length
   };
 
-  const handleSavePoliza = (data: PolizaInput) => {
+  /**
+   * Guardado con anexo (Fase 4): el ARCHIVO viaja como 2º argumento síncrono
+   * del guardado (un estado intermedio llegaba tarde y el anexo se perdía).
+   * El binario se procesa y persiste ANTES del alta (metadato →
+   * `Poliza.cheque.anexos` CH-16). Si el alta falla (validación D-9), el
+   * anexo queda HUÉRFANO y entra al ciclo día 4 / día 5 (CH-14) — decidido
+   * así: el usuario puede reintentar el alta con la misma imagen.
+   */
+  const handleSavePoliza = async (data: PolizaInput, archivoAnexo?: File) => {
     try {
-      if (editingPoliza) onUpdate(editingPoliza.id, data);
-      else onCreate(data);
+      let datos = data;
+      if (archivoAnexo && data.tipo === 'cheque' && empresaId) {
+        const guardado = await guardarAnexo(empresaId, archivoAnexo);
+        if (guardado) {
+          const anexos = [...(data.cheque?.anexos ?? [])];
+          if (!anexos.some(a => a.sha256 === guardado.metadato.sha256)) anexos.unshift(guardado.metadato);
+          datos = { ...data, cheque: { ...(data.cheque ?? {}), anexos } };
+        }
+      }
+      if (editingPoliza) onUpdate(editingPoliza.id, datos);
+      else onCreate(datos);
       setIsFormOpen(false);
       setEditingPoliza(null);
     } catch (error) {
@@ -267,11 +410,21 @@ export function PolizaView({
 
       <PolizaList
         polizas={filtradas}
+        empresaId={empresaId}
         hayFiltroActivo={filtro !== 'todas' || termino.length > 0}
         onEdit={openEditar}
         onDelete={onDeleteRequest}
         onPrint={setPrintPoliza}
       />
+
+      {/* Aviso del día 4 (CH-14 de PLAN_CHEQUES.md): rescate o descarte de huérfanos */}
+      {avisoHuerfanos.length > 0 && (
+        <BannerHuerfanos
+          empresaId={empresaId}
+          huerfanos={avisoHuerfanos}
+          onDescartar={descartarHuerfanos}
+        />
+      )}
 
       {isFormOpen && (
         <PolizaForm

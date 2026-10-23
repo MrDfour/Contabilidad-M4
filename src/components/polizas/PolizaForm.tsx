@@ -91,7 +91,6 @@ export function PolizaForm({
   onModoChange,
   initialData,
   onSave,
-  onAnexoPendiente,
   onCancel
 }: {
   accounts: Account[],
@@ -102,10 +101,11 @@ export function PolizaForm({
   onModoChange?: (m: ModoCaptura) => void,
   /** Presente SOLO en edición: bloquea el tipo (D-8) y precarga todos los campos. */
   initialData?: Poliza,
-  onSave: (data: PolizaInput) => void,
-  /** Fase 2 (CH-6): archivo de anexo del cheque elegido en el picker. NADIE lo
-   *  persiste todavía — Fase 4 (attachmentService) lo recibe al construir. */
-  onAnexoPendiente?: (archivo: File) => void,
+  /** Fase 4 (PLAN_CHEQUES): si el usuario eligió imagen de cheque, el ARCHIVO
+   *  viaja como 2º argumento SÍNCRONO del guardado (un estado intermedio en el
+   *  dueño llegaba TARDE: React se lo pasa al render SIGUIENTE y el anexo
+   *  se perdía — bug corregido 2026-10-23). Nadie lo persiste AQUÍ: attachmentService. */
+  onSave: (data: PolizaInput, archivoAnexo?: File) => void,
   onCancel: () => void
 }) {
   const [tipo, setTipo] = useState<TipoPoliza>(initialData?.tipo ?? leerHojaPapel());
@@ -322,7 +322,7 @@ export function PolizaForm({
           ...(anexosPrevios && anexosPrevios.length > 0 ? { anexos: anexosPrevios } : {})
         }
       : undefined;
-    if (tipo === 'cheque' && archivoAnexoRef.current) onAnexoPendiente?.(archivoAnexoRef.current);
+    // El archivo viaja JUNTO al input (2º argumento síncrono) — sin carreras.
     onSave({
       tipo,
       fecha,
@@ -332,7 +332,7 @@ export function PolizaForm({
       reviso: reviso.trim() || undefined,
       autorizo: autorizo.trim() || undefined,
       ...(cheque ? { cheque } : {})
-    });
+    }, tipo === 'cheque' ? (archivoAnexoRef.current ?? undefined) : undefined);
   };
 
   return (

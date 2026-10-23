@@ -26,6 +26,8 @@ export function AppFooter({
         <div className="flex gap-6 items-center">
           <button
             onClick={onExportBackup}
+            /* CH-12 de PLAN_CHEQUES.md: metadatos de anexos sí, imágenes no. */
+            title="Los respaldos incluyen los METADATOS de los anexos de cheques (peso/fecha/hash); las IMÁGENES no viajan — viven solo en el equipo original."
             className="inline-flex items-center gap-1.5 text-slate-400 hover:text-indigo-300 transition-colors text-xs"
           >
             <Download className="w-3.5 h-3.5" />
@@ -39,6 +41,7 @@ export function AppFooter({
               accept=".json,application/json"
               onChange={onImportBackup}
               className="hidden"
+              title="La restauración trae los metadatos de los anexos; las imágenes de cheques siguen viviendo solo en su equipo original (CH-12)."
             />
           </label>
           <span className="flex items-center gap-2 italic">

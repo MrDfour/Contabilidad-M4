@@ -16,6 +16,11 @@ declare global {
       ) => () => void;
       saveData: (key: string, data: any) => Promise<void>;
       loadData: (key: string) => Promise<any>;
+      /* Anexos del cheque (attachmentService, Fase 4 PLAN_CHEQUES.md):
+       * binarios en `userData/attachments/`, base64 por IPC. */
+      saveAttachment?: (key: string, data: string) => Promise<void>;
+      loadAttachment?: (key: string) => Promise<string | null>;
+      deleteAttachment?: (key: string) => Promise<void>;
     };
     Capacitor?: {
       isNativePlatform: () => boolean;
