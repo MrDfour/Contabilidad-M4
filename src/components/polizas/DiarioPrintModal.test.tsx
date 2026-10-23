@@ -35,7 +35,7 @@ const imprimir = () => screen.getByRole('button', { name: /Imprimir$/ }) as HTML
 
 describe('DiarioPrintModal (impresión del Libro Diario por período)', () => {
   it('muestra solo las pólizas dentro del rango Desde/Hasta', () => {
-    render(<DiarioPrintModal polizas={polizas} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={polizas} empresaId="e1" onClose={vi.fn()} />);
     // Inicial: día de la póliza más reciente → solo p3
     expect(screen.getAllByText(/1 póliza/).length).toBeGreaterThan(0);
     expect(screen.getByText('DIA-0001')).toBeTruthy();
@@ -51,7 +51,7 @@ describe('DiarioPrintModal (impresión del Libro Diario por período)', () => {
   });
 
   it('suma general del período = suma de totales de las pólizas en rango', () => {
-    render(<DiarioPrintModal polizas={polizas} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={polizas} empresaId="e1" onClose={vi.fn()} />);
     fireEvent.change(desde(), { target: { value: '2026-03-01' } });
     fireEvent.change(hasta(), { target: { value: '2026-03-31' } });
     // 1000 + 250 + 500 = 1750 en ambas columnas (partida doble) — aparece en Debe y Haber
@@ -60,7 +60,7 @@ describe('DiarioPrintModal (impresión del Libro Diario por período)', () => {
   });
 
   it('sin pólizas en el rango: mensaje y botón Imprimir deshabilitado', () => {
-    render(<DiarioPrintModal polizas={polizas} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={polizas} empresaId="e1" onClose={vi.fn()} />);
     fireEvent.change(desde(), { target: { value: '2025-01-01' } });
     fireEvent.change(hasta(), { target: { value: '2025-01-31' } });
     expect(screen.getByText(/No hay pólizas registradas en el período/i)).toBeTruthy();
@@ -72,7 +72,7 @@ describe('DiarioPrintModal (impresión del Libro Diario por período)', () => {
     const hoyISO = hoy.toISOString().split('T')[0];
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
 
-    render(<DiarioPrintModal polizas={polizas} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={polizas} empresaId="e1" onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Hoy' }));
     expect(desde().value).toBe(hoyISO);
     expect(hasta().value).toBe(hoyISO);
@@ -85,7 +85,7 @@ describe('DiarioPrintModal (impresión del Libro Diario por período)', () => {
 
 describe('DiarioPrintModal formato Libro continuo', () => {
   it('compacta todas las operaciones en una tabla con suma del día por fecha', () => {
-    render(<DiarioPrintModal polizas={polizas} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={polizas} empresaId="e1" onClose={vi.fn()} />);
     // Ampliar a marzo completo (2 días, 4 partidas)
     fireEvent.change(desde(), { target: { value: '2026-03-01' } });
     fireEvent.change(hasta(), { target: { value: '2026-03-31' } });
@@ -108,7 +108,7 @@ describe('DiarioPrintModal formato Libro continuo', () => {
   });
 
   it('la preferencia de formato persiste en localStorage', () => {
-    render(<DiarioPrintModal polizas={polizas} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={polizas} empresaId="e1" onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Libro continuo' }));
     expect(localStorage.getItem('contasis_diario_formato')).toBe('continuo');
   });
@@ -116,7 +116,7 @@ describe('DiarioPrintModal formato Libro continuo', () => {
 
 describe('DiarioPrintModal formato Póliza diaria', () => {
   it('consolida las pólizas del mismo día en una hoja, agregadas por cuenta', () => {
-    render(<DiarioPrintModal polizas={polizas} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={polizas} empresaId="e1" onClose={vi.fn()} />);
     fireEvent.change(desde(), { target: { value: '2026-03-01' } });
     fireEvent.change(hasta(), { target: { value: '2026-03-31' } });
     fireEvent.click(screen.getByRole('button', { name: 'Póliza diaria' }));
@@ -134,7 +134,7 @@ describe('DiarioPrintModal formato Póliza diaria', () => {
   });
 
   it('la preferencia diaria también persiste', () => {
-    render(<DiarioPrintModal polizas={polizas} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={polizas} empresaId="e1" onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Póliza diaria' }));
     expect(localStorage.getItem('contasis_diario_formato')).toBe('diaria');
   });
@@ -172,7 +172,7 @@ describe('DiarioPrintModal — cheques y toggle de inclusión (Fase 3 de PLAN_CH
   });
 
   it('formato Hoja por póliza: el cheque imprime SU hoja propia (título, calcado, datos)', () => {
-    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} empresaId="e1" onClose={vi.fn()} />);
     cambiarRangoMarzo();
 
     // INCLUIDO (default ON): hoja de cheque propia dentro del libro
@@ -186,7 +186,7 @@ describe('DiarioPrintModal — cheques y toggle de inclusión (Fase 3 de PLAN_CH
   });
 
   it('toggle OFF: el cheque SALE del libro (hojas, sumas y conteo)', () => {
-    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} empresaId="e1" onClose={vi.fn()} />);
     cambiarRangoMarzo();
 
     fireEvent.click(screen.getByLabelText('Incluir pólizas de cheque en la impresión'));
@@ -204,7 +204,7 @@ describe('DiarioPrintModal — cheques y toggle de inclusión (Fase 3 de PLAN_CH
   });
 
   it('toggle OFF: el cheque tampoco entra al consolidado diario ni al continuo', () => {
-    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} empresaId="e1" onClose={vi.fn()} />);
     cambiarRangoMarzo();
     fireEvent.click(screen.getByLabelText('Incluir pólizas de cheque en la impresión'));
     fireEvent.click(screen.getByRole('button', { name: 'Póliza diaria' }));
@@ -218,9 +218,30 @@ describe('DiarioPrintModal — cheques y toggle de inclusión (Fase 3 de PLAN_CH
   });
 
   it('toggle incluido en el libro continuo: el folio del cheque entra una vez', () => {
-    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} onClose={vi.fn()} />);
+    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} empresaId="e1" onClose={vi.fn()} />);
     cambiarRangoMarzo();
     fireEvent.click(screen.getByRole('button', { name: 'Libro continuo' }));
     expect(screen.getAllByText('CHE-0001').length).toBe(1);
+  });
+
+  it('opción «Con imagen del cheque»: default DESMARCADA (CH-5: la zona nace en blanco)', () => {
+    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} empresaId="e1" onClose={vi.fn()} />);
+    const caja = screen.getByLabelText('Con imagen del cheque en la hoja') as HTMLInputElement;
+    expect(caja.checked).toBe(false);
+  });
+
+  it('opción «Con imagen del cheque»: la preferencia persistida la enciende al abrir', () => {
+    localStorage.setItem('contasis_hoja_cheque_imagen', '1');
+    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} empresaId="e1" onClose={vi.fn()} />);
+    const caja = screen.getByLabelText('Con imagen del cheque en la hoja') as HTMLInputElement;
+    expect(caja.checked).toBe(true);
+  });
+
+  it('opción «Con imagen del cheque»: cambiarla la persiste (clave compartida con la impresión individual)', () => {
+    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} empresaId="e1" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText('Con imagen del cheque en la hoja'));
+    expect(localStorage.getItem('contasis_hoja_cheque_imagen')).toBe('1');
+    fireEvent.click(screen.getByLabelText('Con imagen del cheque en la hoja'));
+    expect(localStorage.getItem('contasis_hoja_cheque_imagen')).toBe('0');
   });
 });

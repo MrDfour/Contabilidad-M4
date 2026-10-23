@@ -3,9 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useEffect, useState } from 'react';
 import type { Poliza, TipoPoliza } from '../../types';
 import { formatCurrency } from '../../lib/format';
 import { formatPolizaFolio } from '../../lib/accounting';
+import { cargarAnexo } from '../../services/attachmentService';
 
 const TIPO_LABEL: Record<TipoPoliza, string> = {
   ingreso: 'Ingresos',
@@ -18,10 +20,48 @@ const TIPO_LABEL: Record<TipoPoliza, string> = {
 export const RENGLONES_BASE = 10;
 
 /**
+ * La imagen anexa DENTRO de la zona de calcado (solo con la opción
+ * "Con imagen del cheque" encendida). El binario local lo trae
+ * `cargarAnexo` (attachmentService, owner anti-R1); si este equipo no lo
+ * tiene (CH-11), la zona simplemente queda en blanco — nunca rompe el
+ * impreso. La URL del objeto se revoca al desmontar.
+ */
+function ImagenCalcado({ empresaId, sha }: { empresaId: string | null; sha: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let propia = true;
+    let objectUrl: string | null = null;
+    (async () => {
+      const blob = await cargarAnexo(empresaId ?? '', sha);
+      if (!propia) return;
+      if (blob) {
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      }
+    })();
+    return () => {
+      propia = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [empresaId, sha]);
+
+  if (!url) return null;
+  return (
+    <img
+      src={url}
+      alt="Imagen del cheque anexa"
+      className="max-w-full max-h-full object-contain"
+    />
+  );
+}
+
+/**
  * Hoja IMPRIMIBLE de una póliza de CHEQUE (CH-5/CH-15 de PLAN_CHEQUES.md):
  * - título sello "Póliza de Cheque";
- * - zona superior EN BLANCO para el calcado del cheque con papel carbón
- *   (la imagen anexa digital NUNCA se imprime ahí — ese espacio es del carbón);
+ * - zona superior para el calcado del cheque con papel carbón: EN BLANCO por
+ *   default (CH-5); con la opción "Con imagen del cheque" (decisión del
+ *   usuario, 2026-10-23) imprime ahí la imagen anexa si este equipo la tiene;
  * - datos del cheque + Fecha + Nº de Póliza;
  * - tabla de partidas con pie "SUMAS IGUALES" (ver comentario CH-15 más abajo);
  * - cuadro "CONCEPTO DEL PAGO" + casilla "FIRMA (CHEQUE) RECIBIDO".
@@ -30,9 +70,15 @@ export const RENGLONES_BASE = 10;
  */
 export function PolizaChequeSheet({
   poliza,
+  conImagen = false,
+  empresaId = null,
   renglones = RENGLONES_BASE
 }: {
   poliza: Poliza,
+  /** Opción "Con imagen del cheque": imprime el anexo en la zona de calcado. */
+  conImagen?: boolean,
+  /** Contexto del anexo (el binario vive local por cliente). */
+  empresaId?: string | null,
   /** Renglones totales de la tabla (física: deja hueco para notas a mano). */
   renglones?: number
 }) {
@@ -40,8 +86,9 @@ export function PolizaChequeSheet({
     day: '2-digit', month: '2-digit', year: 'numeric'
   });
   const cheque = poliza.cheque;
-  /** CH-5: la zona de calcado se reserva EN BLANCO. */
+  /** CH-5: la zona de calcado se reserva EN BLANCO (con opción de imagen). */
   const relleno = Math.max(0, renglones - poliza.partidas.length);
+  const shaAnexo = conImagen ? cheque?.anexos?.[0]?.sha256 : undefined;
 
   return (
     <>
@@ -54,13 +101,18 @@ export function PolizaChequeSheet({
         </div>
       </div>
 
-      {/* Zona de calcado (en blanco — es del papel carbón, CH-5) */}
+      {/* Zona de calcado: EN BLANCO por default (CH-5); con la opción
+          "Con imagen del cheque" imprime ahí el anexo local si existe. */}
       <div className="mt-4">
         <div
           data-testid="zona-calcado-cheque"
-          title="Zona para calcar el cheque con papel carbón — queda en blanco"
-          className="border-2 border-sky-500 rounded-xl h-[16rem]"
-        />
+          title={conImagen
+            ? 'Zona del cheque — imprime la imagen anexa si este equipo la tiene; en blanco si no'
+            : 'Zona para calcar el cheque con papel carbón — queda en blanco'}
+          className="border-2 border-sky-500 rounded-xl h-[16rem] flex items-center justify-center overflow-hidden"
+        >
+          {shaAnexo ? <ImagenCalcado empresaId={empresaId} sha={shaAnexo} /> : null}
+        </div>
       </div>
 
       {/* Datos del cheque + Fecha + Nº de Póliza */}
@@ -168,11 +220,22 @@ export function PolizaChequeSheet({
  * Despachador de hoja imprimible: la póliza de CHEQUE lleva su hoja propia
  * (PolizaChequeSheet) y las demás la hoja clásica mexicana. Lo usan la
  * impresión individual (PolizaPrintModal) y el diario en formato
- * "Hoja por póliza" (DiarioPrintModal).
+ * "Hoja por póliza" (DiarioPrintModal). La opción "Con imagen del cheque"
+ * (y su contexto `empresaId`) solo afecta a la hoja del cheque.
  */
-export function HojaPolizaImprimible({ poliza }: { poliza: Poliza }) {
+export function HojaPolizaImprimible({
+  poliza,
+  conImagen = false,
+  empresaId = null
+}: {
+  poliza: Poliza,
+  /** Opción "Con imagen del cheque": imprime el anexo en la zona de calcado. */
+  conImagen?: boolean,
+  /** Contexto del anexo (el binario vive local por cliente). */
+  empresaId?: string | null
+}) {
   return poliza.tipo === 'cheque'
-    ? <PolizaChequeSheet poliza={poliza} />
+    ? <PolizaChequeSheet poliza={poliza} conImagen={conImagen} empresaId={empresaId} />
     : <PolizaPapelSheet poliza={poliza} />;
 }
 

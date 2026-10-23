@@ -98,7 +98,7 @@ Además del asiento contable, la póliza de cheque lleva sus **datos propios**: 
 - **Imagen del cheque**: puedes adjuntar una foto/escaneo al crear la póliza; la app la comprime automáticamente para que pese poco (objetivo ~150 KB) sin perder legibilidad. La imagen se ve como **miniatura en la tarjeta** (clic la agranda).
 - **La imagen vive solo en tu equipo**: no viaja por la sincronización ni en los respaldos (esos llevan sus datos: peso, fecha y huella). En otro dispositivo verás el aviso *"solo en su equipo"* en lugar de la foto.
 - **Limpieza automática**: si guardaste una imagen y la póliza no llegó a crearse, la app te avisa durante un día para que la rescates (descargarla a tu dispositivo) o la descartes; al quinto día se borra sola.
-- **Impresión**: el botón Imprimir saca la **hoja de póliza de cheque** con espacio en blanco para calcar la imagen a mano, los datos del cheque y una línea de firma de recibido.
+- **Impresión**: el botón Imprimir saca la **hoja de póliza de cheque** con espacio en blanco para calcar la imagen a mano, los datos del cheque y una línea de firma de recibido. Opcionalmente, la casilla **"Con imagen del cheque"** (default apagada) imprime la imagen anexa DENTRO de la zona de calcado en lugar del blanco — útil como comprobante de la imagen digital; si el equipo no tiene la imagen, la zona simplemente queda en blanco. La preferencia se comparte entre el diario ("Hoja por póliza") y la impresión individual.
 
 #### Filtrado y búsqueda
 - Chips **Todas / Ingresos / Egresos / Diario / Cheques** con conteo por tipo.

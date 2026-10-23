@@ -4,10 +4,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import { PolizaChequeSheet, HojaPolizaImprimible } from './PolizaSheet';
 import { PolizaPrintModal } from './PolizaPrintModal';
-import type { Poliza } from '../../types';
+import { guardarAnexo } from '../../services/attachmentService';
+import type { ChequeAnexo, Poliza } from '../../types';
 
 /** Póliza de CHEQUE con metadatos (CH-1/CH-4 de PLAN_CHEQUES.md). */
 const polizaCheque: Poliza = {
@@ -39,12 +40,30 @@ const polizaDiario: Poliza = {
   totalHaber: 100
 };
 
-describe('PolizaChequeSheet (hoja imprimible del cheque — Fase 3 de PLAN_CHEQUES.md)', () => {
+/** Variante del cheque CON referencia de anexo (Fase 4); el binario puede o no
+ * vivir local en este equipo (CH-11) — ahí va la prueba. */
+const polizaChequeConAnexo = (anexos: ChequeAnexo[]): Poliza => ({
+  ...polizaCheque,
+  cheque: { numero: '1042', banco: 'Banorte', beneficiario: 'Juan P\u00e9rez', anexos }
+});
+
+/** Referencia de anexo SIN binario local detrás (simula otro equipo). */
+const anexoFalso: ChequeAnexo = {
+  id: 'sha-fuera',
+  sha256: 'sha-fuera',
+  bytes: 12,
+  mime: 'image/webp',
+  capturadoEn: '2026-03-07T00:00:00.000Z'
+};
+
+describe('PolizaChequeSheet (hoja imprimible del cheque - Fase 3 de PLAN_CHEQUES.md)', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    localStorage.clear();
   });
   afterEach(() => {
     cleanup();
+    localStorage.clear();
     vi.restoreAllMocks();
   });
 
@@ -54,6 +73,34 @@ describe('PolizaChequeSheet (hoja imprimible del cheque — Fase 3 de PLAN_CHEQU
     const zona = screen.getByTestId('zona-calcado-cheque');
     // La zona NO imprime contenido: ni la imagen anexa ni ningún dato caen ahí.
     expect(zona.textContent).toBe('');
+  });
+
+  it('con anexos pero SIN la opción «Con imagen del cheque»: la zona queda EN BLANCO (CH-5)', () => {
+    // Aunque el metadato del anexo exista, la opción apagada nunca toca el binario.
+    render(<PolizaChequeSheet poliza={polizaChequeConAnexo([anexoFalso])} />);
+    const zona = screen.getByTestId('zona-calcado-cheque');
+    expect(zona.querySelector('img')).toBeNull();
+    expect(zona.textContent).toBe('');
+  });
+
+  it('opción «Con imagen del cheque» + binario local: la imagen cae DENTRO de la zona de calcado', async () => {
+    const { metadato } = (await guardarAnexo('e1', new Blob(['imagen-semilla'], { type: 'image/webp' })))!;
+    render(<PolizaChequeSheet poliza={polizaChequeConAnexo([metadato])} conImagen empresaId="e1" />);
+    const zona = screen.getByTestId('zona-calcado-cheque');
+    await waitFor(() => {
+      // La imagen se carga ASÍNCRONamente (vía cargarAnexo): llega con el estado local listo.
+      expect(zona.querySelector('img')).toBeTruthy();
+    });
+    expect(zona.querySelector('img')?.getAttribute('alt')).toBe('Imagen del cheque anexa');
+  });
+
+  it('opción encendida pero el binario NO vive en este equipo (CH-11): zona en blanco, el impreso nunca rompe', async () => {
+    render(<PolizaChequeSheet poliza={polizaChequeConAnexo([anexoFalso])} conImagen empresaId="e1" />);
+    const zona = screen.getByTestId('zona-calcado-cheque');
+    await waitFor(() => {
+      expect(zona.textContent).toBe('');
+    });
+    expect(zona.querySelector('img')).toBeNull();
   });
 
   it('datos del cheque (CH-4) + Nº de póliza de SU serie', () => {
@@ -112,14 +159,14 @@ describe('PolizaPrintModal con póliza de cheque (ruta de impresión individual)
   });
 
   it('la impresión individual de un cheque muestra su hoja propia', () => {
-    render(<PolizaPrintModal poliza={polizaCheque} onClose={vi.fn()} />);
+    render(<PolizaPrintModal poliza={polizaCheque} empresaId="e1" onClose={vi.fn()} />);
     expect(screen.getByText('Póliza de Cheque')).toBeTruthy();
     expect(screen.getByTestId('zona-calcado-cheque')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Imprimir/ })).toBeTruthy();
   });
 
   it('una póliza normal NO trae zona de calcado', () => {
-    render(<PolizaPrintModal poliza={polizaDiario} onClose={vi.fn()} />);
+    render(<PolizaPrintModal poliza={polizaDiario} empresaId="e1" onClose={vi.fn()} />);
     expect(screen.queryByTestId('zona-calcado-cheque')).toBeNull();
   });
 });

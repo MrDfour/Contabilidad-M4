@@ -408,6 +408,7 @@ Claves usadas (uniformes en las tres plataformas):
 | `contasis_anexos_<empresaId>` | Registro de METADATOS del anexo del cheque (`ChequeAnexo[]`: sha256, bytes, mime, capturadoEn) — dueño: `attachmentService` (Fase 4 PLAN_CHEQUES). Los METADATOS viajan en `Poliza.cheque.anexos[]` y SÍ entran a respaldos/bóveda; el BINARIO nunca (CH-11/CH-12) |
 | IndexedDB `contasis_anexos` / `Directory.Data` `anexo_<empresaId>_<sha>.<ext>` / `userData/attachments/` | El BINARIO del anexo, 100% LOCAL por backend: web (IndexedDB, store `anexos`, clave `<empresaId>_<sha>`) / Android (Filesystem) / Electron (vía IPC `save-attachment`/`load-attachment`/`delete-attachment`). Los componentes NUNCA lo tocan: solo `attachmentService` (anti-R1) |
 | `contasis_diario_cheques` | Toggle "Incluir cheques" del diario impreso (default ON; OFF saca las pólizas de cheque del libro completo) |
+| `contasis_hoja_cheque_imagen` | Opción "Con imagen del cheque" (decisión del usuario 2026-10-23, amplía CH-5): al imprimir la hoja de cheque, su zona de calcado lleva la IMAGEN anexa en vez de quedar en blanco (solo si este equipo tiene el binario CH-11). Default '0' (en blanco para el papel carbón); preferencia COMPARTIDA por el diario (`DiarioPrintModal`) y la impresión individual (`PolizaPrintModal`) |
 
 La composición de las claves por cliente se hace SIEMPRE con el helper puro `clavePorEmpresa` (`lib/empresas.ts`, C-2).
 

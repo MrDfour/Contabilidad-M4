@@ -41,6 +41,14 @@ const CLAVE_FORMATO = 'contasis_diario_formato';
  * el anexo (Fase 4). ON = incluidos (default: no se oculta nada).
  */
 const CLAVE_INCLUIR_CHEQUES = 'contasis_diario_cheques';
+/**
+ * Opción "Con imagen del cheque" (decisión del usuario, 2026-10-23): al
+ * imprimir "Hoja por póliza", la hoja del CHEQUE lleva su imagen anexa en la
+ * zona de calcado en lugar de dejarla en blanco (CH-5). DEFAULT OFF: la zona
+ * nace en blanco para el papel carbón. La preferencia es de la HOJA de cheque
+ * y la comparte la impresión individual (PolizaPrintModal).
+ */
+const CLAVE_HOJA_CHEQUE_IMAGEN = 'contasis_hoja_cheque_imagen';
 
 const leerFormato = (): FormatoImpresion => {
   try {
@@ -57,6 +65,14 @@ const leerIncluirCheques = (): boolean => {
     return localStorage.getItem(CLAVE_INCLUIR_CHEQUES) !== '0';
   } catch {
     return true;
+  }
+};
+
+const leerConImagen = (): boolean => {
+  try {
+    return localStorage.getItem(CLAVE_HOJA_CHEQUE_IMAGEN) === '1';
+  } catch {
+    return false;
   }
 };
 
@@ -106,10 +122,13 @@ interface GrupoDia {
 
 export function DiarioPrintModal({
   polizas,
+  empresaId,
   onClose
 }: {
   /** Pólizas YA ordenadas cronológicamente por el dueño (JournalView). */
   polizas: Poliza[],
+  /** Contexto del anexo de cheques (opción "Con imagen del cheque"). */
+  empresaId: string | null,
   onClose: () => void
 }) {
   const hoyISO = () => new Date().toISOString().split('T')[0];
@@ -126,6 +145,7 @@ export function DiarioPrintModal({
   const [hasta, setHasta] = useState(fechaInicial);
   const [formato, setFormato] = useState<FormatoImpresion>(leerFormato);
   const [incluirCheques, setIncluirCheques] = useState(leerIncluirCheques);
+  const [conImagen, setConImagen] = useState(leerConImagen);
 
   const cambiarFormato = (f: FormatoImpresion) => {
     setFormato(f);
@@ -142,6 +162,16 @@ export function DiarioPrintModal({
       localStorage.setItem(CLAVE_INCLUIR_CHEQUES, incluir ? '1' : '0');
     } catch {
       // Sin persistencia disponible: el toggle vive solo en esta sesión.
+    }
+  };
+
+  /** Preferencia compartida con la impresión individual (misma clave). */
+  const cambiarConImagen = (con: boolean) => {
+    setConImagen(con);
+    try {
+      localStorage.setItem(CLAVE_HOJA_CHEQUE_IMAGEN, con ? '1' : '0');
+    } catch {
+      // Sin persistencia disponible: la opción vive solo en esta sesión.
     }
   };
 
@@ -288,6 +318,21 @@ export function DiarioPrintModal({
             />
             Incluir cheques
           </label>
+          {/* Opción "Con imagen del cheque" (persistida; default OFF): afecta
+              a la zona de calcado de la hoja de cheque en "Hoja por póliza". */}
+          <label
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-slate-300 cursor-pointer select-none"
+            title="En «Hoja por póliza», la hoja del cheque imprime su imagen anexa en la zona superior en vez de dejarla en blanco (solo si este equipo tiene la imagen)."
+          >
+            <input
+              type="checkbox"
+              aria-label="Con imagen del cheque en la hoja"
+              checked={conImagen}
+              onChange={e => cambiarConImagen(e.target.checked)}
+              className="w-3.5 h-3.5 accent-indigo-500"
+            />
+            Con imagen del cheque
+          </label>
 
           <div className="flex items-center gap-1 p-1 rounded-lg bg-white/5 border border-white/10">
             <button
@@ -390,7 +435,7 @@ export function DiarioPrintModal({
                   style={i < ordenadas.length - 1 ? { pageBreakAfter: 'always' } : undefined}
                 >
                   <div className={i > 0 ? 'mt-10 pt-8 border-t-2 border-dashed border-sky-200' : 'mt-4'}>
-                    <HojaPolizaImprimible poliza={p} />
+                    <HojaPolizaImprimible poliza={p} conImagen={conImagen} empresaId={empresaId} />
                   </div>
                 </div>
               ))}

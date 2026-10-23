@@ -489,6 +489,7 @@ export default function App() {
                   >
                     <JournalView
                       polizas={polizasCronologicas}
+                      empresaId={activaId}
                       onSetModal={setModalInfo}
                     />
                   </motion.div>

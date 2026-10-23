@@ -76,9 +76,12 @@ const construirFilas = (polizas: Poliza[]): FilaDiario[] => {
 
 export function JournalView({
   polizas,
+  empresaId,
   onSetModal
 }: {
   polizas: Poliza[],
+  /** Contexto del anexo de cheques (opción "Con imagen del cheque" del diario). */
+  empresaId: string | null,
   onSetModal: (info: { type: 'success' | 'error', title: string, message: string } | null) => void
 }) {
   const [isExporting, setIsExporting] = useState(false);
@@ -258,7 +261,7 @@ export function JournalView({
 
       {/* Impresión por día/período en formato papel */}
       {printOpen && (
-        <DiarioPrintModal polizas={polizasOrdenadas} onClose={() => setPrintOpen(false)} />
+        <DiarioPrintModal polizas={polizasOrdenadas} empresaId={empresaId} onClose={() => setPrintOpen(false)} />
       )}
     </div>
   );

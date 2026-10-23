@@ -438,7 +438,7 @@ export function PolizaView({
         />
       )}
 
-      <PolizaPrintModal poliza={printPoliza} onClose={() => setPrintPoliza(null)} />
+      <PolizaPrintModal poliza={printPoliza} empresaId={empresaId} onClose={() => setPrintPoliza(null)} />
 
       {/* F-6 (PLAN_FUSION_BOVEDA.md): acción manual SOLO cuando hay pendientes; */}
       {/* la asignación en sí la ejecuta el hook dueño (App) y el toast viaja por App. */}

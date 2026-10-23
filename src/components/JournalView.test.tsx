@@ -37,7 +37,7 @@ const polizaReporte = (ocultar?: Partial<Poliza>): Poliza => ({
 
 describe('JournalView (solo lectura — Fase 4 de PLAN_POLIZAS.md)', () => {
   it('ya NO ofrece captura: sin botón "Nuevo Asiento" y sin importador', () => {
-    render(<JournalView polizas={[polizaReporte()]} onSetModal={vi.fn()} />);
+    render(<JournalView polizas={[polizaReporte()]} empresaId="e1" onSetModal={vi.fn()} />);
     expect(screen.queryByText('Nuevo Asiento')).toBeNull();
     expect(screen.queryByText('Importar')).toBeNull();
     expect(screen.queryByText('Plantilla')).toBeNull();
@@ -45,7 +45,7 @@ describe('JournalView (solo lectura — Fase 4 de PLAN_POLIZAS.md)', () => {
 
   it('muestra una fila por partida con folio/tipo/cuenta y suma iguales al final', () => {
     const p = polizaReporte();
-    render(<JournalView polizas={[p]} onSetModal={vi.fn()} />);
+    render(<JournalView polizas={[p]} empresaId="e1" onSetModal={vi.fn()} />);
 
     const folio = formatPolizaFolio(p);
     // la columna FOLIO repite el folio en cada fila de la póliza
@@ -61,7 +61,7 @@ describe('JournalView (solo lectura — Fase 4 de PLAN_POLIZAS.md)', () => {
     const p = polizaReporte({
       partidas: [partidaReporte({ id: 'rep-0', debit: 0, credit: 0 })]
     });
-    render(<JournalView polizas={[p]} onSetModal={vi.fn()} />);
+    render(<JournalView polizas={[p]} empresaId="e1" onSetModal={vi.fn()} />);
     expect(screen.getByText(/No hay movimientos registrados/i)).toBeTruthy();
   });
 });
