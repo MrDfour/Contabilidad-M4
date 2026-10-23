@@ -33,7 +33,7 @@ import {
   type ResumenFusion,
 } from '../../lib/unionBovedas';
 
-const PREFIJO_TIPO: Record<Poliza['tipo'], string> = { ingreso: 'ING', egreso: 'EGR', diario: 'DIA' };
+const PREFIJO_TIPO: Record<Poliza['tipo'], string> = { ingreso: 'ING', egreso: 'EGR', diario: 'DIA', cheque: 'CHE' };
 
 /** Etiqueta de folio SIN tocar storage (solo display). */
 const etiquetaFolio = (p: Poliza): string => `${PREFIJO_TIPO[p.tipo]}-${String(Math.max(p.folio, 0)).padStart(4, '0')}`;

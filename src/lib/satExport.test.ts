@@ -54,14 +54,16 @@ const PARTIDA_VENTAS = partida({
 });
 
 describe('buildPolizasXML (constructor puro del XML SAT de Pólizas — Anexo 24)', () => {
-  it('TipoPoliza: ingreso→1, egreso→2, diario→3', () => {
+  it('TipoPoliza: ingreso→1, egreso→2, diario→3, cheque→2 (CH-2 de PLAN_CHEQUES.md)', () => {
     const x = parseXML(buildPolizasXML('GACJ890101ABA', '2025', '03', [
       poliza({ id: 'p1', folio: 1, tipo: 'ingreso', fecha: '2025-03-05' }, [PARTIDA_CAJA]),
       poliza({ id: 'p2', folio: 1, tipo: 'egreso', fecha: '2025-03-06' }, [PARTIDA_CAJA]),
-      poliza({ id: 'p3', folio: 1, tipo: 'diario', fecha: '2025-03-07' }, [PARTIDA_CAJA])
+      poliza({ id: 'p3', folio: 1, tipo: 'diario', fecha: '2025-03-07' }, [PARTIDA_CAJA]),
+      poliza({ id: 'p4', folio: 1, tipo: 'cheque', fecha: '2025-03-08' }, [PARTIDA_CAJA])
     ], ACCOUNTS));
 
-    expect(x.polizas.map(p => p.getAttribute('TipoPoliza'))).toEqual(['1', '2', '3']);
+    // El Anexo 24 no define "cheque": la póliza de cheque sale como egreso real.
+    expect(x.polizas.map(p => p.getAttribute('TipoPoliza'))).toEqual(['1', '2', '3', '2']);
   });
 
   it('NumUnIdenPol = FOLIO REAL (no índice+1) — el cambio central de la Fase 6', () => {

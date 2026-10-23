@@ -33,14 +33,15 @@ const esFolioBuscado = (termino: string, poliza: Poliza) => {
   return formatPolizaFolio(poliza).toLowerCase().includes(limpio.toLowerCase());
 };
 
-/** Preferencia de estilo de captura (global, no por empresa: es gusto del usuario). */
+/** Preferencia de estilo de captura (global, no por empresa: es gusto del usuario).
+ *  CH-7 de PLAN_CHEQUES.md: el default del modal es ahora la HOJA (papel). */
 const CLAVE_MODO_CAPTURA = 'contasis_modo_captura';
 
 const leerModoCaptura = (): ModoCaptura => {
   try {
-    return localStorage.getItem(CLAVE_MODO_CAPTURA) === 'papel' ? 'papel' : 'clasica';
+    return localStorage.getItem(CLAVE_MODO_CAPTURA) === 'clasica' ? 'clasica' : 'papel';
   } catch {
-    return 'clasica';
+    return 'papel';
   }
 };
 
@@ -105,7 +106,8 @@ export function PolizaView({
     todas: conBusqueda.length,
     ingreso: conBusqueda.filter(p => p.tipo === 'ingreso').length,
     egreso: conBusqueda.filter(p => p.tipo === 'egreso').length,
-    diario: conBusqueda.filter(p => p.tipo === 'diario').length
+    diario: conBusqueda.filter(p => p.tipo === 'diario').length,
+    cheque: conBusqueda.filter(p => p.tipo === 'cheque').length
   };
 
   const handleSavePoliza = (data: PolizaInput) => {

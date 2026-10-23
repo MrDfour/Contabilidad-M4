@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { DiarioPrintModal } from './DiarioPrintModal';
 import type { Poliza } from '../../types';
 
@@ -137,5 +137,90 @@ describe('DiarioPrintModal formato Póliza diaria', () => {
     render(<DiarioPrintModal polizas={polizas} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Póliza diaria' }));
     expect(localStorage.getItem('contasis_diario_formato')).toBe('diaria');
+  });
+});
+
+describe('DiarioPrintModal — cheques y toggle de inclusión (Fase 3 de PLAN_CHEQUES.md)', () => {
+  const polizaCheque: Poliza = {
+    id: 'pc1',
+    folio: 1,
+    tipo: 'cheque',
+    fecha: '2026-03-07',
+    concepto: 'Pago renta con cheque',
+    cheque: { numero: '1042', banco: 'Banorte', beneficiario: 'Juan Pérez' },
+    partidas: [
+      { id: 'pc1-0', accountId: 'a1', accountCode: '1101', accountName: 'Caja', debit: 300, credit: 0 },
+      { id: 'pc1-1', accountId: 'a2', accountCode: '3101', accountName: 'Capital Social', debit: 0, credit: 300 }
+    ],
+    totalDebe: 300,
+    totalHaber: 300
+  };
+
+  const cambiarRangoMarzo = () => {
+    fireEvent.change(desde(), { target: { value: '2026-03-01' } });
+    fireEvent.change(hasta(), { target: { value: '2026-03-31' } });
+  };
+
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    localStorage.clear();
+  });
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it('formato Hoja por póliza: el cheque imprime SU hoja propia (título, calcado, datos)', () => {
+    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} onClose={vi.fn()} />);
+    cambiarRangoMarzo();
+
+    // INCLUIDO (default ON): hoja de cheque propia dentro del libro
+    expect(screen.getByText('Póliza de Cheque')).toBeTruthy();
+    expect(screen.getByTestId('zona-calcado-cheque')).toBeTruthy();
+    expect(screen.getByText('1042')).toBeTruthy();
+    expect(screen.getByText('Juan Pérez')).toBeTruthy();
+    expect(screen.getAllByText('CHE-0001').length).toBeGreaterThan(0);
+    // La suma general del período incluye el cheque (1750 + 300, doble partida)
+    expect(screen.getAllByText('$2,050.00').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('toggle OFF: el cheque SALE del libro (hojas, sumas y conteo)', () => {
+    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} onClose={vi.fn()} />);
+    cambiarRangoMarzo();
+
+    fireEvent.click(screen.getByLabelText('Incluir pólizas de cheque en la impresión'));
+
+    expect(screen.queryByTestId('zona-calcado-cheque')).toBeNull();
+    expect(screen.queryByText('1042')).toBeNull();
+    expect(screen.queryByText('Póliza de Cheque')).toBeNull();
+    // Quedan las 3 pólizas no-cheque y el aviso de exclusión
+    expect(screen.getAllByText(/3 póliza/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/1 cheque\(s\) excluido\(s\)/)).toBeTruthy();
+    // Suma general sin el cheque: 1000 + 250 + 500 = 1750
+    expect(screen.getAllByText('$1,750.00').length).toBeGreaterThanOrEqual(2);
+    // La preferencia persiste
+    expect(localStorage.getItem('contasis_diario_cheques')).toBe('0');
+  });
+
+  it('toggle OFF: el cheque tampoco entra al consolidado diario ni al continuo', () => {
+    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} onClose={vi.fn()} />);
+    cambiarRangoMarzo();
+    fireEvent.click(screen.getByLabelText('Incluir pólizas de cheque en la impresión'));
+    fireEvent.click(screen.getByRole('button', { name: 'Póliza diaria' }));
+    // Sin el cheque: 2 hojas diarias (01/03, 05/03) — no la del 07/03
+    expect(screen.getAllByText('Póliza Diaria').length).toBe(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Libro continuo' }));
+    // El folio del cheque no aparece en el libro continuo
+    expect(screen.queryByText('CHE-0001')).toBeNull();
+    expect(screen.getAllByText('Suma del día').length).toBe(2);
+  });
+
+  it('toggle incluido en el libro continuo: el folio del cheque entra una vez', () => {
+    render(<DiarioPrintModal polizas={[...polizas, polizaCheque]} onClose={vi.fn()} />);
+    cambiarRangoMarzo();
+    fireEvent.click(screen.getByRole('button', { name: 'Libro continuo' }));
+    expect(screen.getAllByText('CHE-0001').length).toBe(1);
   });
 });

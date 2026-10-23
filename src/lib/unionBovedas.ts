@@ -124,6 +124,7 @@ const contenidoEstable = (p: Poliza): string =>
     p.elaboro ?? null,
     p.reviso ?? null,
     p.autorizo ?? null,
+    JSON.stringify(p.cheque ?? null), // metadatos/anexos del cheque entran al contenido estable (F-3)
   ]);
 
 /** true si la póliza entrante es gemela sospechosa de una local (F-5). */

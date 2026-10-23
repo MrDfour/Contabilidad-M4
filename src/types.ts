@@ -33,7 +33,7 @@ export interface JournalEntry {
 }
 
 /** Tipo de póliza contable: captura de Ingreso (1), Egreso (2) o Diario (3) para SAT. */
-export type TipoPoliza = 'ingreso' | 'egreso' | 'diario';
+export type TipoPoliza = 'ingreso' | 'egreso' | 'diario' | 'cheque';
 
 /** Una línea de una póliza (partida contable de un solo lado). */
 export interface PartidaPoliza {
@@ -64,6 +64,27 @@ export interface Poliza {
   autorizo?: string;
   capturadoEn?: string; // ISO con hora de captura (silencioso; ordena el merge futuro, no toca UI/SAT)
   editadoEn?: string;   // ISO de la última edición (silencioso; el merge gana por la más reciente)
+  cheque?: ChequeDatos; // CH-4 (PLAN_CHEQUES.md): SOLO tipo 'cheque' — invariante de visual/persistencia
+}
+
+/** Referencia a un ANEXO de imagen (calca del cheque). El binario NUNCA va inline: vive
+ * aparte en attachmentService (CH-6/CH-11 de PLAN_CHEQUES.md), clave por (empresaId, sha). */
+export interface ChequeAnexo {
+  id: string;          // = sha256 del binario — dedupe CH-10
+  sha256: string;
+  bytes: number;
+  mime: 'image/webp' | 'image/jpeg';
+  capturadoEn: string; // ISO — materia prima del ciclo huérfano (aviso día 4 / purga día 5, CH-14)
+}
+
+/** Metadatos del cheque físico que encabeza la hoja (CH-4). Campos de texto libre;
+ * `numero` es el folio BANCARIO del cheque (otro que el folio contable CHE-…, CH-3).
+ * El anexo es LISTA desde el día 1 (CH-16); la UI de fase 1 la limita a 1 elemento. */
+export interface ChequeDatos {
+  numero?: string;
+  banco?: string;
+  beneficiario?: string;
+  anexos?: ChequeAnexo[];
 }
 
 export interface Journal {

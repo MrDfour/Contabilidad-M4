@@ -312,25 +312,25 @@ de cheque y las fechas (es lo que manda una auditoría/cotejo real).
 ## 9. Fases de implementación
 
 ### Fase 1 — Tipos + helpers puros (sin UI)
-- [ ] `types.ts`: `TipoPoliza` + `ChequeDatos`/`ChequeAnexo`; `Poliza.cheque?` incluido en el contenido estable de pólizas (huella de sync K-11).
-- [ ] `lib/accounting.ts`: `formatPolizaFolio`/`nextPolizaFolio`/`asignarFoliosPendientes` con `CHE`.
-- [ ] `lib/satExport.ts`: `TIPO_POLIZA_SAT` (cheque→'2') + test de XML PL con póliza de cheque.
-- [ ] `lib/unionBovedas.test.ts`: caso tipo `cheque` (folios, colisiones F-2, contenido estable).
-- [ ] `lib/accounting.test.ts`: folios CHE por cliente + "PENDIENTE" con folio 0.
+- [x] `types.ts`: `TipoPoliza` + `ChequeDatos`/`ChequeAnexo`; `Poliza.cheque?` incluido en el contenido estable de pólizas (huella de sync K-11).
+- [x] `lib/accounting.ts`: `formatPolizaFolio`/`nextPolizaFolio`/`asignarFoliosPendientes` con `CHE`.
+- [x] `lib/satExport.ts`: `TIPO_POLIZA_SAT` (cheque→'2') + test de XML PL con póliza de cheque.
+- [x] `lib/unionBovedas.test.ts`: caso tipo `cheque` (folios, colisiones F-2, contenido estable).
+- [x] `lib/accounting.test.ts`: folios CHE por cliente + "PENDIENTE" con folio 0.
 
 ### Fase 2 — Modal rework (UI)
-- [ ] `PolizaForm.tsx`: control FORMATO ▾ (ingresos/egresos/diario/cheque) + entrada clásica; default papel; tipo congelado al editar; grid mobile apilado; `contasis_hoja_papel`.
-- [ ] Formulario cheque: datos del cheque + UI de anexo (picker → pipeline WebP CH-9) — sin la persistencia real todavía (por props/callback).
-- [ ] `PolizaFilter`/`PolizaCard`: chip + distintivo CHE + folio.
-- [ ] `PolizaForm.test.tsx`: modos, tipo congelado, validación en hoja cheque (≥2 partidas, sumas).
-- [ ] `AsignarFoliosPendientesModal`: sin cambios esperados, test de folio CHE pendiente.
+- [x] `PolizaForm.tsx`: control FORMATO ▾ (ingresos/egresos/diario/cheque) + entrada clásica; default papel; tipo congelado al editar; grid mobile apilado; `contasis_hoja_papel`.
+- [x] Formulario cheque: datos del cheque + UI de anexo (picker → pipeline WebP CH-9) — sin la persistencia real todavía (por props/callback).
+- [x] `PolizaFilter`/`PolizaCard`: chip + distintivo CHE + folio.
+- [x] `PolizaForm.test.tsx`: modos, tipo congelado, validación en hoja cheque (≥2 partidas, sumas).
+- [x] `AsignarFoliosPendientesModal`: sin cambios esperados, test de folio CHE pendiente.
 
 ### Fase 3 — Hoja de cheque impresa
-- [ ] `PolizaSheet.tsx` (o `HojaCheque`): título "PÓLIZA DE CHEQUE", zona superior en blanco (CH-5), cuadro "CONCEPTO DEL PAGO" + "FIRMA (CHEQUE) RECIBIDO", datos del cheque (`numero`/banco/beneficiario) + Nº de póliza; renglones por parámetro (ya existe).
-- [ ] Pie "SUMAS IGUALES" (CH-15) **con comentario en código**: la leyenda queda PENDIENTE de futuros cambios según la práctica contable real del contador.
-- [ ] `PolizaPrintModal.tsx`: ruta de impresión para cheques.
-- [ ] `DiarioPrintModal.tsx`: los cheques entran al diario por fecha (los 3 formatos); en "hoja por póliza" el cheque imprime su hoja propia.
-- [ ] Tests/print smoke (JSDOM: presencia de zonas/título; los tests del diario ya cubren la integración de formatos).
+- [x] `PolizaSheet.tsx` (o `HojaCheque`): título "PÓLIZA DE CHEQUE", zona superior en blanco (CH-5), cuadro "CONCEPTO DEL PAGO" + "FIRMA (CHEQUE) RECIBIDO", datos del cheque (`numero`/banco/beneficiario) + Nº de póliza; renglones por parámetro (ya existe).
+- [x] Pie "SUMAS IGUALES" (CH-15) **con comentario en código**: la leyenda queda PENDIENTE de futuros cambios según la práctica contable real del contador.
+- [x] `PolizaPrintModal.tsx`: ruta de impresión para cheques.
+- [x] `DiarioPrintModal.tsx`: los cheques entran al diario por fecha (los 3 formatos); en "hoja por póliza" el cheque imprime su hoja propia.
+- [x] Tests/print smoke (JSDOM: presencia de zonas/título; los tests del diario ya cubren la integración de formatos).
 
 ### Fase 4 — attachmentService + backends (deployment tras el gate de §8.2)
 - [ ] `services/attachmentService.ts`: save/load/delete por (empresaId, sha) + dedupe CH-10.
@@ -350,3 +350,9 @@ de cheque y las fechas (es lo que manda una auditoría/cotejo real).
 | Fase | Estado | Fecha | Notas |
 |------|--------|-------|-------|
 | — | ⏳ En planeación (v2) | 2026-10-21 | Decisiones del usuario incorporadas (CH-1..CH-16). PENDIENTE: gate del experimento de legibilidad §8.2 antes de Fases 2 y 4; parámetros de la escalera se congelan con su resultado. |
+| 1 | ✅ COMPLETADA | 2026-10-23 | `tipo: 'cheque'` + `ChequeDatos`/`ChequeAnexo` en `types.ts` (CH-1/CH-4/CH-6/CH-16); `Poliza.cheque` entra al `contenidoEstable` de `unionBovedas.ts` (F-3/K-11). Prefijo `CHE` en `accounting.ts`/`FusionBovedaModal`; `TIPO_POLIZA_SAT.cheque='2'` (CH-2) y proyección legacy `flattenPolizasToJournalEntries` proyecta cheque→egreso por el mismo criterio. Maps exhaustivos de UI completados para compile-clean (PolizaCard/JournalView/PolizaSheet/AsignarFoliosPendientesModal/PolizaView + chip "Cheques" en `PolizaFilter`). 10 tests nuevos (folios CHE, XML cheque→2, fusión con cheques: entrante con metadatos intactos, colisión→pendiente, metadato `cheque` como EDICIÓN F-3). Gate limpio: lint ✓ · 326 tests ✓ · build ✓ · anti-CJK limpio. |
+| — | 🧪 Herramienta del experimento §8.2 LISTA | 2026-10-23 | `herramientas/experimento_escalera.html`: página 100% local (sin build ni red) que corre las escaleras A y B sobre cada muestra, reporta KB por pasada, ofrece el checklist de 4 puntos y genera el reporte Markdown para §10. Falta: que el usuario la abra, cargue sus 5 fotos + 2 escaneos, marque la legibilidad y así se congelan los parámetros para las Fases 2 y 4. |
+| — | ✅ EXPERIMENTO §8.2 EJECUTADO — **GATE SUPERADO** | 2026-10-23 | 5 muestras reales (captura/WhatsApp/webp) + 1 imagen generada de control. **TODAS 4/4 legibles en AMBAS escaleras** (confirmado por el usuario de viva voz: "todos los archivos se ven muy bien en ambos tipos de compresión"). Tamaños finales ≤ 97 KB (objetivo 150 KB cómodo). La imagen generada salió 0/4 por diseño (no contiene datos de cheque: control negativo, se excluye). **PARÁMETROS CONGELADOS** tal cual §8.1 sin endurecer: umbral ≥2500 px → escalera A, <2500 → escalera B; objetivo 150 KB; cap 300 KB con guardado CAPADO (nunca rechaza, CH-9); P4 solo como último recurso. Nota honesta: todas las muestras tuvieron lado menor < 2500 px, así que P3 (grises) y P4 (búsqueda binaria) no quedaron ejercitadas por el experimento — quedan como red de seguridad tal como están escritas. **Fases 2 y 4 DESBLOQUEADAS.** |
+| 2 | ✅ COMPLETADA | 2026-10-23 | Rework del modal (CH-8): control FORMATO ▾ con las 4 hojas (select único `aria-label="Formato de la póliza"` que ES el tipo) + enlaces alternos "usar captura clásica (campos)" / "usar captura en papel (hoja)"; Última hoja usada persistida en `contasis_hoja_papel` (default Diario). Default del modal = 'papel' en PolizaView (CH-7). Datos del cheque (CH-4: Número/Banco/Beneficiario — `numero` es el folio bancario) visibles SOLO con tipo 'cheque', en ambos modos; al editar se prellenan y se PRESERVAN los `anexos` previos. UI del anexo (CH-6): picker `image/*` + preview local (objectURL revocado al quitar/desmontar); el binario NO se persiste — la Fase 4 lo recibe vía prop `onAnexoPendiente`. Hoja papel reconstruida como **grid responsive** (encabezado de columnas solo desktop, celdas apiladas en móvil) — un solo DOM, sin duplicar aria-labels. PolizaCard: línea "Cheque Nº … · Banco · Beneficiario". D-8 respetado: tipo/hoja congelados al editar. El toggle antiguo CAPTURA [Clásica|Papel] queda RETIRADO. 8 tests nuevos (hoja recordada, persistence, FORMATO↔tipo, cheque en clásica viaja al input, prefill en edición, diario sin cheque) + test CHE-0001 pendiente. Gate limpio: lint ✓ · 334 tests ✓ · build ✓ · anti-CJK limpio. |
+| — | 🧭 DECISIÓN DE VISTA (usuario, 2026-10-23) | 2026-10-23 | Reporte del usuario con capturas: en el compilado de pólizas el cheque "no se muestra" y la imagen anexa tampoco. Verificado: el código de Fase 2 SÍ lista cheques (filtro/conteo/PolizaCard) — las capturas corresponden al build instalado anterior (recargar PWA). El anexo de imagen requiere Fase 4 (binario local). Alcance decidido por el usuario: (1) SEGUIR EL ORDEN del plan (Fase 3 → 4): la imagen en tarjeta llega con attachmentService como miniatura COMPACTA (~64 px, clic abre grande); (2) impresión del diario con **toggle "Incluir cheques"** (cada cheque además tiene su impresión individual con imagen cuando exista el anexo). |
+| 3 | ✅ COMPLETADA | 2026-10-23 | `PolizaSheet.tsx`: nueva hoja **`PolizaChequeSheet`** — título sello "Póliza de Cheque", zona de calcado EN BLANCO ~16rem (CH-5, la imagen anexa NUNCA se imprime ahí), datos del cheque + Fecha + Nº de Póliza (CHE- de su serie), tabla de partidas con relleno hasta 10 y pie "SUMAS IGUALES" con **comentario CH-15 en código** (pendiente de la práctica contable real del contador), cuadros "Concepto del pago" + "Firma (cheque) recibido" en blanco para firma a mano. Despachador **`HojaPolizaImprimible`**: cheque→hoja propia, resto→hoja clásica; usado por `PolizaPrintModal` (impresión individual) y el diario (formato "Hoja por póliza"). `DiarioPrintModal`: en los 3 formatos el entrar/salir del cheque lo controla el **toggle "Incluir cheques"** (checkbox persistido en `contasis_diario_cheques`, default ON — no se oculta nada); con OFF el cheque sale del libro COMPLETO (hojas, consolidado diario, libro continuo y sumas) y el panel avisa "N cheque(s) excluido(s)"; período que SOLO tenga cheques excluidos muestra mensaje propio. 12 tests nuevos (hoja cheque: título/zona/datos/sumas/relleno; despacho por tipo; ruta individual; diario: hoja propia incluida, toggle OFF excluye de los 3 formatos con sumas correctas, folio CHE en continuo). Gate limpio: lint ✓ · **346 tests** ✓ (29 archivos) · build ✓ · anti-CJK limpio. |

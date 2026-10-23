@@ -30,13 +30,15 @@ import { DiarioPrintModal } from './polizas/DiarioPrintModal';
 const TIPO_LABEL: Record<TipoPoliza, string> = {
   ingreso: 'Ingreso',
   egreso: 'Egreso',
-  diario: 'Diario'
+  diario: 'Diario',
+  cheque: 'Cheque'
 };
 
 const TIPO_BADGE: Record<TipoPoliza, string> = {
   ingreso: 'bg-emerald-500/15 text-emerald-400',
   egreso: 'bg-rose-500/15 text-rose-400',
-  diario: 'bg-indigo-500/15 text-indigo-400'
+  diario: 'bg-indigo-500/15 text-indigo-400',
+  cheque: 'bg-amber-500/15 text-amber-400'
 };
 
 /** Fila del reporte: una partida de una póliza cronológica. */

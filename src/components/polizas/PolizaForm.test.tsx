@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PolizaForm } from './PolizaForm';
 import type { Account, Poliza } from '../../types';
@@ -301,24 +301,155 @@ describe('PolizaForm modo papel (captura tipo póliza física)', () => {
     expect(input.partidas[1]).toMatchObject({ debit: 0, credit: 300 });
   });
 
-  it('el toggle de modo aparece solo si el dueño puede persistirlo (onModoChange)', () => {
+  it('los accesos alternos de captura aparecen solo si el dueño puede persistir (CH-8)', () => {
+    const onModoChange = vi.fn();
     const { unmount } = render(
       <PolizaForm accounts={accounts} appMode="basic" onSave={vi.fn()} onCancel={vi.fn()} />
     );
-    expect(screen.queryByRole('button', { name: 'Papel' })).toBeNull();
+    // Sin dueño: NO hay enlace alterno en clásica
+    expect(screen.queryByRole('button', { name: /usar captura en papel/i })).toBeNull();
     unmount();
 
+    // Clásica + dueño → enlace hacia la hoja papel
     render(
       <PolizaForm
         accounts={accounts}
         appMode="basic"
         modo="clasica"
-        onModoChange={vi.fn()}
+        onModoChange={onModoChange}
         onSave={vi.fn()}
         onCancel={vi.fn()}
       />
     );
-    expect(screen.getByRole('button', { name: 'Papel' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Clásica' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /usar captura en papel/i }));
+    expect(onModoChange).toHaveBeenCalledWith('papel');
+  });
+});
+
+describe('PolizaForm CH-8 de PLAN_CHEQUES.md (FORMATO, hoja recordada, cheque)', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    localStorage.clear();
+  });
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  const formato = () => screen.getByLabelText('Formato de la póliza') as HTMLSelectElement;
+
+  it('modo papel: control FORMATO con las 4 hojas y default DIARIO sin clave previa', () => {
+    render(
+      <PolizaForm accounts={accounts} appMode="basic" modo="papel" onSave={vi.fn()} onCancel={vi.fn()} />
+    );
+    expect(formato()).toBeTruthy();
+    expect(formato().value).toBe('diario'); // contasis_hoja_papel ausente → Diario (CH-8)
+    expect(screen.getByRole('option', { name: 'Póliza de Cheque' })).toBeTruthy();
+    // En papel NO existe el select "Tipo de Póliza" clásico ( FORMATO lo sustituye)
+    expect(screen.queryByLabelText('Tipo de Póliza')).toBeNull();
+  });
+
+  it('elegir FORMATO persiste contasis_hoja_papel y muestra los datos del cheque', () => {
+    const onSave = vi.fn();
+    render(
+      <PolizaForm accounts={accounts} appMode="basic" modo="papel" onSave={onSave} onCancel={vi.fn()} />
+    );
+    fireEvent.change(formato(), { target: { value: 'cheque' } });
+    expect(localStorage.getItem('contasis_hoja_papel')).toBe('cheque');
+    expect(screen.getByLabelText('Número de cheque')).toBeTruthy();
+    expect(screen.getByLabelText('Banco del cheque')).toBeTruthy();
+    expect(screen.getByLabelText('Beneficiario del cheque')).toBeTruthy();
+  });
+
+  it('hoja recordada: contasis_hoja_papel=cheque abre el modal EN CHEQUE', () => {
+    localStorage.setItem('contasis_hoja_papel', 'cheque');
+    render(
+      <PolizaForm accounts={accounts} appMode="basic" modo="papel" onSave={vi.fn()} onCancel={vi.fn()} />
+    );
+    expect(formato().value).toBe('cheque');
+    expect(screen.getByLabelText('Número de cheque')).toBeTruthy();
+  });
+
+  it('enlace "usar captura clásica (campos)" delega en el dueño (onModoChange)', () => {
+    const onModoChange = vi.fn();
+    render(
+      <PolizaForm
+        accounts={accounts}
+        appMode="basic"
+        modo="papel"
+        onModoChange={onModoChange}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /usar captura clásica/i }));
+    expect(onModoChange).toHaveBeenCalledWith('clasica');
+  });
+
+  it('clásica: TIPO gana "Cheque" → datos del cheque visibles y viajan al PolizaInput', () => {
+    const onSave = vi.fn();
+    render(
+      <PolizaForm accounts={accounts} appMode="basic" modo="clasica" onSave={onSave} onCancel={vi.fn()} />
+    );
+    expect(screen.queryByLabelText('Formato de la póliza')).toBeNull();
+    fireEvent.change(tipoSelect(), { target: { value: 'cheque' } });
+    expect(screen.getByLabelText('Número de cheque')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Número de cheque'), { target: { value: '1042' } });
+    fireEvent.change(screen.getByLabelText('Banco del cheque'), { target: { value: 'Banorte' } });
+    fireEvent.change(screen.getByLabelText('Beneficiario del cheque'), { target: { value: 'Juan Pérez' } });
+    fireEvent.change(conceptoGeneral(), { target: { value: 'Pago con cheque' } });
+    fireEvent.change(amount(1), { target: { value: '100' } });
+    fireEvent.change(amount(2), { target: { value: '100' } });
+    fireEvent.click(submitButton());
+
+    const input = onSave.mock.calls[0][0] as PolizaInput;
+    expect(input.tipo).toBe('cheque');
+    expect(input.cheque).toEqual({ numero: '1042', banco: 'Banorte', beneficiario: 'Juan Pérez' });
+  });
+
+  it('tipo/hoja de cheque CONGELADO al editar y el cheque se prellena (D-8/CH-4)', () => {
+    const editable: Poliza = {
+      id: 'c1',
+      tipo: 'cheque',
+      folio: 3,
+      fecha: '2026-03-10',
+      concepto: 'Pago renta con cheque',
+      cheque: { numero: '1042', banco: 'Banorte', beneficiario: 'Juan Pérez' },
+      partidas: [
+        { id: 'c1-1', accountId: 'a1', accountCode: '1101', accountName: 'Caja', debit: 500, credit: 0 },
+        { id: 'c1-2', accountId: 'a2', accountCode: '3101', accountName: 'Capital Social', debit: 0, credit: 500 }
+      ],
+      totalDebe: 500,
+      totalHaber: 500
+    };
+    render(
+      <PolizaForm
+        accounts={accounts}
+        appMode="basic"
+        modo="papel"
+        initialData={editable}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+    expect(formato()).toBeDisabled();
+    expect(formato().value).toBe('cheque');
+    expect((screen.getByLabelText('Número de cheque') as HTMLInputElement).value).toBe('1042');
+    expect((screen.getByLabelText('Banco del cheque') as HTMLInputElement).value).toBe('Banorte');
+    expect((screen.getByLabelText('Beneficiario del cheque') as HTMLInputElement).value).toBe('Juan Pérez');
+  });
+
+  it('un TIPO diario NO compone cheque en el PolizaInput', () => {
+    const onSave = vi.fn();
+    render(
+      <PolizaForm accounts={accounts} appMode="basic" modo="clasica" onSave={onSave} onCancel={vi.fn()} />
+    );
+    fireEvent.change(conceptoGeneral(), { target: { value: 'Asiento simple' } });
+    expect(screen.queryByLabelText('Número de cheque')).toBeNull(); // diario: SIN datos de cheque
+    fireEvent.change(amount(1), { target: { value: '100' } });
+    fireEvent.change(amount(2), { target: { value: '100' } });
+    fireEvent.click(submitButton());
+    expect((onSave.mock.calls[0][0] as PolizaInput).cheque).toBeUndefined();
   });
 });

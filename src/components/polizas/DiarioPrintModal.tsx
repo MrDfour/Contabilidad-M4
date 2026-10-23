@@ -10,7 +10,7 @@ import { CalendarRange, Printer, X } from 'lucide-react';
 import type { Poliza } from '../../types';
 import { formatCurrency, normalizeAmount } from '../../lib/format';
 import { consolidarPolizasDiaria, formatPolizaFolio } from '../../lib/accounting';
-import { PolizaPapelSheet } from './PolizaSheet';
+import { HojaPolizaImprimible, PolizaPapelSheet } from './PolizaSheet';
 
 /**
  * Impresión del Libro Diario en formato papel, con TRES disposiciones:
@@ -34,6 +34,13 @@ import { PolizaPapelSheet } from './PolizaSheet';
 type FormatoImpresion = 'polizas' | 'diaria' | 'continuo';
 
 const CLAVE_FORMATO = 'contasis_diario_formato';
+/**
+ * Toggle "Incluir cheques" (decisión del usuario, 2026-10-23): las pólizas de
+ * CHEQUE pueden quedarse FUERA del libro impreso para no saturar el diario;
+ * cada cheque también tiene su impresión individual con imagen cuando exista
+ * el anexo (Fase 4). ON = incluidos (default: no se oculta nada).
+ */
+const CLAVE_INCLUIR_CHEQUES = 'contasis_diario_cheques';
 
 const leerFormato = (): FormatoImpresion => {
   try {
@@ -42,6 +49,14 @@ const leerFormato = (): FormatoImpresion => {
     return 'polizas';
   } catch {
     return 'polizas';
+  }
+};
+
+const leerIncluirCheques = (): boolean => {
+  try {
+    return localStorage.getItem(CLAVE_INCLUIR_CHEQUES) !== '0';
+  } catch {
+    return true;
   }
 };
 
@@ -110,6 +125,7 @@ export function DiarioPrintModal({
   const [desde, setDesde] = useState(fechaInicial);
   const [hasta, setHasta] = useState(fechaInicial);
   const [formato, setFormato] = useState<FormatoImpresion>(leerFormato);
+  const [incluirCheques, setIncluirCheques] = useState(leerIncluirCheques);
 
   const cambiarFormato = (f: FormatoImpresion) => {
     setFormato(f);
@@ -120,14 +136,29 @@ export function DiarioPrintModal({
     }
   };
 
+  const cambiarIncluirCheques = (incluir: boolean) => {
+    setIncluirCheques(incluir);
+    try {
+      localStorage.setItem(CLAVE_INCLUIR_CHEQUES, incluir ? '1' : '0');
+    } catch {
+      // Sin persistencia disponible: el toggle vive solo en esta sesión.
+    }
+  };
+
   const enRango = polizas.filter(p => p.fecha >= desde && p.fecha <= hasta);
+  // Toggle de cheques: OFF saca a las pólizas de cheque del libro impreso
+  // (sus partidas/sumas también salen para que el libro cuadre por sí solo).
+  const impresas = incluirCheques
+    ? enRango
+    : enRango.filter(p => p.tipo !== 'cheque');
+  const chequesExcluidos = enRango.filter(p => p.tipo === 'cheque').length;
   // Defensa: orden cronológico garantizado aunque el dueño no ordene.
-  const ordenadas = [...enRango].sort((a, b) =>
+  const ordenadas = [...impresas].sort((a, b) =>
     a.fecha.localeCompare(b.fecha) ||
     a.folio - b.folio ||
     (a.capturadoEn ?? '').localeCompare(b.capturadoEn ?? ''));
-  const sumaDebe = normalizeAmount(enRango.reduce((s, p) => s + p.totalDebe, 0));
-  const sumaHaber = normalizeAmount(enRango.reduce((s, p) => s + p.totalHaber, 0));
+  const sumaDebe = normalizeAmount(impresas.reduce((s, p) => s + p.totalDebe, 0));
+  const sumaHaber = normalizeAmount(impresas.reduce((s, p) => s + p.totalHaber, 0));
 
   // --- Agrupar pólizas del rango por fecha (ordenadas) ---
   const porDia: Array<{ fecha: string; polizas: Poliza[] }> = [];
@@ -239,9 +270,24 @@ export function DiarioPrintModal({
           </div>
 
           <span className="text-xs text-slate-400">
-            {enRango.length} póliza(s) en el rango
+            {impresas.length} póliza(s) en el rango
+            {!incluirCheques && chequesExcluidos > 0 && (
+              <span className="text-amber-300"> · {chequesExcluidos} cheque(s) excluido(s)</span>
+            )}
           </span>
           <div className="flex-1" />
+
+          {/* Toggle de inclusión de cheques (persistido; default ON) */}
+          <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-slate-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              aria-label="Incluir pólizas de cheque en la impresión"
+              checked={incluirCheques}
+              onChange={e => cambiarIncluirCheques(e.target.checked)}
+              className="w-3.5 h-3.5 accent-indigo-500"
+            />
+            Incluir cheques
+          </label>
 
           <div className="flex items-center gap-1 p-1 rounded-lg bg-white/5 border border-white/10">
             <button
@@ -291,7 +337,7 @@ export function DiarioPrintModal({
           <button
             type="button"
             onClick={() => window.print()}
-            disabled={enRango.length === 0}
+            disabled={impresas.length === 0}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/5 disabled:text-slate-500 text-white text-sm font-medium shadow-lg shadow-indigo-500/20 transition-all"
           >
             <Printer className="w-4 h-4" /> Imprimir
@@ -330,23 +376,28 @@ export function DiarioPrintModal({
               No hay pólizas registradas en el período seleccionado.
               Ajusta las fechas (Desde/Hasta) en el panel superior.
             </p>
+          ) : impresas.length === 0 ? (
+            <p className="py-16 text-center text-sm text-neutral-500">
+              El período solo contiene pólizas de cheque y están excluidas.
+              Activa «Incluir cheques» para imprimirlas.
+            </p>
           ) : formato === 'polizas' ? (
             <>
-              {enRango.map((p, i) => (
+              {ordenadas.map((p, i) => (
                 <div
                   key={p.id}
-                  className={i < enRango.length - 1 ? 'poliza-print-break' : undefined}
-                  style={i < enRango.length - 1 ? { pageBreakAfter: 'always' } : undefined}
+                  className={i < ordenadas.length - 1 ? 'poliza-print-break' : undefined}
+                  style={i < ordenadas.length - 1 ? { pageBreakAfter: 'always' } : undefined}
                 >
                   <div className={i > 0 ? 'mt-10 pt-8 border-t-2 border-dashed border-sky-200' : 'mt-4'}>
-                    <PolizaPapelSheet poliza={p} />
+                    <HojaPolizaImprimible poliza={p} />
                   </div>
                 </div>
               ))}
 
               {/* Suma general del período */}
               <SumaGeneral
-                etiqueta={`Suma general del período (${enRango.length} póliza${enRango.length === 1 ? '' : 's'})`}
+                etiqueta={`Suma general del período (${ordenadas.length} póliza${ordenadas.length === 1 ? '' : 's'})`}
                 sumaDebe={sumaDebe}
                 sumaHaber={sumaHaber}
               />

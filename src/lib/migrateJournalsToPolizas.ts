@@ -24,7 +24,7 @@ export const migrateJournalsToPolizas = (
   journals: Journal[],
   accounts: Account[]
 ): Poliza[] => {
-  const foliosPorTipo: Record<TipoPoliza, number> = { ingreso: 0, egreso: 0, diario: 0 };
+  const foliosPorTipo: Record<TipoPoliza, number> = { ingreso: 0, egreso: 0, diario: 0, cheque: 0 };
   const polizas: Poliza[] = [];
 
   journals.forEach(journal => {

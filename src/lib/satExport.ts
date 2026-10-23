@@ -180,7 +180,7 @@ export const buildPolizasXML = (
     );
   }
 
-  const TIPO_POLIZA_SAT: Record<TipoPoliza, string> = { diario: '3', ingreso: '1', egreso: '2' };
+  const TIPO_POLIZA_SAT: Record<TipoPoliza, string> = { diario: '3', ingreso: '1', egreso: '2', cheque: '2' };
 
   const polizasXML = polizasPeriodo.map(poliza => {
     const transacciones = poliza.partidas.map(partida => {

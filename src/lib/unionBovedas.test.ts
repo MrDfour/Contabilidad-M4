@@ -330,6 +330,75 @@ describe('aplicarFusion — folios colisionados (F-2)', () => {
   });
 });
 
+describe('pólizas de CHEQUE en la fusión (CH-1/CH-3/CH-4 de PLAN_CHEQUES.md)', () => {
+  /** Local con una serie CHE propia: folios 1 y 2 de cheque. */
+  const construirCheques = (): BackupSnapshotV3 => {
+    nodo = 0;
+    return {
+      empresas: [
+        empresa('e1', {
+          polizas: [
+            poliza({ tipo: 'cheque', folio: 1, concepto: 'CHE local 1', capturadoEn: '2026-10-15T08:00:00.000Z' }),
+            poliza({ tipo: 'cheque', folio: 2, concepto: 'CHE local 2', capturadoEn: '2026-10-15T10:00:00.000Z' }),
+          ],
+        }),
+      ],
+      activaId: 'e1',
+    };
+  };
+
+  it('entrante CHE sin colisión conserva su folio Y sus metadatos del cheque', () => {
+    const local = construirCheques();
+    // folio 3: fuera de la serie local (1 y 2) — sin colisión F-2.
+    const entrante: Poliza = {
+      ...poliza({ tipo: 'cheque', folio: 3, concepto: 'CHE del móvil', capturadoEn: '2026-10-15T12:00:00.000Z' }),
+      cheque: { numero: '1042', banco: 'Banorte', beneficiario: 'Juan Pérez' },
+    };
+    const remoto: BackupSnapshotV3 = { empresas: [empresa('e1', { polizas: [entrante] })], activaId: 'e1' };
+
+    const { snapshot, resumen } = aplicarFusion(local, remoto, {});
+    const resultado = buscar(snapshot, 'e1', 'CHE del móvil')!;
+    expect(resumen.sumadas).toBe(1);
+    expect(resultado.folio).toBe(3); // folio entrante intacto, serie CHE propia
+    expect(resultado.cheque).toEqual({ numero: '1042', banco: 'Banorte', beneficiario: 'Juan Pérez' });
+  });
+
+  it('colisión de folio CHE sin decisión → pendiente (folio 0), local intacta', () => {
+    const local = construirCheques();
+    const entrante = poliza({ tipo: 'cheque', folio: 2, concepto: 'CHE choca', capturadoEn: '2026-10-15T12:00:00.000Z' });
+    const remoto: BackupSnapshotV3 = { empresas: [empresa('e1', { polizas: [entrante] })], activaId: 'e1' };
+
+    const { snapshot, resumen } = aplicarFusion(local, remoto, {});
+    expect(buscar(snapshot, 'e1', 'CHE choca')!.folio).toBe(0);
+    expect(resumen.pendientes).toBe(1);
+    expect(buscar(snapshot, 'e1', 'CHE local 1')!.folio).toBe(1);
+    expect(buscar(snapshot, 'e1', 'CHE local 2')!.folio).toBe(2);
+  });
+
+  it('el metadato del cheque entra al contenido estable: el mismo id con distinto cheque es una EDICIÓN (F-3, gana editadoEn)', () => {
+    nodo = 0;
+    const localOriginal: Poliza = {
+      ...poliza({ tipo: 'cheque', folio: 1, concepto: 'Pago renta', capturadoEn: '2026-10-15T08:00:00.000Z' }),
+      cheque: { numero: '1000', banco: 'Banamex' },
+    };
+    const local: BackupSnapshotV3 = { empresas: [empresa('e1', { polizas: [localOriginal] })], activaId: 'e1' };
+
+    // El móvil corrigió SOLO el número bancario (concepto/partidas idénticos, como contenidoEstable manda).
+    const remotaEditada: Poliza = {
+      ...localOriginal,
+      cheque: { numero: '1042', banco: 'Banamex', beneficiario: 'Casa de renta' },
+      editadoEn: '2026-10-16T09:00:00.000Z',
+    };
+    const remoto: BackupSnapshotV3 = { empresas: [empresa('e1', { polizas: [remotaEditada] })], activaId: 'e1' };
+
+    const { snapshot, resumen } = aplicarFusion(local, remoto, {});
+    expect(resumen.edicionesRemotoGanan).toBe(1);
+    const resultado = snapshot.empresas[0].polizas[0];
+    expect(snapshot.empresas[0].polizas).toHaveLength(1);
+    expect(resultado.cheque).toEqual({ numero: '1042', banco: 'Banamex', beneficiario: 'Casa de renta' });
+  });
+});
+
 describe('aplicarFusion — dominios no foliables y catálogos (F-1/F-4)', () => {
   const cuentaA = (id: string, code: string, nombre = `Cuenta ${code}`): Account => ({ id, code, name: nombre, type: 'asset' });
   const activoA = (id: string, name: string): FixedAsset => ({

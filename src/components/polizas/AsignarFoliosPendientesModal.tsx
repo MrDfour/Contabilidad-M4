@@ -22,7 +22,8 @@ import { asignarFoliosPendientes, esFolioPendiente, formatPolizaFolio } from '..
 const ETIQUETA_TIPO: Record<Poliza['tipo'], string> = {
   ingreso: 'Ingreso',
   egreso: 'Egreso',
-  diario: 'Diario'
+  diario: 'Diario',
+  cheque: 'Cheque'
 };
 
 export function AsignarFoliosPendientesModal({

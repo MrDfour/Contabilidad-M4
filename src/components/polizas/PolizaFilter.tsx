@@ -12,7 +12,8 @@ const OPCIONES: { id: FiltroTipo; label: string }[] = [
   { id: 'todas', label: 'Todas' },
   { id: 'ingreso', label: 'Ingresos' },
   { id: 'egreso', label: 'Egresos' },
-  { id: 'diario', label: 'Diario' }
+  { id: 'diario', label: 'Diario' },
+  { id: 'cheque', label: 'Cheques' }
 ];
 
 /** Control de filtrado por TipoPoliza + buscador por folio numérico y concepto. */

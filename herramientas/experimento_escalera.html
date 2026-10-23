@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<!--
+  @license
+  SPDX-License-Identifier: Apache-2.0
+-->
+<!--
+  HERRAMIENTA DEL EXPERIMENTO DE LEGIBILIDAD (§8.2 de PLAN_CHEQUES.md)
+
+  USO: abrir este archivo con doble clic (Chrome/Edge). NADA se sube a la red:
+  todo corre local en esta página (FileReader + canvas + toBlob WebP).
+
+  1) Cargar las muestras: 5 fotos REALES de cheques + 2 escaneos pequeños.
+  2) Automáticamente corre las escaleras A (fotos, origen >= 2500 px) y
+     B (escaneos, origen < 2500 px) definidas en §8.1 del plan. Cada imagen
+     prueba AMBAS escaleras: así se ve si una foto chica merece la B o viceversa.
+  3) Revisar cada muestra con el zoom y marcar el checklist de legibilidad.
+  4) "Generar reporte" produce el texto (Markdown) para pegar en §10 del plan
+     y CONGELAR los parámetros finales de la escalera ANTES de la Fase 4.
+-->
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Experimento de legibilidad — escalera de compresión de cheques (§8.2)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 1.2rem; background: #0f172a; color: #e2e8f0; }
+  h1 { font-size: 1.25rem; } h2 { font-size: 1rem; margin: 0 0 .6rem; }
+  .panel { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
+  .zona-drop { border: 2px dashed #475569; border-radius: 10px; padding: 1.6rem; text-align: center; cursor: pointer; }
+  .muestra { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 1rem; margin-bottom: 1.2rem; }
+  .muestra h2 { color: #93c5fd; }
+  .fila { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .tarjeta-img { flex: 1 1 260px; max-width: 340px; background: #0f172a; border-radius: 8px; padding: .6rem; }
+  .tarjeta-img img { width: 100%; background: #fff; }
+  .meta { font-size: .8rem; color: #94a3b8; margin-top: .3rem; }
+  .meta b { color: #e2e8f0; }
+  .ok { color: #4ade80; } .alta { color: #fbbf24; } .mal { color: #f87171; }
+  table.check { border-collapse: collapse; width: 100%; margin-top: .8rem; font-size: .85rem; }
+  table.check th, table.check td { border: 1px solid #334155; padding: .35rem .5rem; text-align: center; }
+  table.check th { background: #0f172a; font-weight: 600; }
+  table.check td:first-child, table.check th:first-child { text-align: left; }
+  button { font: inherit; padding: .45rem .9rem; border-radius: 8px; border: none; cursor: pointer; background: #4f46e5; color: #fff; }
+  button.sec { background: #334155; color: #e2e8f0; }
+  .pasos { font-size: .78rem; color: #94a3b8; margin-top: .4rem; line-height: 1.6; }
+  textarea { width: 100%; min-height: 280px; font-family: monospace; font-size: .78rem; background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; }
+  .hint { color: #94a3b8; font-size: .8rem; }
+</style>
+</head>
+<body>
+<h1>Experimento de legibilidad — escaleras A/B de compresión (cheques)</h1>
+<p class="hint">100% local: las imágenes NO salen de tu equipo. Corresponde al §8.2 de PLAN_CHEQUES.md.</p>
+
+<div class="panel">
+  <div class="zona-drop" id="drop">
+    <b>Carga aquí las muestras</b> (clic o arrastra)<br>
+    <span class="hint">5 fotos reales de cheques de distintos bancos/tamaños + 2 escaneos pequeños · JPG/PNG/WebP</span>
+    <input type="file" id="input" accept="image/*" multiple hidden>
+  </div>
+</div>
+
+<div id="salida"></div>
+
+<div class="panel" id="panelReporte" hidden>
+  <h2>Reporte para §10 del plan</h2>
+  <textarea id="reporte" readonly></textarea>
+  <div style="margin-top:.5rem">
+    <button id="copiar">Copiar reporte</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const KB = 1024, OBJETIVO = 150 * KB, CAP = 300 * KB;
+const SALIDA = document.getElementById('salida');
+const muestras = [];
+
+const fmtKB = (bytes) => (bytes / KB).toLocaleString('es-MX', { maximumFractionDigits: 1 }) + ' KB';
+const clase = (clasif) => (clasif === 'ok' ? 'ok' : clasif === 'alta' ? 'alta' : 'mal');
+
+/** Clasifica el ORIGINAL por su lado menor: >= 2500 px candidato a escalera A. */
+const ladoMenor = (w, h) => Math.min(w, h);
+
+/** Renglón con lados ajustados manteniendo proporción; null = no se baja px. */
+const reescalaA = (w, h, lado) => {
+  const largo = Math.max(w, h);
+  if (largo <= lado) return null;
+  const k = lado / largo;
+  return { w: Math.round(w * k), h: Math.round(h * k) };
+};
+
+/** Pasada: dibuja en canvas (downscale/grises opcionales) y exporta WebP a esa calidad. */
+const pasada = (img, px, calidad, gris) => new Promise((resolve) => {
+  const c = document.createElement('canvas');
+  c.width = px ? px.w : img.naturalWidth;
+  c.height = px ? px.h : img.naturalHeight;
+  const ctx = c.getContext('2d');
+  if (gris) ctx.filter = 'grayscale(1)';
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  c.toBlob((b) => resolve(b), 'image/webp', calidad);
+});
+
+/** Desciende la calidad hasta caber en el CAP; si no cabe, entrega el piso (capado, CH-9). */
+const capa = async (img, px, qInicio, qPiso) => {
+  for (let q = qInicio; q >= qPiso; q -= 0.02) {
+    const b = await pasada(img, px, q, false);
+    if (b.size <= CAP) return b;
+  }
+  return pasada(img, px, qPiso, false);
+};
+
+/** Escalera A (§8.1): agresiva para origenes >= 2500 px en su lado menor. */
+const escaleraA = async (img) => {
+  const pasos = [];
+  const w = img.naturalWidth, h = img.naturalHeight;
+  let px = reescalaA(w, h, 1600);
+  let b = await pasada(img, px, 0.72, false);
+  pasos.push('P1: 1600 px · .72 → ' + fmtKB(b.size));
+  if (b.size > OBJETIVO) {
+    px = reescalaA(w, h, 1200);
+    b = await pasada(img, px, 0.60, false);
+    pasos.push('P2: 1200 px · .60 → ' + fmtKB(b.size));
+  }
+  if (b.size > OBJETIVO) {
+    px = reescalaA(w, h, 900);
+    b = await pasada(img, px, 0.45, true);
+    pasos.push('P3: 900 px · .45 + grises → ' + fmtKB(b.size));
+  }
+  if (b.size > CAP) {
+    px = reescalaA(w, h, 900);
+    b = await capa(img, px, 0.40, 0.28);
+    pasos.push('P4: búsqueda .40→.28 (capado) → ' + fmtKB(b.size));
+  }
+  return { pasos, final: b };
+};
+
+/** Escalera B (§8.1): conservadora para escaneos < 2500 px; jamás baja de ~700 px ni calidad < .30. */
+const escaleraB = async (img) => {
+  const pasos = [];
+  const w = img.naturalWidth, h = img.naturalHeight;
+  let px = reescalaA(w, h, 1600);
+  let b = await pasada(img, px, 0.72, false);
+  pasos.push('P1: ' + (px ? '1600 px' : 'original') + ' · .72 → ' + fmtKB(b.size));
+  if (b.size > OBJETIVO) {
+    b = await pasada(img, null, 0.55, false);
+    pasos.push('P2: −20% calidad (.55) sin bajar px → ' + fmtKB(b.size));
+  }
+  if (b.size > OBJETIVO) {
+    b = await pasada(img, null, 0.55, true);
+    pasos.push('P3: grises sin bajar px → ' + fmtKB(b.size));
+  }
+  if (b.size > CAP) {
+    px = reescalaA(w, h, 700);
+    b = await capa(img, px, 0.50, 0.30);
+    pasos.push('P4: búsqueda .50→.30, mínimo 700 px (capado) → ' + fmtKB(b.size));
+  }
+  return { pasos, final: b };
+};
+
+const clasifica = (bytes) => (bytes <= OBJETIVO ? 'ok' : bytes <= CAP ? 'alta' : 'mal');
+
+const PUNTOS = [
+  'MONTO en número y letra',
+  'Número de cheque',
+  'Banco y fecha',
+  'Firmas/manuscritos'
+];
+
+const leyenda = { ok: '≤ 150 KB (objetivo)', alta: '150–300 KB (capado, guardar igual)', mal: '> 300 KB (no debió pasar)' };
+
+/** Procesa UNA muestra: carga, corre A y B, pinte la interfaz de revisión. */
+const procesarMuestra = async (archivo, indice) => {
+  const urlOriginal = await new Promise((res) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result));
+    fr.readAsDataURL(archivo);
+  });
+  const img = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = rej;
+    i.src = urlOriginal;
+  });
+
+  const resultadoA = await escaleraA(img);
+  const resultadoB = await escaleraB(img);
+  const urlA = URL.createObjectURL(resultadoA.final);
+  const urlB = URL.createObjectURL(resultadoB.final);
+
+  const m = {
+    indice,
+    nombre: archivo.name,
+    originales: { w: img.naturalWidth, h: img.naturalHeight, bytes: archivo.size },
+    escalaMax: ladoMenor(img.naturalWidth, img.naturalHeight),
+    A: { blob: resultadoA.final, pasos: resultadoA.pasos },
+    B: { blob: resultadoB.final, pasos: resultadoB.pasos },
+    check: { A: [false, false, false, false], B: [false, false, false, false] },
+  };
+  muestras.push(m);
+
+  const div = document.createElement('div');
+  div.className = 'muestra';
+
+  const tar = (titulo, url, blob, pasos, clasif) => {
+    const t = document.createElement('div');
+    t.className = 'tarjeta-img';
+    const im = document.createElement('img');
+    im.src = url;
+    im.title = 'Clic para abrir en tamaño completo';
+    im.onclick = () => window.open(url, '_blank');
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<b>${titulo}</b> · <b class="${clase(clasif)}">${fmtKB(blob.size)}</b> ${leyenda[clasif] === '' ? '' : '· ' + leyenda[clasif]}`;
+    const bits = document.createElement('div');
+    bits.className = 'pasos';
+    bits.textContent = pasos.join('  ·  ');
+    t.append(im, meta, bits);
+    return t;
+  };
+
+  const fila = document.createElement('div');
+  fila.className = 'fila';
+  fila.append(
+    tar('Original (' + m.originales.w + '×' + m.originales.h + ' · ' + fmtKB(m.originales.bytes) + ' · lado menor ' + m.escalaMax + ' px)', urlOriginal, archivo, ['—'], 'ok'),
+    tar('Escalera A (agresiva)', urlA, m.A.blob, m.A.pasos, clasifica(m.A.blob.size)),
+    tar('Escalera B (conservadora)', urlB, m.B.blob, m.B.pasos, clasifica(m.B.blob.size))
+  );
+
+  const h2 = document.createElement('h2');
+  h2.textContent = 'Muestra ' + indice + ' — ' + archivo.name;
+  div.append(h2, fila);
+
+  const tabla = document.createElement('table');
+  tabla.className = 'check';
+  const thead = document.createElement('thead');
+  thead.innerHTML = '<tr><th>Checklist de legibilidad</th><th>Escalera A</th><th>Escalera B</th></tr>';
+  const tbody = document.createElement('tbody');
+  PUNTOS.forEach((punto, pi) => {
+    const tr = document.createElement('tr');
+    const tdP = document.createElement('td'); tdP.textContent = punto;
+    tr.append(tdP);
+    ['A', 'B'].forEach((k) => {
+      const td = document.createElement('td');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      // El reporte se refresca al vuelo: cada marco de check re-genera el Markdown.
+      cb.onchange = () => {
+        m.check[k][pi] = cb.checked;
+        document.getElementById('reporte').value = generarReporte();
+      };
+      td.append(cb);
+      tr.append(td);
+    });
+    tbody.append(tr);
+  });
+  tabla.append(thead, tbody);
+  div.append(tabla);
+  SALIDA.append(div);
+};
+
+/** Reporte Markdown para §10. */
+const generarReporte = () => {
+  const lin = [];
+  lin.push('### Experimento de legibilidad §8.2 — resultados (' + new Date().toLocaleDateString('es-MX') + ')');
+  lin.push('');
+  lin.push('| # | Muestra | Original | Escalera A | Escalera B | A legible | B legible |');
+  lin.push('|---|---------|----------|------------|------------|-----------|-----------|');
+  muestras.forEach((m) => {
+    const ya = m.check.A.every((v) => v) ? 'SÍ (4/4)' : m.check.A.filter((v) => v).length + '/4';
+    const yb = m.check.B.every((v) => v) ? 'SÍ (4/4)' : m.check.B.filter((v) => v).length + '/4';
+    lin.push('| ' + m.indice + ' | ' + m.nombre + ' | ' + m.originales.w + '×' + m.originales.h + ' · ' + fmtKB(m.originales.bytes) +
+      ' | ' + fmtKB(m.A.blob.size) + ' | ' + fmtKB(m.B.blob.size) + ' | ' + ya + ' | ' + yb + ' |');
+  });
+  lin.push('');
+  lin.push('- Gate: si A pierde legibilidad (P3/P4) en >= 1 de las 5 fotos, endurecer la escalera A o mover el objetivo de 150 KB a 200 KB (§8.2).');
+  lin.push('- CONGELAR aquí los parámetros finales antes de la Fase 4.');
+  return lin.join('\n');
+};
+
+// ---------- cableado de la interfaz ----------
+const drop = document.getElementById('drop');
+const input = document.getElementById('input');
+drop.onclick = () => input.click();
+input.onchange = async () => {
+  for (const f of input.files) await procesarMuestra(f, muestras.length + 1);
+  document.getElementById('panelReporte').hidden = false;
+  document.getElementById('reporte').value = generarReporte();
+};
+input.value = '';
+drop.ondragover = (e) => { e.preventDefault(); };
+drop.ondrop = async (e) => {
+  e.preventDefault();
+  for (const f of e.dataTransfer.files) if (f.type.startsWith('image/')) await procesarMuestra(f, muestras.length + 1);
+  document.getElementById('panelReporte').hidden = false;
+  document.getElementById('reporte').value = generarReporte();
+};
+document.getElementById('copiar').onclick = () => {
+  navigator.clipboard.writeText(document.getElementById('reporte').value);
+};
+</script>
+</body>
+</html>

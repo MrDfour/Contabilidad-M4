@@ -22,7 +22,8 @@ interface PolizaCardProps {
 const TIPO_STYLES: Record<TipoPoliza, { label: string; badge: string }> = {
   ingreso: { label: 'Ingreso', badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
   egreso: { label: 'Egreso', badge: 'bg-rose-500/15 text-rose-400 border-rose-500/30' },
-  diario: { label: 'Diario', badge: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30' }
+  diario: { label: 'Diario', badge: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30' },
+  cheque: { label: 'Cheque', badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30' }
 };
 
 /** Tarjeta individual de póliza con desglose de partidas y acciones (editar/imprimir/eliminar). */
@@ -56,6 +57,13 @@ export function PolizaCard({
             <time className="text-xs text-slate-400">{fecha}</time>
           </div>
           <p className="text-sm text-slate-200">{poliza.concepto}</p>
+          {/* CH-4 de PLAN_CHEQUES.md: la hoja cheque muestra sus datos del cheque. */}
+          {poliza.tipo === 'cheque' && poliza.cheque && (poliza.cheque.numero || poliza.cheque.banco || poliza.cheque.beneficiario) && (
+            <p className="text-[11px] text-amber-300/90">
+              Cheque Nº {poliza.cheque.numero || '—'}{poliza.cheque.banco ? ` · ${poliza.cheque.banco}` : ''}
+              {poliza.cheque.beneficiario ? ` · ${poliza.cheque.beneficiario}` : ''}
+            </p>
+          )}
           {(poliza.elaboro || poliza.reviso || poliza.autorizo) && (
             <div className="flex gap-4 pt-1 text-[10px] text-slate-500">
               {poliza.elaboro && (

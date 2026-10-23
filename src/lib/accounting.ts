@@ -104,7 +104,9 @@ export const flattenPolizasToJournalEntries = (polizas: Poliza[]): JournalEntry[
     id: poliza.id,
     date: poliza.fecha,
     description: poliza.concepto,
-    policyType: poliza.tipo,
+    // Proyección legacy (JournalEntry no conoce 'cheque'): el cheque PROYECTA como
+    // egreso por el mismo criterio fiscal del Anexo 24 (CH-2 de PLAN_CHEQUES.md).
+    policyType: (poliza.tipo === 'cheque' ? 'egreso' : poliza.tipo),
     movements: poliza.partidas
       .filter(p => p.debit > 0 || p.credit > 0)
       .map(p => ({
@@ -159,11 +161,13 @@ export const asignarFoliosPendientes = (polizas: Poliza[]): {
   return { polizas: working, afectadas };
 };
 
-/** Folio para presentación: "ING-0001" | "EGR-0001" | "DIA-0001" (solo display, no storage).
+/** Folio para presentación: "ING-0001" | "EGR-0001" | "DIA-0001" | "CHE-0001" (solo
+ *  display, no storage; el folio contable CHE- es OTRO que el número bancario del
+ *  cheque, que vive en Poliza.cheque.numero — CH-3 de PLAN_CHEQUES.md).
  *  Un folio pendiente (centinela folio 0 del merge, F-2) se muestra "PENDIENTE". */
 export const formatPolizaFolio = (poliza: Poliza): string => {
   if (esFolioPendiente(poliza)) return 'PENDIENTE';
-  const prefix = { ingreso: 'ING', egreso: 'EGR', diario: 'DIA' }[poliza.tipo];
+  const prefix = { ingreso: 'ING', egreso: 'EGR', diario: 'DIA', cheque: 'CHE' }[poliza.tipo];
   return `${prefix}-${String(poliza.folio).padStart(4, '0')}`;
 };
 

@@ -60,3 +60,22 @@ describe('AsignarFoliosPendientesModal (previsualización de F-6)', () => {
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('AsignarFoliosPendientesModal — folio CHE pendiente (CH-3 de PLAN_CHEQUES.md)', () => {
+  beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}); });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+  it('una póliza de CHEQUE sin folio predice CHE-0001 (serie propia por tipo)', () => {
+    const props = {
+      polizas: [p('pen-che', 'cheque', 0, 'Pago con cheque', '2026-10-15T08:00:00.000Z')],
+      onConfirmar: vi.fn(),
+      onClose: vi.fn()
+    };
+    render(<AsignarFoliosPendientesModal {...props} />);
+    expect(props.onConfirmar).not.toHaveBeenCalled();
+    expect(screen.getByText(/1 póliza entró sin folio/i)).toBeTruthy();
+    const fila = screen.getByText('Pago con cheque').closest('div.rounded-xl') as HTMLElement;
+    expect(fila.textContent).toContain('Cheque');          // etiqueta de SU tipo
+    expect(fila.textContent).toContain('CHE-0001');        // proyección de SU serie
+  });
+});

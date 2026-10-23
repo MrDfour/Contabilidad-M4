@@ -269,6 +269,17 @@ describe('nextPolizaFolio', () => {
     ];
     expect(nextPolizaFolio(lista, 'diario')).toBe(1);
   });
+
+  it('tipo cheque: serie propia CHE independiente (CH-3 de PLAN_CHEQUES.md)', () => {
+    const lista: Poliza[] = [
+      poliza({ id: '1', tipo: 'ingreso', folio: 5 }),
+      poliza({ id: '2', tipo: 'egreso', folio: 9 })
+    ];
+    // El folio contable del cheque NO hereda la serie de egresos, aunque para
+    // el SAT la póliza salga como egreso (CH-2/CH-3 de PLAN_CHEQUES.md).
+    expect(nextPolizaFolio(lista, 'cheque')).toBe(1);
+    expect(nextPolizaFolio([...lista, poliza({ id: '3', tipo: 'cheque', folio: 3 })], 'cheque')).toBe(4);
+  });
 });
 
 describe('formatPolizaFolio', () => {
@@ -276,6 +287,7 @@ describe('formatPolizaFolio', () => {
     expect(formatPolizaFolio(poliza({ tipo: 'ingreso', folio: 1 }))).toBe('ING-0001');
     expect(formatPolizaFolio(poliza({ tipo: 'egreso', folio: 12 }))).toBe('EGR-0012');
     expect(formatPolizaFolio(poliza({ tipo: 'diario', folio: 123 }))).toBe('DIA-0123');
+    expect(formatPolizaFolio(poliza({ tipo: 'cheque', folio: 1 }))).toBe('CHE-0001'); // CH-3
   });
 
   it('folio de 5 dígitos no se trunca', () => {

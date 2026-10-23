@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type ChangeEvent, Fragment, type FormEvent, useMemo, useState } from 'react';
+import { type ChangeEvent, Fragment, type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertCircle, FileScan, Plus, Trash2, X } from 'lucide-react';
-import type { Account, Poliza, PartidaPoliza, TipoPoliza } from '../../types';
+import { AlertCircle, FileScan, ImagePlus, Plus, Trash2, X } from 'lucide-react';
+import type { Account, Poliza, PartidaPoliza, TipoPoliza, ChequeDatos } from '../../types';
 import type { PolizaInput } from '../../hooks/usePolizas';
 import type { AppMode } from '../../lib/navigation';
 import {
@@ -20,7 +20,8 @@ import { validatePolizaBalance } from '../../lib/accounting';
 import { SearchableAccountSelect } from '../account/AccountPicker';
 
 /**
- * Modal de captura de pólizas (Fase 3 de PLAN_POLIZAS.md).
+ * Modal de captura de pólizas (Fase 3 de PLAN_POLIZAS.md · rework CH-8 de
+ * PLAN_CHEQUES.md).
  *
  * Valida la partida doble EN VIVO (Debe == Haber) y bloquea el guardado si no
  * cuadra o hay menos de 2 partidas con monto. El tipo de póliza queda CONGELADO
@@ -28,13 +29,17 @@ import { SearchableAccountSelect } from '../account/AccountPicker';
  * UUID/RFC/Total desde un XML CFDI por partida (con resolución de discrepancias,
  * patrón de EntryForm).
  *
- * Dos estilos de captura (`modo`, ver ModoCaptura): 'clasica' (columna única con
- * selector Debe/Haber) y 'papel' (grid tipo póliza física mexicana con columnas
- * DEBE/HABER y franja SUMAS IGUALES). Ambos comparten el mismo estado y reglas;
- * solo cambia la presentación. La preferencia la persiste PolizaView.
+ * CH-8: la captura EN PAPEL es la primera opción. Modo papel: un control único
+ * FORMATO ▾ (Ingresos/Egresos/Diario/Cheque — cada uno es su hoja) con entrada
+ * secundaria "usar captura clásica (campos)". La ÚLTIMA hoja usada se recuerda
+ * en `contasis_hoja_papel` (default Diario; CH-8). En clásico, el TIPO de
+ * póliza gana el valor "Cheque". La preferencia de modo la persiste PolizaView
+ * (`contasis_modo_captura`, default 'papel').
  *
  * El folio y los totales los asigna el hook (usePolizas): aquí solo se compone
- * el `PolizaInput`.
+ * el `PolizaInput`. De tipo 'cheque': datos del cheque (CH-4) + UI del anexo de
+ * imagen (CH-6; la PERSISTENCIA del binario llega con attachmentService en
+ * Fase 4 — la UI guarda el metadato y el archivo vive solo en esta sesión).
  */
 
 interface DraftPartida {
@@ -58,11 +63,26 @@ const nuevaFila = (accountId: string, side: 'debit' | 'credit'): DraftPartida =>
 
 /**
  * Modo de captura de partidas:
- * - 'clasica': columna única de monto + selector Debe/Haber (la actual).
+ * - 'clasica': columna única de monto + selector Debe/Haber (la alternativa).
  * - 'papel': grid tipo póliza física mexicana (importes escritos directo en
  *   las columnas DEBE/HABER, footer de SUMAS IGUALES y franja de firmas).
  */
 export type ModoCaptura = 'clasica' | 'papel';
+
+/** CH-8: la última hoja usada en captura papel se recuerda GLOBAL por dispositivo. */
+const CLAVE_HOJA_PAPEL = 'contasis_hoja_papel';
+
+const HOJAS_VALIDAS: TipoPoliza[] = ['ingreso', 'egreso', 'diario', 'cheque'];
+
+const leerHojaPapel = (): TipoPoliza => {
+  let guardada: string | null = null;
+  try {
+    guardada = localStorage.getItem(CLAVE_HOJA_PAPEL);
+  } catch {
+    // Sin persistencia: default Diario (CH-8).
+  }
+  return HOJAS_VALIDAS.includes(guardada as TipoPoliza) ? (guardada as TipoPoliza) : 'diario';
+};
 
 export function PolizaForm({
   accounts,
@@ -71,25 +91,36 @@ export function PolizaForm({
   onModoChange,
   initialData,
   onSave,
+  onAnexoPendiente,
   onCancel
 }: {
   accounts: Account[],
   appMode: AppMode,
   /** Estilo de captura; la preferencia vive en PolizaView (localStorage). */
   modo?: ModoCaptura,
-  /** Presente solo si el dueño puede persistir el modo → muestra el selector. */
+  /** Presente solo si el dueño puede persistir el modo → muestra el enlace alterno. */
   onModoChange?: (m: ModoCaptura) => void,
   /** Presente SOLO en edición: bloquea el tipo (D-8) y precarga todos los campos. */
   initialData?: Poliza,
   onSave: (data: PolizaInput) => void,
+  /** Fase 2 (CH-6): archivo de anexo del cheque elegido en el picker. NADIE lo
+   *  persiste todavía — Fase 4 (attachmentService) lo recibe al construir. */
+  onAnexoPendiente?: (archivo: File) => void,
   onCancel: () => void
 }) {
-  const [tipo, setTipo] = useState<TipoPoliza>(initialData?.tipo ?? 'diario');
+  const [tipo, setTipo] = useState<TipoPoliza>(initialData?.tipo ?? leerHojaPapel());
   const [fecha, setFecha] = useState(initialData?.fecha ?? new Date().toISOString().split('T')[0]);
   const [concepto, setConcepto] = useState(initialData?.concepto ?? '');
   const [elaboro, setElaboro] = useState(initialData?.elaboro ?? '');
   const [reviso, setReviso] = useState(initialData?.reviso ?? '');
   const [autorizo, setAutorizo] = useState(initialData?.autorizo ?? '');
+  // CH-4: datos del cheque (solo visualizados/compuestos cuando tipo === 'cheque').
+  const [chequeNumero, setChequeNumero] = useState(initialData?.cheque?.numero ?? '');
+  const [chequeBanco, setChequeBanco] = useState(initialData?.cheque?.banco ?? '');
+  const [chequeBeneficiario, setChequeBeneficiario] = useState(initialData?.cheque?.beneficiario ?? '');
+  // CH-6 (Fase 2): preview LOCAL del anexo elegido; el binario no se persiste aquí.
+  const [anexoPicked, setAnexoPicked] = useState<{ nombre: string; url: string } | null>(null);
+  const archivoAnexoRef = useRef<File | null>(null);
   const [rows, setRows] = useState<DraftPartida[]>(
     initialData
       ? initialData.partidas.map(p => ({
@@ -220,6 +251,42 @@ export function PolizaForm({
     setAmountInputs([...amountInputs, '']);
   };
 
+  /** CH-8: cambiar la hoja (papel) también PERSISTE la última usada
+   *  (`contasis_hoja_papel`, global por dispositivo; default Diario). */
+  const alCambiarHoja = (nuevo: TipoPoliza) => {
+    setTipo(nuevo);
+    try {
+      localStorage.setItem(CLAVE_HOJA_PAPEL, nuevo);
+    } catch {
+      // Sin persistencia: la hoja vive solo en esta sesión.
+    }
+  };
+
+  /** Anexo del cheque (CH-6, Fase 2): preview local; el binario NO se guarda aquí. */
+  const alElegirAnexo = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    archivoAnexoRef.current = file;
+    setAnexoPicked(prev => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return { nombre: file.name, url: URL.createObjectURL(file) };
+    });
+  };
+
+  const quitarAnexo = () => {
+    archivoAnexoRef.current = null;
+    setAnexoPicked(null); // el useEffect revoca la URL del objeto
+    const label = document.querySelector<HTMLInputElement>('input[type=file][accept="image/*"]');
+    if (label) label.value = '';
+  };
+
+  useEffect(() => {
+    return () => {
+      if (anexoPicked) URL.revokeObjectURL(anexoPicked.url);
+    };
+  }, [anexoPicked]);
+
   // --- Modo PAPEL: importes escritos directo en la columna DEBE o HABER ---
   // El valor visible de cada columna sale del lado activo de la fila; teclear
   // en una columna mueve el importe a ese lado (equivalente al papel, donde el
@@ -244,6 +311,18 @@ export function PolizaForm({
     e.preventDefault();
     if (isDeshabilitado) return;
     if (!concepto.trim()) return;
+    // CH-4: metadatos del cheque solo si la póliza ES de cheque; al editar se
+    // PRESERVAN los anexos previos (su binario lo gestiona attachmentService, Fase 4).
+    const anexosPrevios = initialData?.cheque?.anexos;
+    const cheque: ChequeDatos | undefined = tipo === 'cheque'
+      ? {
+          numero: chequeNumero.trim() || undefined,
+          banco: chequeBanco.trim() || undefined,
+          beneficiario: chequeBeneficiario.trim() || undefined,
+          ...(anexosPrevios && anexosPrevios.length > 0 ? { anexos: anexosPrevios } : {})
+        }
+      : undefined;
+    if (tipo === 'cheque' && archivoAnexoRef.current) onAnexoPendiente?.(archivoAnexoRef.current);
     onSave({
       tipo,
       fecha,
@@ -251,7 +330,8 @@ export function PolizaForm({
       partidas: partidasFinales,
       elaboro: elaboro.trim() || undefined,
       reviso: reviso.trim() || undefined,
-      autorizo: autorizo.trim() || undefined
+      autorizo: autorizo.trim() || undefined,
+      ...(cheque ? { cheque } : {})
     });
   };
 
@@ -268,36 +348,14 @@ export function PolizaForm({
             {initialData ? 'Editar Póliza' : 'Nueva Póliza Contable'}
           </h3>
           <div className="flex items-center gap-3">
-            {onModoChange && (
-              <div className="hidden md:flex items-center gap-1 p-1 rounded-lg bg-white/5 border border-white/10">
-                <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Captura</span>
-                <button
-                  type="button"
-                  aria-pressed={modo === 'clasica'}
-                  onClick={() => onModoChange('clasica')}
-                  className={
-                    'px-3 py-1 rounded-md text-xs font-bold transition-colors ' +
-                    (modo === 'clasica'
-                      ? 'bg-indigo-600 text-white shadow shadow-indigo-500/30'
-                      : 'text-slate-400 hover:text-white')
-                  }
-                >
-                  Clásica
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={modo === 'papel'}
-                  onClick={() => onModoChange('papel')}
-                  className={
-                    'px-3 py-1 rounded-md text-xs font-bold transition-colors ' +
-                    (modo === 'papel'
-                      ? 'bg-indigo-600 text-white shadow shadow-indigo-500/30'
-                      : 'text-slate-400 hover:text-white')
-                  }
-                >
-                  Papel
-                </button>
-              </div>
+            {onModoChange && modo === 'clasica' && (
+              <button
+                type="button"
+                onClick={() => onModoChange('papel')}
+                className="hidden sm:inline-flex text-[10px] font-bold uppercase tracking-wide px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:bg-indigo-500/20 transition-colors"
+              >
+                usar captura en papel (hoja)
+              </button>
             )}
             <button type="button" onClick={onCancel} aria-label="Cerrar formulario"
               className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
@@ -307,22 +365,53 @@ export function PolizaForm({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Datos generales */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tipo de Póliza</label>
+          {/* CH-8 — modo papel: control FORMATO único al frente (es el tipo/hoja);
+              la ÚLTIMA hoja usada se persiste en contasis_hoja_papel al elegir. */}
+          {modo === 'papel' && (
+            <div className="flex flex-wrap items-center gap-3 pb-2 border-b border-white/10">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Formato</span>
               <select
                 value={tipo}
                 disabled={Boolean(initialData)} // D-8: congelado al editar
-                onChange={e => setTipo(e.target.value as TipoPoliza)}
-                aria-label="Tipo de Póliza"
-                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-white appearance-none disabled:opacity-50"
+                onChange={e => alCambiarHoja(e.target.value as TipoPoliza)}
+                aria-label="Formato de la póliza"
+                className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-white appearance-none disabled:opacity-50"
               >
-                <option value="diario" className="bg-slate-800">Diario</option>
-                <option value="ingreso" className="bg-slate-800">Ingreso</option>
-                <option value="egreso" className="bg-slate-800">Egreso</option>
+                <option value="ingreso">Póliza de Ingresos</option>
+                <option value="egreso">Póliza de Egresos</option>
+                <option value="diario">Póliza de Diario</option>
+                <option value="cheque">Póliza de Cheque</option>
               </select>
+              {onModoChange && (
+                <button
+                  type="button"
+                  onClick={() => onModoChange('clasica')}
+                  className="text-xs underline decoration-dotted underline-offset-2 text-slate-400 hover:text-white transition-colors"
+                >
+                  usar captura clásica (campos)
+                </button>
+              )}
             </div>
+          )}
+          {/* Datos generales */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {modo === 'clasica' && (
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tipo de Póliza</label>
+                <select
+                  value={tipo}
+                  disabled={Boolean(initialData)} // D-8: congelado al editar
+                  onChange={e => setTipo(e.target.value as TipoPoliza)}
+                  aria-label="Tipo de Póliza"
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-white appearance-none disabled:opacity-50"
+                >
+                  <option value="diario" className="bg-slate-800">Diario</option>
+                  <option value="ingreso" className="bg-slate-800">Ingreso</option>
+                  <option value="egreso" className="bg-slate-800">Egreso</option>
+                  <option value="cheque" className="bg-slate-800">Cheque</option>
+                </select>
+              </div>
+            )}
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Fecha</label>
               <input
@@ -376,6 +465,74 @@ export function PolizaForm({
               />
             </div>
           </div>
+
+          {/* CH-4 — Datos del cheque: SOLO cuando la hoja es de cheque. Campos de
+              texto libre; `numero` es el folio BANCARIO (otro que el folio CHE-). */}
+          {tipo === 'cheque' && (
+            <div className="border border-amber-500/20 bg-amber-500/[0.06] rounded-xl p-4 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-amber-300">Datos del cheque</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Número de cheque</label>
+                  <input
+                    type="text"
+                    aria-label="Número de cheque"
+                    placeholder="Ej: 1042 (folio del banco)"
+                    value={chequeNumero}
+                    onChange={e => setChequeNumero(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm outline-none text-white placeholder-slate-600"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Banco</label>
+                  <input
+                    type="text"
+                    aria-label="Banco del cheque"
+                    placeholder="Ej: Banorte"
+                    value={chequeBanco}
+                    onChange={e => setChequeBanco(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm outline-none text-white placeholder-slate-600"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Beneficiario</label>
+                  <input
+                    type="text"
+                    aria-label="Beneficiario del cheque"
+                    placeholder="Ej: Juan Pérez"
+                    value={chequeBeneficiario}
+                    onChange={e => setChequeBeneficiario(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm outline-none text-white placeholder-slate-600"
+                  />
+                </div>
+              </div>
+              {/* CH-6 (Fase 2): picker + preview LOCAL. El binario se persiste con
+                  attachmentService en la Fase 4 (no viaja en la bóveda, CH-11). */}
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:bg-indigo-500/20 cursor-pointer transition-colors text-xs font-semibold">
+                  <ImagePlus className="w-4 h-4" />
+                  Adjuntar imagen del cheque
+                  <input type="file" accept="image/*" onChange={alElegirAnexo} className="hidden" />
+                </label>
+                {anexoPicked && (
+                  <>
+                    <img
+                      src={anexoPicked.url}
+                      alt={`Anexo elegido: ${anexoPicked.nombre}`}
+                      className="h-16 w-24 object-cover rounded-lg border border-white/10 bg-white"
+                    />
+                    <span className="text-xs text-slate-400 max-w-[16rem] truncate">{anexoPicked.nombre}</span>
+                    <button type="button" onClick={quitarAnexo} className="text-xs text-rose-400 hover:text-rose-300 underline">
+                      Quitar
+                    </button>
+                  </>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-500">
+                El anexo vive SOLO en este equipo (la imagen no viaja en la bóveda, CH-11); la hoja impresa reserva su zona de calca en blanco (CH-5).
+              </p>
+            </div>
+          )}
 
           {/* Partidas */}
           <div className="space-y-4">
@@ -510,119 +667,126 @@ export function PolizaForm({
               </div>
             ))}
 
-            {/* Modo PAPEL: póliza física mexicana — importes directos en DEBE/HABER */}
+            {/* Modo PAPEL: póliza física mexicana — importes directos en DEBE/HABER.
+                Grid responsive (4.2 de PLAN_CHEQUES.md): en escritorio imita las
+                columnas de la hoja física; en móvil TODO se apila. Un solo DOM:
+                los aria-labels NO se duplican (jsdom/tests siguen únicos). */}
             {modo === 'papel' && (
-              <div className="border border-white/10 rounded-xl overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-white/5 text-[10px] uppercase tracking-wider text-slate-400 border-b border-white/10">
-                      <th className="text-left px-4 py-2 w-64 font-bold">Cta / Scta</th>
-                      <th className="text-right px-4 py-2 w-36 font-bold text-emerald-400">Debe</th>
-                      <th className="text-right px-4 py-2 w-36 font-bold text-rose-400">Haber</th>
-                      <th className="text-left px-3 py-2 font-bold">Concepto</th>
-                      <th className="w-12" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r, idx) => (
-                      <Fragment key={r.uid}>
-                        <tr className="border-b border-white/5">
-                          <td className="px-3 py-2">
-                            <SearchableAccountSelect
-                              accounts={accounts}
-                              value={r.accountId}
-                              onChange={(newId) => updateRow(idx, { accountId: newId })}
-                            />
-                          </td>
-                          <td className="px-2 py-2">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              aria-label={`Debe de partida ${idx + 1}`}
-                              value={valorPapel(idx, 'debit')}
-                              onChange={e => cambiarImportePapel(idx, 'debit', e.target.value)}
-                              onWheel={(e) => e.currentTarget.blur()}
-                              onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
-                              placeholder="0.00"
-                              className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-right outline-none font-mono text-emerald-300 placeholder-slate-700"
-                            />
-                          </td>
-                          <td className="px-2 py-2">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              aria-label={`Haber de partida ${idx + 1}`}
-                              value={valorPapel(idx, 'credit')}
-                              onChange={e => cambiarImportePapel(idx, 'credit', e.target.value)}
-                              onWheel={(e) => e.currentTarget.blur()}
-                              onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
-                              placeholder="0.00"
-                              className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-right outline-none font-mono text-rose-300 placeholder-slate-700"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="text"
-                              placeholder="Opcional"
-                              value={r.concept}
-                              onChange={e => updateRow(idx, { concept: e.target.value })}
-                              className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg outline-none text-white placeholder-slate-600"
-                            />
-                          </td>
-                          <td className="px-2 py-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => removeRow(idx)}
-                              disabled={partidasFinales.length < 2}
-                              aria-label={`Eliminar partida ${idx + 1}`}
-                              className="p-2 text-slate-500 hover:text-rose-400 disabled:opacity-30"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                        {appMode === 'fiscal' && (
-                          <tr className="border-b border-white/5 bg-white/[0.02]">
-                            <td colSpan={5} className="px-3 py-2">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                <div className="flex items-center gap-2">
-                                  <label className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:bg-indigo-500/20 cursor-pointer transition-colors text-[10px] font-semibold uppercase tracking-wide">
-                                    <FileScan className="w-3.5 h-3.5" />
-                                    Leer XML
-                                    <input
-                                      type="file"
-                                      accept=".xml,text/xml,application/xml"
-                                      onChange={(e) => handleCFDIUpload(idx, e)}
-                                      className="hidden"
-                                    />
-                                  </label>
-                                  <input
-                                    type="text"
-                                    maxLength={36}
-                                    placeholder="UUID CFDI: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
-                                    value={r.uuidCFDI || ''}
-                                    onChange={e => updateRow(idx, { uuidCFDI: e.target.value })}
-                                    onBlur={e => updateRow(idx, { uuidCFDI: e.target.value.trim() })}
-                                    className="flex-1 min-w-0 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg outline-none text-white placeholder-slate-600 text-xs"
-                                  />
-                                </div>
+              <div className="border border-white/10 rounded-xl overflow-hidden">
+                {/* Encabezado de columnas: SOLO escritorio (móvil usa etiquetas por celda) */}
+                <div className="hidden md:grid grid-cols-[minmax(0,1fr)_9rem_9rem_minmax(0,1fr)_2.5rem] gap-2 items-center bg-white/5 text-[10px] uppercase tracking-wider text-slate-400 border-b border-white/10 px-3 py-2">
+                  <span className="text-left font-bold">Cta / Scta</span>
+                  <span className="text-right font-bold text-emerald-400">Debe</span>
+                  <span className="text-right font-bold text-rose-400">Haber</span>
+                  <span className="text-left font-bold pl-2">Concepto</span>
+                  <span />
+                </div>
+                <div className="divide-y divide-white/5">
+                  {rows.map((r, idx) => (
+                    <Fragment key={r.uid}>
+                      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_9rem_9rem_minmax(0,1fr)_2.5rem] gap-2 items-center px-3 py-2">
+                        {/* Cuenta contable (etiqueta visible SOLO en móvil) */}
+                        <div className="space-y-1">
+                          <span className="md:hidden text-[9px] uppercase font-bold text-slate-500">Cuenta contable</span>
+                          <SearchableAccountSelect
+                            accounts={accounts}
+                            value={r.accountId}
+                            onChange={(newId) => updateRow(idx, { accountId: newId })}
+                          />
+                        </div>
+                        {/* Debe (teclear fija el lado, igual que el papel) */}
+                        <div className="space-y-1">
+                          <span className="md:hidden text-[9px] uppercase font-bold text-slate-500">Debe</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            aria-label={`Debe de partida ${idx + 1}`}
+                            value={valorPapel(idx, 'debit')}
+                            onChange={e => cambiarImportePapel(idx, 'debit', e.target.value)}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
+                            placeholder="0.00"
+                            className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-right outline-none font-mono text-emerald-300 placeholder-slate-700"
+                          />
+                        </div>
+                        {/* Haber */}
+                        <div className="space-y-1">
+                          <span className="md:hidden text-[9px] uppercase font-bold text-slate-500">Haber</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            aria-label={`Haber de partida ${idx + 1}`}
+                            value={valorPapel(idx, 'credit')}
+                            onChange={e => cambiarImportePapel(idx, 'credit', e.target.value)}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
+                            placeholder="0.00"
+                            className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-right outline-none font-mono text-rose-300 placeholder-slate-700"
+                          />
+                        </div>
+                        {/* Concepto de la partida */}
+                        <div className="space-y-1 md:pl-2">
+                          <span className="md:hidden text-[9px] uppercase font-bold text-slate-500">Concepto de la partida</span>
+                          <input
+                            type="text"
+                            placeholder="Opcional"
+                            value={r.concept}
+                            onChange={e => updateRow(idx, { concept: e.target.value })}
+                            className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg outline-none text-white placeholder-slate-600"
+                          />
+                        </div>
+                        {/* Eliminar partida */}
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => removeRow(idx)}
+                            disabled={partidasFinales.length < 2}
+                            aria-label={`Eliminar partida ${idx + 1}`}
+                            className="p-2 text-slate-500 hover:text-rose-400 disabled:opacity-30"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      {appMode === 'fiscal' && (
+                        <div className="px-3 py-2 bg-white/[0.02]">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <div className="flex items-center gap-2">
+                              <label className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:bg-indigo-500/20 cursor-pointer transition-colors text-[10px] font-semibold uppercase tracking-wide">
+                                <FileScan className="w-3.5 h-3.5" />
+                                Leer XML
                                 <input
-                                  type="text"
-                                  maxLength={13}
-                                  placeholder="RFC Tercero (XAXX010101000)"
-                                  value={r.rfcTercero || ''}
-                                  onChange={e => updateRow(idx, { rfcTercero: e.target.value })}
-                                  onBlur={e => updateRow(idx, { rfcTercero: e.target.value.toUpperCase().trim() })}
-                                  className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg outline-none text-white placeholder-slate-600 text-xs"
+                                  type="file"
+                                  accept=".xml,text/xml,application/xml"
+                                  onChange={(e) => handleCFDIUpload(idx, e)}
+                                  className="hidden"
                                 />
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
+                              </label>
+                              <input
+                                type="text"
+                                maxLength={36}
+                                placeholder="UUID CFDI: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+                                value={r.uuidCFDI || ''}
+                                onChange={e => updateRow(idx, { uuidCFDI: e.target.value })}
+                                onBlur={e => updateRow(idx, { uuidCFDI: e.target.value.trim() })}
+                                className="flex-1 min-w-0 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg outline-none text-white placeholder-slate-600 text-xs"
+                              />
+                            </div>
+                            <input
+                              type="text"
+                              maxLength={13}
+                              placeholder="RFC Tercero (XAXX010101000)"
+                              value={r.rfcTercero || ''}
+                              onChange={e => updateRow(idx, { rfcTercero: e.target.value })}
+                              onBlur={e => updateRow(idx, { rfcTercero: e.target.value.toUpperCase().trim() })}
+                              className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg outline-none text-white placeholder-slate-600 text-xs"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </Fragment>
+                  ))}
+                </div>
               </div>
             )}
           </div>

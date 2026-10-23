@@ -6,7 +6,7 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { Printer, X } from 'lucide-react';
 import type { Poliza } from '../../types';
-import { PolizaPapelSheet } from './PolizaSheet';
+import { HojaPolizaImprimible } from './PolizaSheet';
 
 /**
  * Vista de formato físico de UNA póliza contable (formato papel mexicano).
@@ -49,7 +49,7 @@ export function PolizaPrintModal({
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             className="w-full max-w-3xl my-8 bg-white text-neutral-900 rounded-2xl shadow-2xl poliza-print-sheet px-6 pt-6 pb-8"
           >
-            <PolizaPapelSheet poliza={poliza} />
+            <HojaPolizaImprimible poliza={poliza} />
           </motion.div>
 
           {/* Acciones (no imprimibles) */}
