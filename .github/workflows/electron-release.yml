@@ -116,7 +116,7 @@ jobs:
             release/**/latest.yml
             release/**/*.blockmap
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 1
 
   build-android:
     name: Build Android APK
@@ -225,7 +225,7 @@ jobs:
         with:
           name: build-failure-reports-${{ github.run_number }}
           path: build-failure-reports/
-          retention-days: 30
+          retention-days: 1
           if-no-files-found: warn
 
       - name: Upload APK artifacts
@@ -234,7 +234,7 @@ jobs:
           name: release-android
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 1
 
   publish:
     name: Publish GitHub Release
