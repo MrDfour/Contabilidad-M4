@@ -24,7 +24,7 @@ reales del flujo mexicano:
 
 Además: decisión de arquitectura para el **anexo de imagen del cheque** sin
 agotar la cuota de Cloudflare KV (bóveda E2EE, uno de los límites duros del
-proyecto, `PLAN_SYNC_KV.md`).
+proyecto; mecánica viva en `ARCHITECTURE.md` §6).
 
 ### No-alcance (explícito)
 
@@ -214,7 +214,7 @@ Reglas:
 
 ## 6. Cuota KV / bóveda: por qué NO en el snapshot (aritmética real)
 
-Contexto (`PLAN_SYNC_KV.md`): la bóveda es **1 blob AES-GCM con el snapshot v3
+Contexto (bóveda E2EE v0.9.0): la bóveda es **1 blob AES-GCM con el snapshot v3
 completo de TODAS las empresas**; cada push re-subiría el blob entero. KV free
 tier: 1 000 writes/día (push + hasta 5 puts de historial — la CUOTA sobra),
 cap duro de **25 MiB POR VALUE**, historial de 5 versiones con TTL 30 días.

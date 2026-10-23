@@ -291,7 +291,7 @@ El módulo de **Contabilidad Electrónica** facilita entregables fiscales del An
 
 ### 10. Sincronización Escritorio ↔ Móvil (bóveda E2EE)
 
-La app sincroniza datos entre dispositivos con una **bóveda personal end-to-end** sobre relay propio en Cloudflare (PLAN_SYNC_KV.md):
+La app sincroniza datos entre dispositivos con una **bóveda personal end-to-end** sobre relay propio en Cloudflare (plan ejecutado en v0.9.0, retirado del repo; detalle vivo en `ARCHITECTURE.md` §6):
 
 - **Relay propio en Cloudflare Workers + KV** (sin costo en el plan gratuito) con WebSocket en vivo y degradación a sondeo.
 - **Cifrado extremo a extremo (AES-GCM 256)**: el relay solo ve blobs ilegibles; las claves nacen en tu dispositivo.

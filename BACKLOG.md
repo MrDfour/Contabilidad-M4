@@ -2,7 +2,9 @@
 
 > Trabajo pendiente acordado FUERA de los planes ejecutados. Cada ítem lista el
 > contexto, el problema y la propuesta. Los planes cerrados (PLAN_POLIZAS,
-> PLAN_MULTI_CLIENTE, PLAN_SYNC_KV) ya cumplieron; esto es lo que sigue vivo.
+> PLAN_MULTI_CLIENTE, PLAN_SYNC_KV, PLAN_FUSION_BOVEDA, REFACTORING) ya cumplieron
+> y quedaron RETIRADOS del repositorio el 2026-10-23 (historial en git); esto es lo
+> que sigue vivo: este BACKLOG y el único plan activo, PLAN_CHEQUES.
 >
 > Convenio de registro: al ejecutar un ítem se pasa su entrada a "EJECUTADO/"
 > con fecha y referencia del commit (o se cancela con porqué).
@@ -32,15 +34,18 @@
 
 ## EJECUTADO/ · BL-6 · Fusión de bóveda por hora de captura (tercer botón del conflicto)
 
-> **EJECUTADO el 2026-10-20 en v0.9.9** vía `PLAN_FUSION_BOVEDA.md` (fases A–D):
+> **EJECUTADO el 2026-10-20 en v0.9.9** (fases A–D del plan de fusión de
+> bóveda, retirado del repo; el detalle vivo de la mecánica está en
+> ARCHITECTURE.md §6):
 > lib pura `src/lib/unionBovedas.ts` (`analizarFusion`/`aplicarFusion`),
 > motor (`contenidoConflicto` + `aplicarSnapshotFusionado` con publicación
 > `max+1` forzada y huella anti-eco saltable), tercer botón "Fusionar ambos" en
 > `ConflictoBovedaModal` con pantalla de revisión `FusionBovedaModal`
 > (folios en disputa por elemento, duplicados con checkbox, bloqueo sin
 > decisiones) y acción manual "Asignar pendientes" en la vista de Pólizas
-> (folio 0 → siguiente disponible por captura). PENDIENTE de sesión: la
-> prueba de escena manual multi-dispositivo (PC + móvil).
+> (folio 0 → siguiente disponible por captura). PRUEBA MANUAL
+> MULTI-DISPOSITIVO CONFIRMADA por el usuario el 2026-10-20 (PC + móvil:
+> "funciona perfecto"). Ítem CERRADO en su totalidad.
 
 - **Contexto:** v0.9.8 ya estampa `capturadoEn`/`editadoEn` en cada póliza (silencio total de UI/SAT), la UI hace "conservar una" con aviso de historial y existe restauración desde historial. Falta el tercer camino: **"Fusionar ambos"** en `ConflictoBovedaModal`.
 - **REGLAS DECIDIDAS (sesión 2026-10-20):**

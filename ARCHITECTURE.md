@@ -5,12 +5,13 @@
 > sin necesidad de explorar todo el repositorio.
 > **Regla de mantenimiento:** si cambias la estructura, los datos almacenados o agregas archivos, actualiza este documento en el mismo commit.
 >
-> **⚠ En transición:** existe un plan de extensión MULTI-CLIENTE en curso
-> (`PLAN_MULTI_CLIENTE.md`, heredero de `PLAN_POLIZAS.md` que quedó CERRADO).
-> Durante ese proceso la regla de mantenimiento aplica doble: cada fase del plan
-> DEBE actualizar este documento en el mismo commit que introduzca cambios de
-> estructura. La tabla de archivos y la sección 9 (convenciones) son las que
-> envejecen más rápido.
+> **Planes cerrados:** los planes ya ejecutados (`PLAN_POLIZAS`, `PLAN_MULTI_CLIENTE`,
+> `PLAN_SYNC_KV`, `PLAN_FUSION_BOVEDA`, `REFACTORING`) quedaron RETIRADOS del
+> repositorio para no contaminarlo (2026-10-23). Las claves de decisión que este
+> documento cita de ellos (D-xx, C-xx, K-xx, F-xx) siguen siendo contexto histórico
+> válido; su contenido completo vive en el historial de git. Este archivo es ahora la
+> única documentación viva de decisiones, junto con `BACKLOG.md` (trabajo pendiente)
+> y `PLAN_CHEQUES.md` (único plan activo).
 
 Versión del código: v0.9.9 · Licencia: Apache-2.0 · README de usuario: `README.md`
 
@@ -200,7 +201,8 @@ Contabilidad-M4/
     │   ├── migrateJournalsToPolizas.ts # Migración ONE-SHOT diarios legacy → pólizas (PURA, sin storage;
     │   │                        #   folios por tipo, ids reaprovechados, CFDI/RFC preservados).
     │   │                        #   Se invoca desde useAppData (primera carga) y App (respaldo v1
-    │   │                        #   y sync remoto viejo → D-14); ver PLAN_POLIZAS.md D-2/D-3/D-4
+    │   │                        #   y sync remoto viejo → D-14); decisiones D-2/D-3/D-4 del
+    │   │                        #   plan de pólizas (retirado; historial en git)
     │   ├── migrateCatalogToGlobal.ts  # Migración ONE-SHOT subcuentas de diarios → catálogo global
     │   │                        #   (D-12, PURA: dedup por code, isReadOnly false en nuevas,
     │   │                        #   idempotente). La goberna el flag `contasis_catalog_migrated`
@@ -390,7 +392,7 @@ La composición de las claves por cliente se hace SIEMPRE con el helper puro `cl
 
 ## 6. Sincronización Escritorio ↔ Móvil (bóveda E2EE en Cloudflare KV)
 
-> Reemplazo integral de la capa anterior (PeerJS + Upstash Redis + PIN), ejecutado en `PLAN_SYNC_KV.md` (v0.9.0). Detalle de decisiones en ese plan (K-1 … K-14).
+> Reemplazo integral de la capa anterior (PeerJS + Upstash Redis + PIN), ejecutado en v0.9.0 (plan de sync KV, retirado del repo). Detalle histórico de decisiones: K-1 … K-14, en el historial de git; el detalle vivo está en esta sección.
 
 - **Transporte único**: Worker propio en Cloudflare (`worker/src/index.ts`) + KV namespace (`CONTABILIDAD_VAULT`). Nada de PeerJS ni de credenciales de tercero; deploy por GitHub Actions (`workflow_dispatch`) con Tokens `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID`.
 - **Ciclo de vida** (`src/services/vaultService.ts`): credenciales por dispositivo en `contasis_vault_creds` vía `storageService`; alistamiento por **QR** (`{v,url,vaultId,secretKey}`) o **frase mnemónica determinista** de 6 palabras (la frase GENERA la misma credencial en cualquier dispositivo: `vaultId = vlt_<sha256(frase)[0..12]>`, `secretKey = SHA-256(vaultId:frase)`). **Rol dual web (v0.9.9):** en la PWA el usuario elige si el dispositivo actúa como Escritorio (genera QR/frase, crea la bóveda) o Móvil (alinea pegando; el escaneo con cámara existe SOLO en el APK) — estado inicial `sugerirRolWeb` vía UA + toggle en `SyncModal`; Electron y APK mantienen su rol fijo sin toggle.
@@ -476,7 +478,7 @@ El `npm run build` genera además del `dist/` clásico: `manifest.webmanifest`, 
   6. Render: `components/polizas/PolizaForm.test.tsx` (partida doble en vivo, tipo congelado D-8 + modo papel), `components/polizas/DiarioPrintModal.test.tsx` (rango/presets y los 3 formatos del diario), `components/polizas/AsignarFoliosPendientesModal.test.tsx` (F-6), `components/JournalView.test.tsx` (contrato de solo lectura), `components/SyncModal.test.tsx` (rol dual web v0.9.9, emparejamiento), `components/EmpresasModal.test.tsx` (gestor de clientes C-1/C-8: switch, alta recortada, edición nombre+RFC mayúsculas, baja con confirmación, último cliente deshabilitado) y `components/modals/FusionBovedaModal.test.tsx` (revisión de fusión, decisiones F-8).
 - **Regla de oro:** cualquier cambio en `lib/accounting.ts`, `lib/format.ts`, `lib/importEntriesFromExcel.ts`, `lib/migrateCatalogToGlobal.ts` o los hooks de dominio DEBE dejar `npm run lint && npm run test` en verde antes de commitear; si el cambio es intencional de comportamiento, se actualiza el test en el MISMO commit.
 - *Quirk de entorno documentado:* Node 22+ trae un `localStorage` global nativo que en Windows puede instalarse sin ruta válida; `setup.ts` rebindea al de jsdom (o memoria) si hace falta. No afecta navegador/Electron.
-- Cobertura deliberadamente FUERA de alcance: render completo de `App` (requiere mock de sync/Upstash; `isDesktopRuntime` impide probar el rol escritorio en browser — mejora futura documentada en §6), el rechazo de duplicados de `CatalogView` en render (mismo aserto ya cubierto a nivel de hook en `handleCombinedAccountsUpdate`) y los tests retirados junto al dominio Journal (`useJournals.test.ts` se eliminó con su hook en Fase 5, registro de retiros en `PLAN_POLIZAS.md`).
+- Cobertura deliberadamente FUERA de alcance: render completo de `App` (requiere mock de sync/Upstash; `isDesktopRuntime` impide probar el rol escritorio en browser — mejora futura documentada en §6), el rechazo de duplicados de `CatalogView` en render (mismo aserto ya cubierto a nivel de hook en `handleCombinedAccountsUpdate`) y los tests retirados junto al dominio Journal (`useJournals.test.ts` se eliminó con su hook en Fase 5; registro de retiros en el plan de pólizas, retirado del repo).
 
 ---
 
@@ -509,7 +511,7 @@ El `npm run build` genera además del `dist/` clásico: `manifest.webmanifest`, 
 | Cambiar ventana Electron / autoupdater | `electron/main.js` |
 | Agregar/modificar lógica sujeta a pruebas | Colocar/actualizar el `.test.ts(x)` COLOCADO junto al módulo (regla y niveles en §9 "Red de pruebas"); `npm run lint && npm run test` en verde antes de commitear |
 
-### Quirks conocidos (anotados, no son bugs por decidir — ver `PLAN_POLIZAS.md` §4.5)
+### Quirks conocidos (anotados, no son bugs por decidir; §4.5 del plan de pólizas retirado)
 
 1. **Encabezado `CONCEPTO` del Excel de importación nunca funcionó:** el parser (`importEntriesFromExcel.ts`) valida los encabezados ANTES de normalizarlos y solo reconoce `GLOSA`; así se congeló por decisión del plan (no rompe nada: la plantilla siempre usó `GLOSA`).
 2. **Error de importación Excel siempre genérico:** el catch de `PolizaView` muestra "Formato no soportado" ante CUALQUIER fallo (JSON corrupto, plantilla incompleta, etc.) — comportamiento heredado que se conservó.
