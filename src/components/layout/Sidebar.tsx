@@ -16,9 +16,10 @@ interface SidebarTabButtonProps {
   label: string;
 }
 
-function SidebarTabButton({ active, onClick, icon, label }: SidebarTabButtonProps) {
+function SidebarTabButton({ active, onClick, icon, label, tabId }: SidebarTabButtonProps & { tabId: AppTab }) {
   return (
     <button
+      data-testid={`sidebar-tab-${tabId}`}
       onClick={onClick}
       className={cn(
         "relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium w-full text-left",
@@ -70,6 +71,7 @@ export function Sidebar({ isMobile, navigationTabs, activeTab, onSelectTab }: Si
         {navigationTabs.map(tab => (
           <div key={tab.id}>
             <SidebarTabButton
+              tabId={tab.id}
               active={activeTab === tab.id}
               onClick={() => onSelectTab(tab.id)}
               icon={React.createElement(tab.icon, { className: 'w-4 h-4' })}

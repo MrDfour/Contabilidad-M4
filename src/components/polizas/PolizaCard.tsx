@@ -116,6 +116,7 @@ export function PolizaCard({
 
   return (
     <motion.article
+      data-testid="poliza-card"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
@@ -174,6 +175,7 @@ export function PolizaCard({
           </button>
           <button
             type="button"
+            data-testid="poliza-print-btn"
             aria-label={`Imprimir póliza ${formatPolizaFolio(poliza)}`}
             onClick={() => onPrint(poliza)}
             className="p-2 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-sky-500/10 transition-colors"

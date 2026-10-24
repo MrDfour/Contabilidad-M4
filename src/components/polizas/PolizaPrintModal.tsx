@@ -51,7 +51,7 @@ export function PolizaPrintModal({
   return (
     <AnimatePresence>
       {poliza && (
-        <div className="fixed inset-0 z-[115] flex items-start justify-center p-4 bg-noche/80 backdrop-blur-sm overflow-y-auto">
+        <div data-testid="poliza-print-modal" className="fixed inset-0 z-[115] flex items-start justify-center p-4 bg-noche/80 backdrop-blur-sm overflow-y-auto">
           <style>{`
             @page { size: A4; margin: 12mm; }
             @media print {
@@ -84,6 +84,7 @@ export function PolizaPrintModal({
           <div className="absolute top-4 right-4 flex gap-2 poliza-print-actions">
             {poliza.tipo === 'cheque' && poliza.cheque?.anexos?.length ? (
               <label
+                data-testid="cheque-adjuntar-btn"
                 className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-slate-300 cursor-pointer select-none"
                 title="Imprime la imagen anexa en la zona del cheque en lugar de dejarla en blanco para el calcado (solo si este equipo tiene la imagen)."
               >

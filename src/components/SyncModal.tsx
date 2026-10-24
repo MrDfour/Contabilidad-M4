@@ -323,8 +323,9 @@ export default function SyncModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[145] flex items-center justify-center p-4 bg-noche/85 backdrop-blur-sm">
+        <div data-testid="sync-modal" className="fixed inset-0 z-[145] flex items-center justify-center p-4 bg-noche/85 backdrop-blur-sm">
           <motion.div
+            data-testid="sync-card"
             initial={{ opacity: 0, scale: 0.95, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 12 }}

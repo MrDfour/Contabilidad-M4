@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { motion } from 'motion/react';
-import { BarChart3, Menu, Shield, Smartphone, Users } from 'lucide-react';
+import { BarChart3, Menu, Play, Smartphone, Users } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { APP_VERSION } from '../../lib/appMeta';
 import type { AppMode } from '../../lib/navigation';
@@ -28,6 +28,8 @@ interface AppHeaderProps {
   /** Tema de la UI (v0.9.9) + setter (persistente por dispositivo). */
   tema: TemaApp;
   onSetTema: (t: TemaApp) => void;
+  /** Abre el tour guiado interactivo (reemplaza al viejo toggle de Modo Básico/Fiscal duplicado). */
+  onOpenTour: () => void;
 }
 
 export function AppHeader({
@@ -41,10 +43,11 @@ export function AppHeader({
   onOpenEmpresas,
   indicadorBoveda = 'sin',
   tema,
-  onSetTema
+  onSetTema,
+  onOpenTour
 }: AppHeaderProps) {
   return (
-    <header className="relative overflow-visible border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top))' }}>
+    <header data-testid="app-header" className="relative overflow-visible border-b border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top))' }}>
       <div className="px-4 md:px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           {isMobile && (
@@ -66,6 +69,7 @@ export function AppHeader({
           <button
             onClick={onOpenEmpresas}
             title="Gestionar clientes"
+            data-testid="header-clientes"
             className="inline-flex items-center gap-1.5 max-w-[13rem] px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors text-xs font-semibold"
           >
             <Users className="w-3.5 h-3.5 shrink-0" />
@@ -73,7 +77,7 @@ export function AppHeader({
               {empresaActivaNombre || 'Clientes'}
             </span>
           </button>
-          <div className="hidden sm:grid grid-cols-2 items-center rounded-lg border border-white/10 bg-white/5 p-1 relative">
+          <div data-testid="app-modo" className="hidden sm:grid grid-cols-2 items-center rounded-lg border border-white/10 bg-white/5 p-1 relative">
             <button
               onClick={() => onSetAppMode('basic')}
               className={cn(
@@ -109,6 +113,7 @@ export function AppHeader({
           </div>
           <button
             onClick={onOpenSync}
+            data-testid="header-sync"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 transition-colors text-xs font-semibold"
           >
             <Smartphone className="w-3.5 h-3.5" />
@@ -131,12 +136,16 @@ export function AppHeader({
               )}
             />
           </button>
+          {/* BOTÓN TOUR: reemplaza al antiguo toggle "Modo Básico/Fiscal" que era
+              DUPLICADO del segmented toggle de Basic↔Fiscal (ver §2 PLAN_TOUR.md). */}
           <button
-            onClick={() => onSetAppMode(prev => (prev === 'basic' ? 'fiscal' : 'basic'))}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 transition-colors text-xs font-semibold"
+            onClick={onOpenTour}
+            aria-label="Iniciar recorrido por la aplicación"
+            title="Recorrido interactivo por todas las funciones (tutorial)"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors text-xs font-semibold"
           >
-            <Shield className="w-3.5 h-3.5" />
-            {appMode === 'basic' ? 'Modo Fiscal' : 'Modo Básico'}
+            <Play className="w-3.5 h-3.5 shrink-0" />
+            Tour
           </button>
           {isMobile && (
             <div className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-1 rounded border border-indigo-500/30 uppercase">

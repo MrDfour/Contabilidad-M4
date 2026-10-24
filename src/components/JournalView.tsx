@@ -169,6 +169,8 @@ export function JournalView({
         </div>
         <div className="flex flex-wrap gap-2 md:gap-3">
           <button
+            type="button"
+            data-testid="journal-excel"
             onClick={handleExportExcel}
             disabled={isExporting}
             className="flex items-center gap-2 px-3 md:px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-xs md:text-sm text-slate-200 disabled:opacity-50"
@@ -176,6 +178,8 @@ export function JournalView({
             <Download className="w-4 h-4" /> Excel
           </button>
           <button
+            type="button"
+            data-testid="journal-pdf"
             onClick={handleExportPDF}
             disabled={isExporting}
             className="flex items-center gap-2 px-3 md:px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-xs md:text-sm text-slate-200 disabled:opacity-50"
@@ -183,6 +187,8 @@ export function JournalView({
             <FileText className="w-4 h-4" /> PDF
           </button>
           <button
+            type="button"
+            data-testid="diario-print-modal"
             onClick={() => setPrintOpen(true)}
             disabled={polizas.length === 0}
             title="Imprimir las pólizas del período en formato papel"

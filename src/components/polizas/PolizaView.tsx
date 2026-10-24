@@ -360,6 +360,7 @@ export function PolizaView({
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
+            data-testid="poliza-plantilla"
             onClick={handleDescargarPlantilla}
             title="Descargar plantilla de Excel para importación"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-600/20 transition-colors text-sm font-medium"
@@ -375,6 +376,7 @@ export function PolizaView({
             />
             <button
               type="button"
+              data-testid="poliza-importar"
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-600/20 transition-colors text-sm font-medium"
             >
               <Upload className="w-4 h-4" /> Importar Excel
@@ -383,6 +385,7 @@ export function PolizaView({
           {pendientesFolio.length > 0 && (
             <button
               type="button"
+              data-testid="poliza-asignar-folios"
               onClick={() => setModalFoliosOpen(true)}
               title="Asignar el siguiente folio disponible a las pólizas que quedaron pendientes del merge"
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20 transition-colors text-sm font-medium"
@@ -392,6 +395,7 @@ export function PolizaView({
           )}
           <button
             type="button"
+            data-testid="btn-nueva-poliza"
             onClick={openNueva}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all active:scale-95"
           >

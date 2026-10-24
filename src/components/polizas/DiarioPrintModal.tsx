@@ -239,7 +239,7 @@ export function DiarioPrintModal({
     : `${desde} al ${hasta}`;
 
   return (
-    <div className="fixed inset-0 z-[115] flex items-start justify-center p-4 bg-noche/80 backdrop-blur-sm overflow-y-auto">
+    <div data-testid="diario-print-sheet" className="fixed inset-0 z-[115] flex items-start justify-center p-4 bg-noche/80 backdrop-blur-sm overflow-y-auto">
       <style>{`
         @page { size: A4; margin: 12mm; }
         @media print {
@@ -321,6 +321,7 @@ export function DiarioPrintModal({
           {/* Opción "Con imagen del cheque" (persistida; default OFF): afecta
               a la zona de calcado de la hoja de cheque en "Hoja por póliza". */}
           <label
+            data-testid="diario-print-imagen-cheque"
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-slate-300 cursor-pointer select-none"
             title="En «Hoja por póliza», la hoja del cheque imprime su imagen anexa en la zona superior en vez de dejarla en blanco (solo si este equipo tiene la imagen)."
           >

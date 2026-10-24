@@ -46,6 +46,8 @@ import { MobileMenu } from './components/layout/MobileMenu';
 import { Sidebar } from './components/layout/Sidebar';
 import { AppHeader } from './components/layout/AppHeader';
 import { AppFooter } from './components/layout/AppFooter';
+import { TourProvider } from './components/tour/TourProvider';
+import { hayDatosReales, esUnicaEmpresaDemo, tourCompletado, tourSaltado } from './lib/tour';
 
 const getStoredAppMode = (): AppMode => {
   if (typeof window === 'undefined') return 'basic';
@@ -68,6 +70,9 @@ export default function App() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showEmpresas, setShowEmpresas] = useState(false);
+  /** Visibilidad del tour guiado (controlada por App, pasada al provider). */
+  const [tourActivo, setTourActivo] = useState(false);
+  const onOpenTour = () => setTourActivo(true);
   const downloadPercent = useUpdateProgress();
   const isDesktopRuntime = typeof window !== 'undefined' && ('electronAPI' in window || navigator.userAgent.toLowerCase().includes('electron'));
   const modalInfoRef = useRef<ModalInfo | null>(null);
@@ -349,6 +354,43 @@ export default function App() {
     }
   }, [appMode, activeTab]);
 
+  // --- Tour guiado: disparador del primer arranque -------------------------
+  // El tour se abre automáticamente solo en el arranque inicial y solo si el
+  // cliente todavía no tiene datos reales (lo guía a crear su primer
+  // cliente/póliza). Una marca de sessionStorage evita repetirlo en la misma
+  // sesión; si el usuario lo cierra con «Saltar», `tourSaltado()` evita
+  // reaperturas futuras.
+  useEffect(() => {
+    if (!hasLoaded) return;
+    try {
+      if (tourCompletado() || tourSaltado()) return;
+      if (sessionStorage.getItem('contasis_tour_first_run_shown') === '1') return;
+      if (!hayDatosReales(empresasState.empresas, polizas)) {
+        sessionStorage.setItem('contasis_tour_first_run_shown', '1');
+        setTourActivo(true);
+      }
+    } catch {
+      /* sin persistencia: el tour no se auto-abre */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasLoaded]);
+  // -------------------------------------------------------------------------
+
+  // --- Tour guiado: purga de la empresa de demostración --------------------
+  // App (no el tour) decide cuándo el borrado es seguro: único cliente y de
+  // id `demo-tour`. Como `eliminarEmpresa` prohíbe por diseño borrar el último
+  // cliente (C-8), la vía de escritura es `hydrate`, autorizada al orquestador.
+  const puedePurgarDemo = esUnicaEmpresaDemo(empresasState.empresas);
+
+  const handlePurgarDemo = () => {
+    // Defensa en profundidad: re-verificación al momento de ejecutar la purga.
+    if (!puedePurgarDemo) return;
+    empresasState.hydrate({ activaId: null, empresas: [] });
+    setModalInfo({ type: 'success', title: 'Cliente de demostración eliminado', message: 'El cliente de demostración salió de la lista. Sus claves por cliente quedan como archivo histórico en el almacenamiento.' });
+    setTourActivo(false);
+  };
+  // -------------------------------------------------------------------------
+
   const handleConfirmDelete = () => {
     if (!confirmDelete) return;
     if (confirmDelete.type === 'poliza') {
@@ -407,6 +449,7 @@ export default function App() {
   const activeMobileTabLabel = navigationTabs.find(tab => tab.id === activeTab)?.shortLabel ?? 'Pólizas';
 
   return (
+    <TourProvider appMode={appMode} empresaId={activaId} abierto={tourActivo} onAbiertoChange={setTourActivo} onNavigateTab={setActiveTab} purgarDemo={puedePurgarDemo ? handlePurgarDemo : null} onAbrirBoveda={() => setShowSyncModal(true)} onCerrarBoveda={() => setShowSyncModal(false)}>
     <div className="min-h-screen bg-noche text-slate-100 font-sans selection:bg-indigo-500 selection:text-white relative overflow-x-hidden">
       {/* Background Gradients (clase temática: se redefine en cada tema, src/temas.css) */}
       <div className="fixed inset-0 fondo-ambiental pointer-events-none"></div>
@@ -446,6 +489,7 @@ export default function App() {
             indicadorBoveda={indicadorBoveda}
             tema={tema}
             onSetTema={setTema}
+            onOpenTour={onOpenTour}
           />
 
           <main className="flex-1 overflow-y-auto pt-3">
@@ -732,5 +776,6 @@ export default function App() {
         }}
       />
     </div>
+    </TourProvider>
   );
 }

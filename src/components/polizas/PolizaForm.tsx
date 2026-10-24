@@ -336,7 +336,7 @@ export function PolizaForm({
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-start justify-center p-4 bg-noche/80 backdrop-blur-sm overflow-y-auto">
+    <div data-testid="poliza-form" className="fixed inset-0 z-[110] flex items-start justify-center p-4 bg-noche/80 backdrop-blur-sm overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -375,6 +375,7 @@ export function PolizaForm({
                 disabled={Boolean(initialData)} // D-8: congelado al editar
                 onChange={e => alCambiarHoja(e.target.value as TipoPoliza)}
                 aria-label="Formato de la póliza"
+                data-testid="poliza-form-hoja"
                 className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-white appearance-none disabled:opacity-50"
               >
                 <option value="ingreso">Póliza de Ingresos</option>
@@ -403,6 +404,7 @@ export function PolizaForm({
                   disabled={Boolean(initialData)} // D-8: congelado al editar
                   onChange={e => setTipo(e.target.value as TipoPoliza)}
                   aria-label="Tipo de Póliza"
+                  data-testid="poliza-form-hoja"
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-white appearance-none disabled:opacity-50"
                 >
                   <option value="diario" className="bg-slate-800">Diario</option>
@@ -431,6 +433,8 @@ export function PolizaForm({
                 placeholder="Ej: Cobro de cliente Factura A-12..."
                 value={concepto}
                 onChange={e => setConcepto(e.target.value)}
+                aria-label="Concepto general de la póliza"
+                data-testid="poliza-form-campo-concepto"
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-white placeholder-slate-600"
               />
             </div>
@@ -509,7 +513,7 @@ export function PolizaForm({
               {/* CH-6 (Fase 2): picker + preview LOCAL. El binario se persiste con
                   attachmentService en la Fase 4 (no viaja en la bóveda, CH-11). */}
               <div className="flex flex-wrap items-center gap-3 pt-1">
-                <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:bg-indigo-500/20 cursor-pointer transition-colors text-xs font-semibold">
+                <label data-testid="poliza-form-adjuntar-cheque" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:bg-indigo-500/20 cursor-pointer transition-colors text-xs font-semibold">
                   <ImagePlus className="w-4 h-4" />
                   Adjuntar imagen del cheque
                   <input type="file" accept="image/*" onChange={alElegirAnexo} className="hidden" />
@@ -561,7 +565,7 @@ export function PolizaForm({
             </div>
 
             {modo === 'clasica' && rows.map((r, idx) => (
-              <div key={r.uid} className="grid grid-cols-12 gap-4 items-end animate-in fade-in slide-in-from-left-2 transition-all">
+              <div key={r.uid} data-testid={`poliza-form-partida-${idx}`} className="grid grid-cols-12 gap-4 items-end animate-in fade-in slide-in-from-left-2 transition-all">
                 <div className="col-span-12 md:col-span-3 space-y-1">
                   <label className="text-[9px] uppercase font-bold text-slate-500">Cuenta contable</label>
                   <SearchableAccountSelect
@@ -684,7 +688,7 @@ export function PolizaForm({
                 <div className="divide-y divide-white/5">
                   {rows.map((r, idx) => (
                     <Fragment key={r.uid}>
-                      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_9rem_9rem_minmax(0,1fr)_2.5rem] gap-2 items-center px-3 py-2">
+                      <div data-testid={`poliza-form-partida-${idx}`} className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_9rem_9rem_minmax(0,1fr)_2.5rem] gap-2 items-center px-3 py-2">
                         {/* Cuenta contable (etiqueta visible SOLO en móvil) */}
                         <div className="space-y-1">
                           <span className="md:hidden text-[9px] uppercase font-bold text-slate-500">Cuenta contable</span>
@@ -846,6 +850,7 @@ export function PolizaForm({
               <button
                 type="submit"
                 disabled={isDeshabilitado}
+                data-testid="poliza-form-guardar"
                 className={
                   'px-6 py-2.5 rounded-lg font-bold transition-all w-full md:w-auto shadow-lg ' +
                   (isDeshabilitado
