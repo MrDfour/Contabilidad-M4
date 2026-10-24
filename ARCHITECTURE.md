@@ -11,9 +11,10 @@
 > documento cita de ellos (D-xx, C-xx, K-xx, F-xx) siguen siendo contexto histórico
 > válido; su contenido completo vive en el historial de git. Este archivo es ahora la
 > única documentación viva de decisiones, junto con `BACKLOG.md` (trabajo pendiente)
-> y `PLAN_CHEQUES.md` (único plan activo).
+> y `PLAN_CHEQUES.md` (único plan activo). `PLAN_TOUR.md` quedó EJECUTADO el 2026-10-23 y
+> permanece en el repo como referencia del tour guiado y sus claves F1–F3.
 
-Versión del código: v0.9.9 · Licencia: Apache-2.0 · README de usuario: `README.md`
+Versión del código: v1.0.0 (**primera versión pública**) · Licencia: Apache-2.0 · README de usuario: `README.md`
 
 ---
 
@@ -27,7 +28,7 @@ App de gestión contable (español, dominio fiscal mexicano) que funciona en **t
 | Escritorio | Electron (instaladores con `electron-builder`) | `electron/main.js` |
 | Android | Capacitor (`capacitor.config.ts`, proyecto `android/` committeado) | `MainActivity` (plugin `AppUpdater`) |
 
-Módulos funcionales: Pólizas Contables (captura principal: Ingreso/Egreso/Diario, en pantalla Clásica o en formato papel mexicano), Multi-Cliente (contador con varios clientes: cada cliente = workspace con catálogo/activos/inventario/pólizas/RFC propios), Libro Diario (reporte consolidado de solo lectura, con impresión por día/rango en formato papel), Cuentas T, Balance General, Estado de Resultados, Catálogo de Cuentas, Activos Fijos con depreciación, Contabilidad Electrónica SAT (Anexo 24) y sincronización Escritorio ↔ Móvil.
+Módulos funcionales: Pólizas Contables (captura principal: Ingreso/Egreso/Diario, en pantalla Clásica o en formato papel mexicano), Multi-Cliente (contador con varios clientes: cada cliente = workspace con catálogo/activos/inventario/pólizas/RFC propios), Libro Diario (reporte consolidado de solo lectura, con impresión por día/rango en formato papel), Cuentas T, Balance General, Estado de Resultados, Catálogo de Cuentas, Activos Fijos con depreciación, Contabilidad Electrónica SAT (Anexo 24), sincronización Escritorio ↔ Móvil (bóveda E2EE) y **Tour guiado interactivo** (coach marks anclados a elementos reales del DOM; se ofrece al primer inicio y a voluntad por el botón del encabezado).
 
 **Stack:** React 19 + TypeScript strict + Vite + Tailwind CSS v4 (sin componentes de UI externos; la UI es propia). Exportación con ExcelJS / jsPDF / html2canvas-pro. Sincronización con relay propio en Cloudflare Workers + KV (bóveda E2EE, §6). PWA con `vite-plugin-pwa` (autoUpdate).
 
@@ -75,11 +76,19 @@ Contabilidad-M4/
     │                           #   `Empresa`/`EstadoEmpresas` = clientes (D-17); `Journal`/`JournalEntry`/
     │                           #   `Movement` SOLO sobreviven como formatos legacy: migración one-shot,
     │                           #   respaldos v1 y sync remoto viejo.
+    ├── types/
+    │   └── tour.ts               # Tipos del TOUR guiado: TourStepDef (ancla target/targetText,
+    │                             #   placement, saltarSi, accion 'abrir-boveda', navegarA),
+    │                             #   TourState y TourContextValue
     ├── App.tsx                 # ⭐ ORQUESTADOR: composición de hooks de dominio (activos fijos viven
     │                           #   aquí con clave POR CLIENTE y guard de transición de cliente),
     │                           #   cambio de cliente activo, navegación
     │                           #   (appMode/activeTab), modales de UI, orquestadores multi-dominio
-    │                           #   (sync remoto, restauración de respaldo v1/v2/v3); shell en layout/
+    │                           #   (sync remoto, restauración de respaldo v1/v2/v3) + wiring del
+    │                           #   TourProvider (tour guiado: auto-abre al primer arranque si
+    │                           #   nunca completado ni saltado, purga del cliente demo CON
+    │                           #   guard `esUnicaEmpresaDemo` y apertura de la bóveda EN VIVO
+    │                           #   durante el paso de respaldo); shell en layout/
     │
     ├── components/             # Vistas puras (reciben datos por props, no tocan storage)
     │   ├── EmpresasModal.tsx         # ⭐ Gestor de CLIENTES (C-1): lista/switch de cliente activo,
@@ -91,8 +100,10 @@ Contabilidad-M4/
     │   │   │                          #   para preservar la animación layoutId="sidebar-active-indicator"
     │   │   ├── AppHeader.tsx           #   sticky header + selector de cliente activo (abre el
     │   │   │                          #   gestor EmpresasModal) + toggle Básico/Fiscal
-    │   │   │                          #   (layoutId="app-mode-indicator", riesgo R4: existe en
-    │   │   │                          #   móvil y desktop; verifica en ambos)
+    │   │   │                          #   (layoutId="app-mode-indicator", riesgo R4) + botón
+    │   │   │                          #   TOUR (onOpenTour: heredó el sitio del antiguo toggle
+    │   │   │                          #   duplicado; abre el tour a voluntad) + botón Sync con
+    │   │   │                          #   el punto de estado de la bóveda
     │   │   └── AppFooter.tsx           #   botones de respaldo/restaurar/acerca de/feedback
     │   ├── account/                  # Selector de cuentas compartido (movido desde journal/ en Fase 7)
     │   │   └── AccountPicker.tsx       # SearchableAccountSelect: lo consumen FixedAssetsView y
@@ -181,6 +192,28 @@ Contabilidad-M4/
     │       │                          #   fusión" bloqueado sin decisiones F-8; publica el motor
     │       ├── AboutModal.tsx          #   "Acerca de" + puente a Feedback
     │       └── DownloadProgressBar.tsx #   barra de progreso de descarga (Electron updater)
+    │   ├── tour/                        # ⭐ TOUR GUIADO (PLAN_TOUR, ejecutado): overlay semitransparente
+    │   │                                #   + coach marks anclados a elementos REALES del DOM
+    │   │                                #   (data-testid / targetText). Lee el estado de la app,
+    │   │                                #   jamás escribe datos: toda decisión de ALTERAR algo la
+    │   │                                #   autoriza App (purga del demo, cierre de la bóveda)
+    │   │   ├── TourProvider.tsx         #   motor de navegación: pasos visibles por appMode
+    │   │   │                            #   (filtrado con saltarSi), saltos navegarA de pestaña,
+    │   │   │                            #   accion 'abrir-boveda' (SyncModal se abre EN VIVO y se
+    │   │   │                            #   cierra al salir del paso SOLO si la abrió el tour),
+    │   │   │                            #   reabrir en paso 1, `siguiente`/`atras`, finalizar
+    │   │   │                            #   (marca completed ≠ saltado) y purga del cliente demo
+    │   │   │                            #   del paso final SOLO si App transmite purgarDemo
+    │   │   ├── TourOverlay.tsx          #   spotlight (4 cuadrantes + anillo ámbar): resolverTarget
+    │   │   │                            #   (data-testid → targetText) y traerAVista (scroll del
+    │   │   │                            #   objetivo SOLO al cambiar de paso, no en scroll ajeno)
+    │   │   ├── TourCoachMark.tsx        #   burbuja: posicionTarjeta (flip entre lados + clamp al
+    │   │   │                            #   viewport; RECHAZA todo candidato que invada a su ancla)
+    │   │   │                            #   en useLayoutEffect, tras traerAVista
+    │   │   └── steps/index.tsx          #   los 29 pasos en español: shell/encabezado, captura de
+    │   │                                #   pólizas (incl. plantilla/importación/folio pendiente),
+    │   │                                #   reportes, fiscal/CFDI, activos fijos, bóveda EN VIVO,
+    │   │                                #   respaldo y cierre con oferta de borrar el demo
     │
     ├── lib/
     │   ├── format.ts            # ⭐ FUENTE ÚNICA de formateo/parseo de montos y texto:
@@ -205,6 +238,12 @@ Contabilidad-M4/
     │   ├── empresas.ts          # ⭐ MULTI-CLIENTE (PLAN_MULTI_CLIENTE): helpers PURAS de claves
     │   │                        #   por cliente (clavePorEmpresa, arrayDe, objetoDe, BASES_POR_EMPRESA).
     │   │                        #   Toda composición de clave `<dominio>_<empresaId>` pasa por aquí.
+    │   ├── tour.ts               # TOUR guiado: claves `contasis_tour_state` /
+    │   │                         #   `contasis_tour_skipped` / `contasis_tour_demo_seedado`,
+    │   │                         #   leerEstadoTour/tourCompletado/tourSaltado,
+    │   │                         #   hayDatosReales y la salvaguarda esUnicaEmpresaDemo
+    │   │                         #   (la purga del cliente demo `demo-tour` SOLO si es el
+    │   │                         #   ÚNICO cliente que existe)
     │   ├── unionBovedas.ts      # ⭐ FUSIÓN DE BÓVEDA (v0.9.9, PLAN_FUSION_BOVEDA): PURA. analizarFusion
     │   │                        #   (clasifica entrantes: directos, ediciones cruzadas F-3, colisiones
     │   │                        #   de folio F-2, duplicados F-5, clientes faltantes F-4) y aplicarFusion
@@ -249,6 +288,8 @@ Contabilidad-M4/
     │   ├── components/polizas/PolizaForm.test.tsx · DiarioPrintModal.test.tsx
     │   │    · AsignarFoliosPendientesModal.test.tsx
     │   ├── components/modals/FusionBovedaModal.test.tsx
+    │   ├── components/tour/TourProvider.test.tsx · TourOverlay.test.tsx
+    │   │    · TourCoachMark.test.tsx · tourSteps.test.tsx
     │   └── test/setup.ts        # Setup global: limpieza entre tests + polyfills jsdom
     │
     ├── services/
@@ -409,6 +450,9 @@ Claves usadas (uniformes en las tres plataformas):
 | IndexedDB `contasis_anexos` / `Directory.Data` `anexo_<empresaId>_<sha>.<ext>` / `userData/attachments/` | El BINARIO del anexo, 100% LOCAL por backend: web (IndexedDB, store `anexos`, clave `<empresaId>_<sha>`) / Android (Filesystem) / Electron (vía IPC `save-attachment`/`load-attachment`/`delete-attachment`). Los componentes NUNCA lo tocan: solo `attachmentService` (anti-R1) |
 | `contasis_diario_cheques` | Toggle "Incluir cheques" del diario impreso (default ON; OFF saca las pólizas de cheque del libro completo) |
 | `contasis_hoja_cheque_imagen` | Opción "Con imagen del cheque" (decisión del usuario 2026-10-23, amplía CH-5): al imprimir la hoja de cheque, su zona de calcado lleva la IMAGEN anexa en vez de quedar en blanco (solo si este equipo tiene el binario CH-11). Default '0' (en blanco para el papel carbón); preferencia COMPARTIDA por el diario (`DiarioPrintModal`) y la impresión individual (`PolizaPrintModal`) |
+| `contasis_tour_state` | Estado del TOUR guiado (`{ startedAt, lastStep, completed }`) — App lo auto-ABRE en el primer arranque si nunca se completó ni se saltó; dueño: `TourProvider` (vía `lib/tour.ts`). El botón del encabezado lo reabre a voluntad (desde paso 1) |
+| `contasis_tour_skipped` | Flag `'1'` tras «Saltarlo»: el tour no vuelve a abrirse solo (queda el botón del encabezado). «Finalizar» NO lo pone — marca `completed` en el estado |
+| `contasis_tour_demo_seedado` | Marca `'1'` si el sembrado del CLIENTE DEMO `demo-tour` ya corrió. La PURGA de ese cliente se ofrece SOLO en el paso final y solo si App transmite `purgarDemo` (guard `esUnicaEmpresaDemo`: el demo debe ser el ÚNICO cliente; `eliminarEmpresa` prohíbe borrar el último, así que la purga va por `hydrate`) |
 
 La composición de las claves por cliente se hace SIEMPRE con el helper puro `clavePorEmpresa` (`lib/empresas.ts`, C-2).
 
@@ -495,13 +539,14 @@ El `npm run build` genera además del `dist/` clásico: `manifest.webmanifest`, 
 
 - Stack: `vitest` + `@testing-library/react` + `jest-dom`, **solo devDependencies**. Config en `vitest.config.ts` (espeja el `define __APP_VERSION__` de Vite); setup global en `src/test/setup.ts` (limpieza de DOM/storage entre tests + polyfills de jsdom: `crypto.randomUUID`, `URL.createObjectURL`).
 - **Ubicación:** cada `.test.ts(x)` vive COLOCADO junto al código que prueba (`lib/`, `hooks/`, `components/`). Vitest descubre `src/**/*.test.{ts,tsx}`.
-- **Niveles cubiertos (28 archivos / 322 tests — 27 colocados en `src/` + `worker/tests/relay.test.ts`, que la misma pasada `npm run test` incluye):**
+- **Niveles cubiertos (38 archivos / 413 tests — 37 colocados en `src/` + `worker/tests/relay.test.ts`, que la misma pasada `npm run test` incluye):**
   1. Unitarias puras: `lib/accounting.test.ts` (Cuentas T, saldos por naturaleza, depreciación, INPC truncado + validación/flatten/folios/entrada-a-póliza + `consolidarPolizasDiaria`), `lib/format.test.ts` (normalización, parseo de importaciones, sanitización de input y contrato de `parseJournalImport`), `lib/satExport.test.ts` (XML PL re-parseado: folios reales, tipos 1/2/3, CompNal, escaping, filename), `lib/empresas.test.ts` (C-2: composición de claves por cliente + normalizadores `arrayDe`/`objetoDe`), `lib/navigation.test.ts` (DEFAULT_TAB = polizas, composición de pestañas), `lib/unionBovedas.test.ts` (fusión F-1…F-8: análisis de entrantes y aplicación del snapshot fusionado), `lib/mnemonic.test.ts` (frase → credencial determinista) y `lib/crypto.test.ts` (AES-GCM del sobre E2EE).
   2. Funcional: `lib/export.test.ts` — el workbook Excel se RELEE con ExcelJS (solo `file-saver` mockeado) y el PDF se valida por firma `%PDF-` real.
   3. Migraciones: `lib/migrateJournalsToPolizas.test.ts` (determinismo congelado: folios por tipo, ids, CFDI/RFC) y `lib/migrateCatalogToGlobal.test.ts` (D-12: dedup por código, idempotencia, orden).
   4. Servicios de bóveda: `services/vaultService.test.ts` (alistamiento QR/frase, credenciales, verificación de relay) y `services/vaultSyncEngine.test.ts` (motor: debounce/coalescing K-5, chequeo pre-publicación, conflicto K-7, huella anti-eco K-11). El anexo de cheques se cubre en `services/attachmentService.test.ts` (escalera congelada §8.2 + fallback nunca-rechaza CH-9, dedupe CH-10, registro por cliente, huérfanos aviso/purga CH-14, cascada de borrado) y `components/polizas/PolizaCard.test.tsx` (miniatura/placeholder/lightbox en tarjeta).
   5. Hooks: `hooks/usePolizas` (CRUD de pólizas, folios por tipo, tipo congelado en edición, hydrate persistente + `hydrateEmpresa` por cliente, puerta `canSave`, guard de transición C-4), `useEmpresas` (CRUD de clientes, guarda de último cliente C-8, hydrate, flag own), `useCatalog` (catálogo por cliente: recuperación de base, dedup por `code`, debounce gated por `canSave`, `hydrateEmpresa`, guard de transición C-4), `useAppData` (boot multi-cliente: migración one-shot C-2, carga del activo, recarga por cambio de cliente C-4, fallback de metadatos corruptos SIN escribir claves), `useBackup` (respaldo v3 con todas las empresas, import v3/v2/v1, vigía 7 días, import corrupto NO restaura), `useInventories` (clave 'general' D-13, helper `inventoriesToGeneral`, `hydrateEmpresa`, sin auto-guardado), `useTemaApp` (tema → data-theme/meta theme-color).
   6. Render: `components/polizas/PolizaForm.test.tsx` (partida doble en vivo, tipo congelado D-8 + modo papel + CH-8), `components/polizas/DiarioPrintModal.test.tsx` (rango/presets, los 3 formatos del diario y el toggle de cheques de Fase 3), `components/polizas/PolizaSheet.test.tsx` (hoja de cheque: calcado/datos/sumas + despacho por tipo), `components/polizas/AsignarFoliosPendientesModal.test.tsx` (F-6), `components/JournalView.test.tsx` (contrato de solo lectura), `components/SyncModal.test.tsx` (rol dual web v0.9.9, emparejamiento), `components/EmpresasModal.test.tsx` (gestor de clientes C-1/C-8: switch, alta recortada, edición nombre+RFC mayúsculas, baja con confirmación, último cliente deshabilitado) y `components/modals/FusionBovedaModal.test.tsx` (revisión de fusión, decisiones F-8).
+  7. Tour guiado: `components/tour/TourProvider.test.tsx` (motor: visibilidad por appMode/saltarSi, finalizar marca completed ≠ saltado, reabrir en paso 1, accion 'abrir-boveda' abre/cierra la bóveda SOLO si la abrió el tour), `components/tour/TourOverlay.test.tsx` (spotlight, resolverTarget y traerAVista), `components/tour/TourCoachMark.test.tsx` (posicionamiento: viewport con flip Y el contrato «la burbuja jamás invada a su ancla») y `components/tour/tourSteps.test.tsx` (contrato de los 29 pasos: anclas `data-testid` reales, accion, español correcto).
 - **Regla de oro:** cualquier cambio en `lib/accounting.ts`, `lib/format.ts`, `lib/importEntriesFromExcel.ts`, `lib/migrateCatalogToGlobal.ts` o los hooks de dominio DEBE dejar `npm run lint && npm run test` en verde antes de commitear; si el cambio es intencional de comportamiento, se actualiza el test en el MISMO commit.
 - *Quirk de entorno documentado:* Node 22+ trae un `localStorage` global nativo que en Windows puede instalarse sin ruta válida; `setup.ts` rebindea al de jsdom (o memoria) si hace falta. No afecta navegador/Electron.
 - Cobertura deliberadamente FUERA de alcance: render completo de `App` (requiere mock de sync/Upstash; `isDesktopRuntime` impide probar el rol escritorio en browser — mejora futura documentada en §6), el rechazo de duplicados de `CatalogView` en render (mismo aserto ya cubierto a nivel de hook en `handleCombinedAccountsUpdate`) y los tests retirados junto al dominio Journal (`useJournals.test.ts` se eliminó con su hook en Fase 5; registro de retiros en el plan de pólizas, retirado del repo).
@@ -535,6 +580,7 @@ El `npm run build` genera además del `dist/` clásico: `manifest.webmanifest`, 
 | Cambiar el updater in-app de Android | plugin nativo `android/app/src/main/java/…/AppUpdaterPlugin.java` (descarga/instalación) · `src/services/appUpdater.ts` (puente JS) · `src/components/modals/UpdateAvailableModal.tsx` (UX máquina de estados) |
 | Cambiar la build/distribución (desktop · APK · PWA) | `.github/workflows/electron-release.yml` (desktop + APK + release) · manifest/PWA en `vite.config.ts` (`VitePWA`) |
 | Agregar una vista/nueva pantalla | Nuevo componente + switch en `App.tsx` |
+| Cambiar el TOUR guiado (pasos, anclas, cierre de bóveda, purga del demo) | `src/components/tour/` (motor: `TourProvider`/`TourOverlay`/`TourCoachMark` + `steps/index.tsx`) · `src/lib/tour.ts` (claves y salvaguarda del demo) · `src/App.tsx` (wiring: arranque del 1er uso, `purgarDemo`, `onAbrirBoveda`/`onCerrarBoveda`) · `PLAN_TOUR.md` (plan ejecutado) |
 | Cambiar ventana Electron / autoupdater | `electron/main.js` |
 | Agregar/modificar lógica sujeta a pruebas | Colocar/actualizar el `.test.ts(x)` COLOCADO junto al módulo (regla y niveles en §9 "Red de pruebas"); `npm run lint && npm run test` en verde antes de commitear |
 
