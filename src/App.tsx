@@ -465,6 +465,8 @@ export default function App() {
         onShowAbout={() => setShowAbout(true)}
         tema={tema}
         onSetTema={setTema}
+        appMode={appMode}
+        onSetAppMode={setAppMode}
       />
 
       <div className="flex h-screen overflow-hidden relative z-10">

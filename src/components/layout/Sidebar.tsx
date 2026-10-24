@@ -53,6 +53,7 @@ interface SidebarProps {
 export function Sidebar({ isMobile, navigationTabs, activeTab, onSelectTab }: SidebarProps) {
   return (
     <aside
+      data-testid="sidebar-nav"
       className={cn(
         "w-64 border-r border-white/10 bg-white/5 backdrop-blur-xl p-4 lg:p-5",
         isMobile && "hidden"

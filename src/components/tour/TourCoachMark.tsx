@@ -92,13 +92,27 @@ export function TourCoachMark({ paso, pasoIdx, total, onNext, onBack, onSkip, on
 
   // Posición calculada en un efecto de layout: primero se trae el objetivo a la
   // vista (p. ej. el pie de página) y después se mide, así la tarjeta se ancla
-  // al elemento ya visible y no a una posición vieja.
+  // al elemento ya visible y no a una posición vieja. Si el objetivo todavía no
+  // está en el DOM (pasos con `navegarA`: la vista cambia en el mismo commit),
+  // se reintenta con rAF un momento antes de rendirse y centrar la tarjeta.
   const [pos, setPos] = useState(() => posicionTarjeta(paso.placement ?? 'bottom', null));
   useLayoutEffect(() => {
-    const objetivo = resolverTarget(paso);
-    if (objetivo) traerAVista(objetivo);
-    const rect = objetivo?.getBoundingClientRect() ?? null;
-    setPos(posicionTarjeta(paso.placement ?? 'bottom', rect));
+    const ubicar = (): boolean => {
+      const objetivo = resolverTarget(paso);
+      if (!objetivo) return false;
+      traerAVista(objetivo);
+      setPos(posicionTarjeta(paso.placement ?? 'bottom', objetivo.getBoundingClientRect()));
+      return true;
+    };
+    if (ubicar()) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let intentos = 0;
+    const reintento = () => {
+      if (ubicar() || ++intentos > 40) return;
+      timer = setTimeout(reintento, 50);
+    };
+    timer = setTimeout(reintento, 50);
+    return () => { if (timer !== undefined) clearTimeout(timer); };
   }, [paso]);
 
   // La tecla Escape también cierra desde aquí (el proveedor ya la escucha; esta es otra capa).

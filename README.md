@@ -7,7 +7,7 @@
 **Gestión contable completa para despachos — en español, con dominio fiscal mexicano.**
 Captura tus **Pólizas Contables** (ingreso, egreso, diario y cheque, con partida doble validada en vivo) y deja que la app derive solo el **Libro Diario**, las **Cuentas T**, el **Balance General** y el **Estado de Resultados**. Lleva **varios Clientes** a la vez —cada uno con su catálogo, activos, inventario, pólizas y RFC propio— y sincroniza tu contabilidad **Escritorio ↔ Móvil** con una bóveda personal encriptada de punta a punta.
 
-> Versión: **v1.0.0 — primera versión pública** · Autor: Fernando Martínez · Licencia: Apache-2.0
+> Versión: **v1.0.1** (primera versión pública: v1.0.0) · Autor: Fernando Martínez · Licencia: Apache-2.0
 >
 > Disponible en **Windows · macOS · Linux · Android · Web/PWA** — un solo código base.
 
@@ -470,7 +470,7 @@ Esto primero ejecuta `vite build` y luego `electron-builder`, generando los inst
 
 ```bash
 npm run lint   # tsc --noEmit: detecta errores de tipos sin generar archivos
-npm run test   # Vitest: 38 archivos / 413 pruebas (una pasada)
+npm run test   # Vitest: 38 archivos / 414 pruebas (una pasada)
 ```
 
 > Para desarrollo del codebase, el mapa completo del proyecto vive en [`ARCHITECTURE.md`](ARCHITECTURE.md).
@@ -526,7 +526,7 @@ Para limpiar todos los datos, abre las herramientas de desarrollo (F12) → Appl
 | `npm run preview`        | Previsualiza la build de producción localmente               |
 | `npm run clean`          | Elimina la carpeta `dist/`                                   |
 | `npm run lint`           | Verifica tipos TypeScript sin generar archivos               |
-| `npm run test`           | Ejecuta la red de pruebas (Vitest, 413 pruebas, una pasada)  |
+| `npm run test`           | Ejecuta la red de pruebas (Vitest, 414 pruebas, una pasada)  |
 | `npm run test:watch`     | Modo vigilante de pruebas (se re-ejecutan al guardar)        |
 | `npm run electron:build` | Compila la app de escritorio Electron para distribución      |
 
@@ -538,7 +538,7 @@ Para limpiar todos los datos, abre las herramientas de desarrollo (F12) → Appl
 |--------------------------|--------------------------------------------------|
 | React 19                 | Interfaz de usuario                              |
 | TypeScript               | Tipado estático (strict)                         |
-| Vitest + Testing Library | Red de pruebas (413 pruebas colocadas junto al código) |
+| Vitest + Testing Library | Red de pruebas (414 pruebas colocadas junto al código) |
 | Vite                     | Bundler y servidor de desarrollo                 |
 | vite-plugin-pwa          | Manifest + service worker de la app web instalable |
 | Tailwind CSS v4          | Estilos utilitarios y temas                      |

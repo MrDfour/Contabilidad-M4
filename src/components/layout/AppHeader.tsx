@@ -53,7 +53,9 @@ export function AppHeader({
           {isMobile && (
             <button
               onClick={onOpenMobileMenu}
-              className="p-2 -ml-2 text-slate-400 hover:text-white"
+              aria-label="Abrir menú de navegación"
+              data-testid="mobile-menu-btn"
+              className="p-2 -ml-2 text-slate-400 hover:text-white shrink-0"
             >
               <Menu className="w-6 h-6" />
             </button>
@@ -65,12 +67,12 @@ export function AppHeader({
           <span className="text-[10px] font-mono text-slate-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">{APP_VERSION}</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <button
             onClick={onOpenEmpresas}
             title="Gestionar clientes"
             data-testid="header-clientes"
-            className="inline-flex items-center gap-1.5 max-w-[13rem] px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors text-xs font-semibold"
+            className="inline-flex items-center gap-1.5 max-w-[7rem] sm:max-w-[13rem] px-2 sm:px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors text-xs font-semibold"
           >
             <Users className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">
@@ -117,7 +119,7 @@ export function AppHeader({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 transition-colors text-xs font-semibold"
           >
             <Smartphone className="w-3.5 h-3.5" />
-            Sync
+            <span className="hidden sm:inline">Sync</span>
             <span
               title={
                 indicadorBoveda === 'sin' ? 'Sin bóveda' :
@@ -142,13 +144,13 @@ export function AppHeader({
             onClick={onOpenTour}
             aria-label="Iniciar recorrido por la aplicación"
             title="Recorrido interactivo por todas las funciones (tutorial)"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors text-xs font-semibold"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors text-xs font-semibold shrink-0"
           >
             <Play className="w-3.5 h-3.5 shrink-0" />
-            Tour
+            <span className="hidden sm:inline">Tour</span>
           </button>
           {isMobile && (
-            <div className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-1 rounded border border-indigo-500/30 uppercase">
+            <div data-testid="mobile-tab-badge" className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-1 rounded border border-indigo-500/30 uppercase shrink-0">
               {activeMobileTabLabel}
             </div>
           )}

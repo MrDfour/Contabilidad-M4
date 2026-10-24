@@ -14,7 +14,7 @@
 > y `PLAN_CHEQUES.md` (único plan activo). `PLAN_TOUR.md` quedó EJECUTADO el 2026-10-23 y
 > permanece en el repo como referencia del tour guiado y sus claves F1–F3.
 
-Versión del código: v1.0.0 (**primera versión pública**) · Licencia: Apache-2.0 · README de usuario: `README.md`
+Versión del código: v1.0.1 (**parche móvil**: header responsivo + tour a prueba de elementos ocultos; primera versión pública: v1.0.0) · Licencia: Apache-2.0 · README de usuario: `README.md`
 
 ---
 
@@ -96,14 +96,20 @@ Contabilidad-M4/
     │   │                             #   el switch dispara la recarga orquestada (C-4)
     │   ├── layout/                   # Shell de layout extraído de App (Fase 3): presentacionales,
     │   │   ├── MobileMenu.tsx          #   drawer móvil (AnimatePresence), ítems derivados de NavigationTab[]
+    │   │   │                          #   + sección «Modo de la app» (v1.0.1: en móvil el toggle del
+    │   │   │                          #   header está oculto, aquí se cambia Básico↔Fiscal; testid
+    │   │   │                          #   mobile-app-modo) + sección Tema + Acerca de
     │   │   ├── Sidebar.tsx             #   sidebar desktop: SIEMPRE montado (se oculta con CSS en móvil)
     │   │   │                          #   para preservar la animación layoutId="sidebar-active-indicator"
+    │   │   │                          #   (testid sidebar-nav: ancla del tour que descarta ocultos)
     │   │   ├── AppHeader.tsx           #   sticky header + selector de cliente activo (abre el
     │   │   │                          #   gestor EmpresasModal) + toggle Básico/Fiscal
-    │   │   │                          #   (layoutId="app-mode-indicator", riesgo R4) + botón
-    │   │   │                          #   TOUR (onOpenTour: heredó el sitio del antiguo toggle
+    │   │   │                          #   (layoutId="app-mode-indicator", riesgo R4; hidden en móvil)
+    │   │   │                          #   + botón TOUR (onOpenTour: heredó el sitio del antiguo toggle
     │   │   │                          #   duplicado; abre el tour a voluntad) + botón Sync con
-    │   │   │                          #   el punto de estado de la bóveda
+    │   │   │                          #   el punto de estado de la bóveda. v1.0.1 anti-colisión:
+    │   │   │                          #   en móvil Sync/Tour muestran SOLO icono, nombre de cliente
+    │   │   │                          #   truncado y TemaMenu oculto (el tema vive en MobileMenu)
     │   │   └── AppFooter.tsx           #   botones de respaldo/restaurar/acerca de/feedback
     │   ├── account/                  # Selector de cuentas compartido (movido desde journal/ en Fase 7)
     │   │   └── AccountPicker.tsx       # SearchableAccountSelect: lo consumen FixedAssetsView y
@@ -205,15 +211,21 @@ Contabilidad-M4/
     │   │   │                            #   (marca completed ≠ saltado) y purga del cliente demo
     │   │   │                            #   del paso final SOLO si App transmite purgarDemo
     │   │   ├── TourOverlay.tsx          #   spotlight (4 cuadrantes + anillo ámbar): resolverTarget
-    │   │   │                            #   (data-testid → targetText) y traerAVista (scroll del
-    │   │   │                            #   objetivo SOLO al cambiar de paso, no en scroll ajeno)
+    │   │   │                            #   (data-testid → targetText, SOLO elementos VISIBLES: cadenaVisible
+    │   │   │                            #   descarta ancestros display:none — sidebar/toggle ocultos en
+    │   │   │                            #   móvil —; v1.0.1) y traerAVista (scroll del objetivo SOLO al
+    │   │   │                            #   cambiar de paso, no en scroll ajeno); si el ancla aún no monta
+    │   │   │                            #   (navegarA en el mismo commit) reintenta ~2 s con timers
     │   │   ├── TourCoachMark.tsx        #   burbuja: posicionTarjeta (flip entre lados + clamp al
     │   │   │                            #   viewport; RECHAZA todo candidato que invada a su ancla)
-    │   │   │                            #   en useLayoutEffect, tras traerAVista
+    │   │   │                            #   en useLayoutEffect, tras traerAVista; misma re-limpia
+    │   │   │                            #   temporizada del ancla tarde (v1.0.1)
     │   │   └── steps/index.tsx          #   los 29 pasos en español: shell/encabezado, captura de
     │   │                                #   pólizas (incl. plantilla/importación/folio pendiente),
     │   │                                #   reportes, fiscal/CFDI, activos fijos, bóveda EN VIVO,
-    │   │                                #   respaldo y cierre con oferta de borrar el demo
+    │   │                                #   respaldo y cierre con oferta de borrar el demo. v1.0.1:
+    │   │                                #   anclas dobles «selector de escritorio, menú móvil» en
+    │   │                                #   toggle-modo y sidebar (mobile-app-modo / mobile-menu-btn)
     │
     ├── lib/
     │   ├── format.ts            # ⭐ FUENTE ÚNICA de formateo/parseo de montos y texto:
@@ -539,7 +551,7 @@ El `npm run build` genera además del `dist/` clásico: `manifest.webmanifest`, 
 
 - Stack: `vitest` + `@testing-library/react` + `jest-dom`, **solo devDependencies**. Config en `vitest.config.ts` (espeja el `define __APP_VERSION__` de Vite); setup global en `src/test/setup.ts` (limpieza de DOM/storage entre tests + polyfills de jsdom: `crypto.randomUUID`, `URL.createObjectURL`).
 - **Ubicación:** cada `.test.ts(x)` vive COLOCADO junto al código que prueba (`lib/`, `hooks/`, `components/`). Vitest descubre `src/**/*.test.{ts,tsx}`.
-- **Niveles cubiertos (38 archivos / 413 tests — 37 colocados en `src/` + `worker/tests/relay.test.ts`, que la misma pasada `npm run test` incluye):**
+- **Niveles cubiertos (38 archivos / 414 tests — 37 colocados en `src/` + `worker/tests/relay.test.ts`, que la misma pasada `npm run test` incluye):**
   1. Unitarias puras: `lib/accounting.test.ts` (Cuentas T, saldos por naturaleza, depreciación, INPC truncado + validación/flatten/folios/entrada-a-póliza + `consolidarPolizasDiaria`), `lib/format.test.ts` (normalización, parseo de importaciones, sanitización de input y contrato de `parseJournalImport`), `lib/satExport.test.ts` (XML PL re-parseado: folios reales, tipos 1/2/3, CompNal, escaping, filename), `lib/empresas.test.ts` (C-2: composición de claves por cliente + normalizadores `arrayDe`/`objetoDe`), `lib/navigation.test.ts` (DEFAULT_TAB = polizas, composición de pestañas), `lib/unionBovedas.test.ts` (fusión F-1…F-8: análisis de entrantes y aplicación del snapshot fusionado), `lib/mnemonic.test.ts` (frase → credencial determinista) y `lib/crypto.test.ts` (AES-GCM del sobre E2EE).
   2. Funcional: `lib/export.test.ts` — el workbook Excel se RELEE con ExcelJS (solo `file-saver` mockeado) y el PDF se valida por firma `%PDF-` real.
   3. Migraciones: `lib/migrateJournalsToPolizas.test.ts` (determinismo congelado: folios por tipo, ids, CFDI/RFC) y `lib/migrateCatalogToGlobal.test.ts` (D-12: dedup por código, idempotencia, orden).

@@ -40,7 +40,8 @@ export function TemaMenu({
           className="fixed inset-0 z-[59] cursor-default"
         />
       )}
-      <div className="relative">
+      {/* Oculto en móvil (< sm): allí el selector de tema vive en MobileMenu. */}
+      <div className="relative hidden sm:block">
         <button
           onClick={() => setAbierto(v => !v)}
           title={`Tema de la interfaz: ${activo?.etiqueta ?? ''}`}

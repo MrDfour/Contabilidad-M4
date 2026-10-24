@@ -5,10 +5,10 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertCircle, BarChart3, Contrast, Moon, Sun } from 'lucide-react';
+import { AlertCircle, BarChart3, Contrast, Moon, ShieldCheck, Sparkles, Sun } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { APP_VERSION } from '../../lib/appMeta';
-import type { AppTab, NavigationTab } from '../../lib/navigation';
+import type { AppMode, AppTab, NavigationTab } from '../../lib/navigation';
 import { TEMAS_APP, type TemaApp } from '../../lib/temas';
 
 /** Icono por tema (MobileMenu lista las 4 opciones de TEMAS_APP). */
@@ -59,6 +59,9 @@ interface MobileMenuProps {
   /** Tema de la UI (v0.9.9) + setter (persistente por dispositivo). */
   tema: TemaApp;
   onSetTema: (t: TemaApp) => void;
+  /** Modo Básico/Fiscal (v1.0.1): en móvil el toggle del header está oculto, así que el menú lo ofrece aquí. */
+  appMode: AppMode;
+  onSetAppMode: (mode: AppMode) => void;
 }
 
 export function MobileMenu({
@@ -70,7 +73,9 @@ export function MobileMenu({
   onSelectTab,
   onShowAbout,
   tema,
-  onSetTema
+  onSetTema,
+  appMode,
+  onSetAppMode
 }: MobileMenuProps) {
   return (
     <AnimatePresence>
@@ -110,6 +115,24 @@ export function MobileMenu({
                   label={tab.label}
                 />
               ))}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-[10px] uppercase font-bold text-slate-500 mb-2 pl-1 tracking-widest">Modo de la app</p>
+              <div data-testid="mobile-app-modo">
+                <MobileNavItem
+                  active={appMode === 'basic'}
+                  onClick={() => { onSetAppMode('basic'); }}
+                  icon={<Sparkles className="w-5 h-5" />}
+                  label="Básico"
+                />
+                <MobileNavItem
+                  active={appMode === 'fiscal'}
+                  onClick={() => { onSetAppMode('fiscal'); }}
+                  icon={<ShieldCheck className="w-5 h-5" />}
+                  label="Fiscal"
+                />
+              </div>
             </div>
 
             <div className="flex flex-col gap-2">

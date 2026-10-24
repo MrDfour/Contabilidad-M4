@@ -66,9 +66,17 @@ describe('TOUR_STEPS — pasos condicionales', () => {
 
   it('los pasos del encabezado se anclan con testids reales (visibles en las capturas del usuario)', () => {
     expect(TOUR_STEPS.find(s => s.id === 'header')?.target).toBe('[data-testid="app-header"]');
-    expect(TOUR_STEPS.find(s => s.id === 'toggle-modo')?.target).toBe('[data-testid="app-modo"]');
     expect(TOUR_STEPS.find(s => s.id === 'empresas')?.target).toBe('[data-testid="header-clientes"]');
     expect(TOUR_STEPS.find(s => s.id === 'tema-sync')?.target).toBe('[data-testid="header-sync"]');
+  });
+
+  it('el toggle de modo y la navegación tienen ancla de escritorio Y de móvil', () => {
+    // Escritorio: app-modo / sidebar-nav. Móvil: mobile-app-modo (dentro del
+    // menú ☰) / mobile-menu-btn. El resolvedor toma el primero VISIBLE.
+    expect(TOUR_STEPS.find(s => s.id === 'toggle-modo')?.target).toContain('[data-testid="app-modo"]');
+    expect(TOUR_STEPS.find(s => s.id === 'toggle-modo')?.target).toContain('[data-testid="mobile-app-modo"]');
+    expect(TOUR_STEPS.find(s => s.id === 'sidebar')?.target).toContain('[data-testid="sidebar-nav"]');
+    expect(TOUR_STEPS.find(s => s.id === 'sidebar')?.target).toContain('[data-testid="mobile-menu-btn"]');
   });
 
   it('el paso fiscal de XML en la partida es de modo Fiscal y requiere el formulario abierto', () => {
