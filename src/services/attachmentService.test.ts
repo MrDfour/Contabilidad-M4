@@ -110,6 +110,32 @@ describe('attachmentService — dedupe y registro (CH-6/CH-10/CH-11)', () => {
     expect(a).toBe(b);
   });
 
+  it('sha256Hex pasa el brand check de SubtleCrypto: digest recibe un Uint8Array del realm PROPIO (regresión CI Node 20/24)', async () => {
+    // En CI (Node 20/24) `crypto.subtle.digest` rechaza con TypeError los
+    // ArrayBuffer forasteros — creados por jsdom en OTRO realm de VM — aunque
+    // Node 26 los acepte: ahí nacieron las 11 fallas del 2026-10-23. La regla
+    // que fija esta prueba: sha256Hex SIEMPRE entrega a digest un Uint8Array
+    // del mismo realm que crypto (la copia del servicio); si algún día vuelve
+    // a enviar el original, esta prueba revienta en TODOS los entornos.
+    const subtle = globalThis.crypto?.subtle;
+    if (!subtle) return; // entornos sin Web Crypto: el fallback ya cubre la ruta
+    const digestoReal = subtle.digest.bind(subtle);
+    const espia = vi.spyOn(subtle, 'digest')
+      .mockImplementation(async (algo, datos) => {
+        if (!(datos instanceof globalThis.Uint8Array)) {
+          throw new TypeError("Failed to execute 'digest' on 'SubtleCrypto': 2nd argument is not instance of ArrayBuffer, Buffer, TypedArray, or DataView.");
+        }
+        return digestoReal(algo, datos);
+      });
+    try {
+      const sha = await sha256Hex(new TextEncoder().encode('realm-forastero').buffer as ArrayBuffer);
+      expect(sha).toMatch(/^[0-9a-f]+$/);
+      expect(espia).toHaveBeenCalledTimes(1);
+    } finally {
+      espia.mockRestore();
+    }
+  });
+
   it('guardar → cargar redondo: metadato con bytes reales y binario local intacto', async () => {
     const guardado = await guardarAnexo('e1', blobWebp());
     expect(guardado).not.toBeNull();

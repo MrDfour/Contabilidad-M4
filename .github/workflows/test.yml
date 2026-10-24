@@ -24,7 +24,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # La MISMA versión mayor que el entorno de desarrollo local: el gate
+          # de pre-entrega (lint+tests+build) no debe pasar en una máquina y
+          # fallar en CI por diferencias de Node (p. ej. brand checks de
+          # SubtleCrypto entre realms en jsdom). Node 20 fue forzado a 24 por
+          # GitHub y desaparece de los runners; 26 es la rama corriente.
+          node-version: '26'
           cache: 'npm'
 
       - name: Install dependencies

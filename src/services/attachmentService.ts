@@ -140,7 +140,13 @@ const nombreBinario = (empresaId: string, sha: string, mime: string): string =>
 export const sha256Hex = async (datos: ArrayBuffer): Promise<string> => {
   const subtle = globalThis.crypto?.subtle;
   if (subtle) {
-    const digesto = await subtle.digest('SHA-256', datos);
+    // Copia al realm ACTUAL: en pruebas los ArrayBuffer llegan del realm de
+    // jsdom (otra VM) y el brand check del SubtleCrypto de Node viejo (CI,
+    // Node 20/24) los rechaza — «2nd argument is not instance of ArrayBuffer,
+    // Buffer, TypedArray, or DataView». El Uint8Array propio (con su buffer
+    // copiado) pasa esa validación en cualquier Node o navegador.
+    const bytes = new Uint8Array(new Uint8Array(datos));
+    const digesto = await subtle.digest('SHA-256', bytes);
     return Array.from(new Uint8Array(digesto), b => b.toString(16).padStart(2, '0')).join('');
   }
   const bytes = new Uint8Array(datos);
