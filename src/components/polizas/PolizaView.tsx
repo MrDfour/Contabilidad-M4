@@ -303,11 +303,14 @@ export function PolizaView({
 
   /** Plantilla de importación (mismo formato que usaba el Diario — D-11). */
   const handleDescargarPlantilla = async () => {
+    // Las cuentas del ejemplo DEBEN existir en el catálogo por defecto
+    // (INITIAL_ACCOUNTS): el parser solo acepta cuentas que matcheen por nombre
+    // o código; una fila con cuenta desconocida se pierde silenciosamente.
     const templateData = [
       { 'ASIENTO_ID': '1', 'FECHA': '2024-05-01', 'GLOSA': 'Apertura de caja', 'CUENTA': 'Caja', 'DEBE': 1000, 'HABER': 0 },
       { 'ASIENTO_ID': '1', 'FECHA': '2024-05-01', 'GLOSA': 'Apertura de caja', 'CUENTA': 'Capital Social', 'DEBE': 0, 'HABER': 1000 },
       { 'ASIENTO_ID': '2', 'FECHA': '2024-05-02', 'GLOSA': 'Compra de mercadería', 'CUENTA': 'Caja', 'DEBE': 0, 'HABER': 500 },
-      { 'ASIENTO_ID': '2', 'FECHA': '2024-05-02', 'GLOSA': 'Compra de mercadería', 'CUENTA': 'Mercaderías', 'DEBE': 500, 'HABER': 0 }
+      { 'ASIENTO_ID': '2', 'FECHA': '2024-05-02', 'GLOSA': 'Compra de mercadería', 'CUENTA': 'Almacén / Inventarios', 'DEBE': 500, 'HABER': 0 }
     ];
     await exportToExcel(templateData, 'Plantilla_Importacion_M4', 'Guia_Carga');
   };
@@ -331,10 +334,15 @@ export function PolizaView({
       }
 
       onImportPolizas(entriesToPolizasDiarias(parsedEntries, accounts));
+      // Aviso honesto: el parser omite silenciosamente las filas cuya cuenta no
+      // existe en el catálogo; el usuario DEBE enterarse de qué se perdió.
+      const avisoCuentas = unmatchedAccounts.length > 0
+        ? ` ATENCIÓN: estas cuentas no están en tu catálogo y sus filas se omitieron: ${unmatchedAccounts.slice(0, 5).join(', ')}${unmatchedAccounts.length > 5 ? ' y otras más' : ''}. Complétalas en el catálogo y vuelve a importar esas filas.`
+        : '';
       onSetModal({
         type: 'success',
         title: '¡Importación Lista!',
-        message: `Hemos cargado con éxito ${parsedEntries.length} pólizas diarias desde el archivo Excel. Los folios se asignaron automáticamente.`
+        message: `Hemos cargado con éxito ${parsedEntries.length} pólizas diarias desde el archivo Excel. Los folios se asignaron automáticamente.${avisoCuentas}`
       });
       e.target.value = '';
     } catch {
